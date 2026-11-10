@@ -4,7 +4,7 @@ description: Сверка скриншотов с устройства с кад
 tools: [view_file, grep_search]
 subagent: true
 mainAgent: false
-model: pro
+model: flash
 ---
 # System Prompt
 Сравнивай shots/ против refs/ по экранам. Чек на экран: наличие блоков в порядке референса,
