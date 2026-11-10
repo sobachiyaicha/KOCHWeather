@@ -243,12 +243,49 @@ class MainScreenViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(selectedSegment = segment) }
     }
 
-    fun setTab(tab: BottomTab) {
+    fun selectTab(tab: BottomTab) {
         _uiState.update { it.copy(selectedTab = tab) }
     }
 
+    fun setTab(tab: BottomTab) {
+        selectTab(tab)
+    }
+
+    fun rateWeather(stars: Int) {
+        val clamped = stars.coerceIn(1, 5)
+        val currentAvg = _uiState.value.rating
+        val updatedAvg = ((currentAvg * 9f + clamped) / 10f)
+        _uiState.update {
+            it.copy(
+                userRating = clamped,
+                rating = kotlin.math.round(updatedAvg * 10f) / 10f,
+                showRatingThankYou = true
+            )
+        }
+        viewModelScope.launch {
+            delay(2500)
+            _uiState.update { it.copy(showRatingThankYou = false) }
+        }
+    }
+
+    fun dismissRatingThankYou() {
+        _uiState.update { it.copy(showRatingThankYou = false) }
+    }
+
     fun setRating(rating: Float) {
-        _uiState.update { it.copy(userRating = rating) }
+        rateWeather(kotlin.math.round(rating).toInt().coerceIn(1, 5))
+    }
+
+    fun setUmbrellaShopOpen(open: Boolean) {
+        _uiState.update { it.copy(isUmbrellaShopOpen = open) }
+    }
+
+    fun openUmbrellaShop() {
+        setUmbrellaShopOpen(true)
+    }
+
+    fun closeUmbrellaShop() {
+        setUmbrellaShopOpen(false)
     }
 
     fun onCloudsCleared() {

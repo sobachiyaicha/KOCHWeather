@@ -11,14 +11,43 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.WeatherIconType
 import kotlin.math.cos
 import kotlin.math.sin
+
+val TShirtIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "TShirt",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(fill = SolidColor(Color.White)) {
+        moveTo(12f, 4f)
+        quadTo(9.5f, 4.5f, 9f, 6f)
+        lineTo(4.5f, 7.5f)
+        lineTo(2f, 11.5f)
+        lineTo(5.5f, 13.5f)
+        lineTo(7f, 11f)
+        lineTo(7f, 20f)
+        lineTo(17f, 20f)
+        lineTo(17f, 11f)
+        lineTo(18.5f, 13.5f)
+        lineTo(22f, 11.5f)
+        lineTo(19.5f, 7.5f)
+        lineTo(15f, 6f)
+        quadTo(14.5f, 4.5f, 12f, 4f)
+        close()
+    }.build()
+}
 
 @Composable
 fun WeatherIcon(

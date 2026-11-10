@@ -1,12 +1,9 @@
 package com.koch.weather.ui.main
 
-import com.koch.weather.data.model.AppThemeMode
-import com.koch.weather.data.model.BottomTab
-import com.koch.weather.data.model.CityLocation
-import com.koch.weather.data.model.ConditionSegment
-import com.koch.weather.data.model.MainScreenUiState
+import com.koch.weather.data.model.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,23 +21,54 @@ class MainScreenViewModelTest {
         assertFalse(state.isGrassModalOpen)
         assertFalse(state.isGrassUploaded)
         assertEquals(3.5f, state.rating, 0.01f)
+        assertNull(state.userRating)
+        assertFalse(state.showRatingThankYou)
+        assertFalse(state.isUmbrellaShopOpen)
+        assertTrue(state.umbrellas.isNotEmpty())
     }
 
     @Test
-    fun uiState_copyUpdatesState() {
+    fun uiState_phase3Features_copyUpdatesState() {
         val state = MainScreenUiState()
         val updated = state.copy(
             isOffline = true,
             currentTheme = AppThemeMode.COPPER_SUNSET,
-            isGrassUploaded = true,
-            selectedCityIndex = 1,
-            currentCityIndex = 1
+            selectedSegment = ConditionSegment.CLOTHES,
+            selectedTab = BottomTab.MAP,
+            userRating = 5,
+            rating = 4.2f,
+            showRatingThankYou = true,
+            isUmbrellaShopOpen = true
         )
         assertTrue(updated.isOffline)
         assertEquals(AppThemeMode.COPPER_SUNSET, updated.currentTheme)
-        assertTrue(updated.isGrassUploaded)
-        assertEquals(1, updated.selectedCityIndex)
-        assertEquals(1, updated.currentCityIndex)
+        assertEquals(ConditionSegment.CLOTHES, updated.selectedSegment)
+        assertEquals(BottomTab.MAP, updated.selectedTab)
+        assertEquals(Integer.valueOf(5), updated.userRating)
+        assertEquals(4.2f, updated.rating, 0.01f)
+        assertTrue(updated.showRatingThankYou)
+        assertTrue(updated.isUmbrellaShopOpen)
+    }
+
+    @Test
+    fun conditionSegments_hasAllFiveSegments() {
+        val segments = ConditionSegment.values()
+        assertEquals(5, segments.size)
+        assertTrue(segments.contains(ConditionSegment.WEATHER))
+        assertTrue(segments.contains(ConditionSegment.RAIN))
+        assertTrue(segments.contains(ConditionSegment.WIND))
+        assertTrue(segments.contains(ConditionSegment.CLOTHES))
+        assertTrue(segments.contains(ConditionSegment.TRAFFIC))
+    }
+
+    @Test
+    fun bottomTabs_hasAllFourTabs() {
+        val tabs = BottomTab.values()
+        assertEquals(4, tabs.size)
+        assertTrue(tabs.contains(BottomTab.HOME))
+        assertTrue(tabs.contains(BottomTab.MAP))
+        assertTrue(tabs.contains(BottomTab.LIST))
+        assertTrue(tabs.contains(BottomTab.SEARCH))
     }
 
     @Test
@@ -53,5 +81,13 @@ class MainScreenViewModelTest {
         )
         assertEquals("Санкт-Петербург", defaultCities[0].name)
         assertEquals("Москва", defaultCities[1].name)
+    }
+
+    @Test
+    fun defaultUmbrellas_containsExpectedItems() {
+        val umbrellas = DefaultUmbrellas.items
+        assertTrue(umbrellas.size >= 4)
+        assertTrue(umbrellas.any { it.name.contains("Sky Blue") })
+        assertTrue(umbrellas.any { it.priceRu.contains("649") })
     }
 }

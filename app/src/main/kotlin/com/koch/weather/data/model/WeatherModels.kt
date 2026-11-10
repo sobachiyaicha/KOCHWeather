@@ -108,7 +108,8 @@ data class WeatherDomainData(
     val weatherCode: Int,
     val iconType: WeatherIconType,
     val clothingAdvice: String,
-    val trafficAdvice: Pair<Int, String>,
+    val trafficScore: Int = 4,
+    val trafficAdvice: String = "Движение свободное",
     val hourly: List<HourlyItem>,
     val daily: List<DailyItem>,
     val isOffline: Boolean = false,
@@ -137,6 +138,58 @@ enum class BottomTab {
     SEARCH
 }
 
+@Serializable
+data class UmbrellaItem(
+    val id: String,
+    val name: String,
+    val priceRu: String,
+    val priceByn: String,
+    val colorHex: Long,
+    val isCompact: Boolean = true,
+    val description: String = ""
+)
+
+object DefaultUmbrellas {
+    val items = listOf(
+        UmbrellaItem(
+            id = "umb_sky_blue",
+            name = "Зонт-автомат Sky Blue",
+            priceRu = "649 ₽",
+            priceByn = "29.99 BYN",
+            colorHex = 0xFF2196F3,
+            isCompact = true,
+            description = "Компактный 3-сложения, ветрозащита 15 м/с"
+        ),
+        UmbrellaItem(
+            id = "umb_classic_black",
+            name = "Зонт-трость Classic Black",
+            priceRu = "990 ₽",
+            priceByn = "44.99 BYN",
+            colorHex = 0xFF212121,
+            isCompact = false,
+            description = "Усиленный каркас из фибергласса, деревянная ручка"
+        ),
+        UmbrellaItem(
+            id = "umb_copper_sunset",
+            name = "Зонт Copper Sunset",
+            priceRu = "790 ₽",
+            priceByn = "36.50 BYN",
+            colorHex = 0xFFD84315,
+            isCompact = true,
+            description = "Тефлоновое нано-покрытие, сохнет за 1 минуту"
+        ),
+        UmbrellaItem(
+            id = "umb_dome_transparent",
+            name = "Прозрачный зонт-купол",
+            priceRu = "850 ₽",
+            priceByn = "39.99 BYN",
+            colorHex = 0xFF90CAF9,
+            isCompact = false,
+            description = "Глубокий купол, защита при сильном ветре"
+        )
+    )
+}
+
 data class MainScreenUiState(
     val isLoading: Boolean = false,
     val weather: WeatherDomainData? = null,
@@ -152,9 +205,16 @@ data class MainScreenUiState(
     val selectedSegment: ConditionSegment = ConditionSegment.WEATHER,
     val selectedTab: BottomTab = BottomTab.HOME,
 
-    // Satirical & interactive features
+    // Rating widget (Phase 3)
     val rating: Float = 3.5f,
-    val userRating: Float = 0f,
+    val userRating: Int? = null,
+    val showRatingThankYou: Boolean = false,
+
+    // Umbrellas store (Phase 3)
+    val isUmbrellaShopOpen: Boolean = false,
+    val umbrellas: List<UmbrellaItem> = DefaultUmbrellas.items,
+
+    // Satirical & interactive features
     val isCloudsCleared: Boolean = false,
     val isGrassModalOpen: Boolean = false,
     val isGrassUploaded: Boolean = false,

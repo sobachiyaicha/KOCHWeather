@@ -139,7 +139,7 @@ class WeatherRepository(context: Context) {
         val minTemp = dailyDto?.temperature2mMin?.firstOrNull()?.roundToInt() ?: (curTemp - 6)
 
         val clothingAdvice = WmoHelper.getClothingAdvice(curTemp, wmoCode)
-        val trafficAdvice = WmoHelper.getTrafficAdvice(wmoCode)
+        val (trafficScore, trafficAdvice) = WmoHelper.getTrafficAdvice(wmoCode, curTemp)
 
         // Hourly mapping
         val hourlyList = mutableListOf<HourlyItem>()
@@ -251,6 +251,7 @@ class WeatherRepository(context: Context) {
             weatherCode = wmoCode,
             iconType = iconType,
             clothingAdvice = clothingAdvice,
+            trafficScore = trafficScore,
             trafficAdvice = trafficAdvice,
             hourly = hourlyList,
             daily = dailyList,
@@ -309,7 +310,8 @@ class WeatherRepository(context: Context) {
             weatherCode = wmoCode,
             iconType = iconType,
             clothingAdvice = WmoHelper.getClothingAdvice(temp, wmoCode),
-            trafficAdvice = WmoHelper.getTrafficAdvice(wmoCode),
+            trafficScore = WmoHelper.getTrafficAdvice(wmoCode, temp).first,
+            trafficAdvice = WmoHelper.getTrafficAdvice(wmoCode, temp).second,
             hourly = getMockHourly(temp, wmoCode, iconType),
             daily = getMockDaily(temp),
             isOffline = isOffline

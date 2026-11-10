@@ -65,7 +65,10 @@ object WmoHelper {
         return baseAdvice + extraAdvice
     }
 
-    fun getTrafficAdvice(weatherCode: Int): Pair<Int, String> {
+    fun getTrafficAdvice(weatherCode: Int, temp: Int = 10): Pair<Int, String> {
+        if (temp <= 0 && weatherCode in listOf(51, 53, 55, 61, 63, 65, 66, 67)) {
+            return 8 to "Осторожно, гололедица! Пробки 8/10, держите дистанцию"
+        }
         return when (weatherCode) {
             0, 1 -> 3 to "Дороги сухие. Движение свободное (3/10)"
             2, 3 -> 5 to "Стандартный трафик. Пробки 5/10"
