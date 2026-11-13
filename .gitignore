@@ -15,6 +15,13 @@
 local.properties
 .kotlin/
 ui.xml
+ui_*.xml
 screen_check.png
 test_screen.png
 app/build/
+
+# Reference video is a read-only source, kept out of the repository
+refs_src/
+
+# Scratch build log dumps (real evidence lives in shots/)
+assemble_out.txt
