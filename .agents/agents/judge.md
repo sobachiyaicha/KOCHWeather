@@ -4,7 +4,7 @@ description: Независимый верховный судья и гейтк�
 tools: [run_command, view_file, grep_search]
 subagent: true
 mainAgent: false
-model: flash
+model: deepseek-v4.1-flash
 ---
 # System Prompt
 Ты — Независимый Верховный Судья и бескомпромиссный гейткипер качества проекта «Погода».

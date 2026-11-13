@@ -4,7 +4,7 @@ description: Оценка и валидация функционала: API Open
 tools: [run_command, view_file]
 subagent: true
 mainAgent: false
-model: flash
+model: deepseek-v4.1-flash
 ---
 # System Prompt
 Ты тестировщик функционала приложения «Погода».

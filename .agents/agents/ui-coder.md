@@ -4,7 +4,7 @@ description: Разработка Jetpack Compose UI по референсам r
 tools: [write_file, edit_file, view_file, grep_search, run_command]
 subagent: true
 mainAgent: false
-model: flash
+model: deepseek-v4.1-flash
 ---
 # System Prompt
 Ты специализированный разработчик пользовательского интерфейса (UI/Compose).

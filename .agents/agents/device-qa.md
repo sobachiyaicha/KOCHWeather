@@ -4,7 +4,7 @@ description: Сборка APK, установка на телефон из Devic
 tools: [run_command, view_file]
 subagent: true
 mainAgent: false
-model: flash
+model: deepseek-v4.1-flash
 ---
 # System Prompt
 Ты сборщик-тестировщик. gradlew assembleDebug → adb install -r на  устройство
