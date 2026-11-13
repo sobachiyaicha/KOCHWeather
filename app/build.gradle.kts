@@ -7,12 +7,22 @@ plugins {
 android {
   namespace = "com.koch.weather"
   compileSdk = 36
+
+  val localProperties = java.util.Properties().apply {
+    val localPropFile = rootProject.file("local.properties")
+    if (localPropFile.exists()) {
+      localPropFile.inputStream().use { load(it) }
+    }
+  }
+  val trafficApiKey = localProperties.getProperty("TRAFFIC_API_KEY") ?: ""
+
   defaultConfig {
     applicationId = "com.koch.weather"
     minSdk = 24
     targetSdk = 34
     versionCode = 1
     versionName = "1.0"
+    buildConfigField("String", "TRAFFIC_API_KEY", "\"$trafficApiKey\"")
   }
 
   buildTypes {
@@ -31,7 +41,7 @@ android {
   buildFeatures {
     compose = true
     aidl = false
-    buildConfig = false
+    buildConfig = true
     shaders = false
   }
 
@@ -74,6 +84,10 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
+
+  // Maps & Images (No VPN / Russia friendly)
+  implementation(libs.osmdroid.android)
+  implementation(libs.coil.compose)
 
   // Local tests
   testImplementation(libs.junit)
