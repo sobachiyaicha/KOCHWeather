@@ -82,7 +82,7 @@ class WeatherRepository @JvmOverloads constructor(
         val result = client.getForecast(city.latitude, city.longitude)
         if (result.isSuccess) {
             val dto = result.getOrThrow()
-            val domain = mapToDomain(city.name, dto, isOffline = false)
+            val domain = mapToDomain(city, dto, isOffline = false)
             memoryCache[city.name] = domain
             // Persist to DataStore cache in background
             try {
@@ -95,7 +95,7 @@ class WeatherRepository @JvmOverloads constructor(
             if (!cachedJson.isNullOrBlank()) {
                 try {
                     val dto = json.decodeFromString<WeatherApiResponse>(cachedJson)
-                    val domain = mapToDomain(city.name, dto, isOffline = true)
+                    val domain = mapToDomain(city, dto, isOffline = true)
                     memoryCache[city.name] = domain
                     domain
                 } catch (_: Exception) {
@@ -129,7 +129,8 @@ class WeatherRepository @JvmOverloads constructor(
         defaultCities.filter { it.name.contains(query, ignoreCase = true) }
     }
 
-    private fun mapToDomain(cityName: String, dto: WeatherApiResponse, isOffline: Boolean): WeatherDomainData {
+    private suspend fun mapToDomain(city: CityLocation, dto: WeatherApiResponse, isOffline: Boolean): WeatherDomainData {
+        val cityName = city.name
         val cur = dto.current ?: CurrentWeatherDto()
         val curTemp = cur.temperature2m.roundToInt()
         val wmoCode = cur.weatherCode
