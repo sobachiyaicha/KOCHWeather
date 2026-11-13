@@ -1,7 +1,7 @@
 ---
 name: data-coder
 description: Разработка сетевого слоя Open-Meteo, кэша DataStore, репозиториев, моделей данных kotlinx.serialization и бизнес-логики.
-tools: [write_file, edit_file, view_file, grep_search, run_command]
+tools: [write, edit, read, read_image, grep, glob, pwsh]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
@@ -25,5 +25,11 @@ model: deepseek-v4.1-flash
    - Управление списком выбранных городов и текущей локации.
 
 4. ViewModels и StateFlow:
-   - Предоставление чистого UI State для ui-coder.
+   - Предоставление чистого UI State для `ui-coder`; контракт не меняй молча.
    - Маппинг WMO кодов в человекочитаемые погодные условия и иконки.
+
+5. Тесты и качество:
+   - Unit-тесты на новую логику: репозитории, ViewModel, сериализация, WMO-коды.
+   - `compileDebugKotlin` и `testDebugUnitTest` проходят.
+   - Никаких выдуманных цифр: при отсутствии данных — «нет данных».
+   - Не трогай `ui/` без согласования — это зона `ui-coder`.

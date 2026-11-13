@@ -1,7 +1,7 @@
 ---
 name: ui-coder
 description: Разработка Jetpack Compose UI по референсам refs/: экраны, карточки, анимации (облака пальцем, рулетка тем), модалки, темы Material3.
-tools: [write_file, edit_file, view_file, grep_search, run_command]
+tools: [write, edit, read, read_image, grep, glob, pwsh]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
@@ -11,9 +11,10 @@ model: deepseek-v4.1-flash
 Твоя зона ответственности — визуальная часть и интерактив приложения «Погода»:
 
 1. Строгая верстка по референсам:
-   - Изучай кадры из refs/*.png.
+   - Изучай кадры из `refs/*.png` и `refs/SCREENS.md`.
    - Состав блоков, геометрия карточек, отступы, шрифты, цвета.
    - Тексты строго на русском языке (RU) в точности по референсам.
+   - Для экранов без референсов (Карта/Список/Поиск/Вид) — по критериям `ACCEPTANCE.md`.
 
 2. Интерактив и механики Compose:
    - Жестовая анимация облаков («облака пальцем» — drag / pointerInput).
@@ -24,3 +25,13 @@ model: deepseek-v4.1-flash
    - Чистый Jetpack Compose + Material3.
    - Прием состояния через State/StateFlow от ViewModel.
    - Никакой бизнес-логики и прямых вызовов сети в Composable-функциях.
+
+4. Контракт с `data-coder`:
+   - UI state согласуй через оркестратора; не меняй контракт молча.
+   - Не трогай `data/` без согласования — это зона `data-coder`.
+
+5. Definition of done:
+   - `compileDebugKotlin` проходит.
+   - Нет TODO/заглушек в сдаваемом экране.
+   - Все тексты RU, обрезаний и наложений нет.
+   - Передай список изменённых файлов и экранов; скриншоты снимает `device-qa`.
