@@ -19,12 +19,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Air
-import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.LaptopMac
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -42,6 +49,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,11 +61,20 @@ import com.koch.weather.data.model.HourlyItem
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.data.model.WeatherIconType
+import com.koch.weather.ui.components.AdPromoDialog
 import com.koch.weather.ui.components.CityPickerDialog
+import com.koch.weather.ui.components.CloudSwipeHeader
 import com.koch.weather.ui.components.DailyDetailDialog
+import com.koch.weather.ui.components.FlightBookingDialog
+import com.koch.weather.ui.components.FoodBottomSheet
 import com.koch.weather.ui.components.FpsOverlay
+import com.koch.weather.ui.components.GrassLockDialog
+import com.koch.weather.ui.components.LootboxDialog
+import com.koch.weather.ui.components.PaywallDialog
 import com.koch.weather.ui.components.TShirtIcon
+import com.koch.weather.ui.components.TaxiBottomSheet
 import com.koch.weather.ui.components.TemperatureRangeBar
+import com.koch.weather.ui.components.ThemeRouletteDialog
 import com.koch.weather.ui.components.UmbrellaShopDialog
 import com.koch.weather.ui.components.WeatherIcon
 import com.koch.weather.ui.components.WeatherMapDialog
@@ -71,8 +88,11 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var isCityPickerOpen by remember { mutableStateOf(false) }
-    var isUmbrellaShopOpen by remember { mutableStateOf(false) }
     var isWeatherMapOpen by remember { mutableStateOf(false) }
+    var isThemeRouletteOpen by remember { mutableStateOf(false) }
+    var isPaywallOpen by remember { mutableStateOf(false) }
+    var isAdPromoOpen by remember { mutableStateOf(false) }
+    var isLootboxOpen by remember { mutableStateOf(false) }
     var selectedDayDetail by remember { mutableStateOf<DailyItem?>(null) }
 
     MainScreenContent(
@@ -85,13 +105,24 @@ fun MainScreen(
             when (tab) {
                 BottomTab.HOME -> {}
                 BottomTab.MAP -> isWeatherMapOpen = true
+                BottomTab.THEMES -> isThemeRouletteOpen = true
                 BottomTab.LIST -> isCityPickerOpen = true
                 BottomTab.SEARCH -> isCityPickerOpen = true
             }
         },
         onRatingChanged = { stars -> viewModel.rateWeather(stars) },
+        onToggleHourlyExpanded = { viewModel.toggleHourlyExpanded() },
+        onCloudsCleared = { viewModel.onCloudsCleared() },
+        onRefreshAiFact = { viewModel.refreshAiFact() },
+        onOpenPaywall = { isPaywallOpen = true },
+        onOpenAdPromo = { isAdPromoOpen = true },
+        onOpenFlight = { viewModel.openFlightSheet() },
+        onOpenLootbox = { isLootboxOpen = true },
+        onOpenTaxi = { viewModel.openTaxiSheet() },
+        onOpenFood = { viewModel.openFoodSheet() },
         onOpenCityPicker = { isCityPickerOpen = true },
         onOpenUmbrellaShop = { viewModel.openUmbrellaShop() },
+        onOpenGrassModal = { viewModel.setGrassModal(true) },
         onDayClick = { day -> selectedDayDetail = day },
         onNextCity = {
             if (uiState.cities.isNotEmpty()) {
@@ -112,6 +143,7 @@ fun MainScreen(
         modifier = modifier
     )
 
+    // Modals and Sheets
     if (isCityPickerOpen) {
         CityPickerDialog(
             cities = uiState.cities,
@@ -148,6 +180,94 @@ fun MainScreen(
         )
     }
 
+    if (isThemeRouletteOpen) {
+        ThemeRouletteDialog(
+            currentTheme = uiState.currentTheme,
+            availableThemes = uiState.availableThemes,
+            onSelectTheme = { theme ->
+                viewModel.setTheme(theme)
+            },
+            onDismiss = {
+                isThemeRouletteOpen = false
+                viewModel.setTab(BottomTab.HOME)
+            }
+        )
+    }
+
+    if (isPaywallOpen) {
+        PaywallDialog(
+            isPremiumPurchased = uiState.isPremiumPurchased,
+            onPurchase = {
+                viewModel.purchasePremium()
+                isPaywallOpen = false
+            },
+            onReset = {
+                viewModel.resetPremium()
+            },
+            onDismiss = { isPaywallOpen = false }
+        )
+    }
+
+    if (isAdPromoOpen) {
+        AdPromoDialog(
+            onOpenPaywall = {
+                isAdPromoOpen = false
+                isPaywallOpen = true
+            },
+            onDismiss = { isAdPromoOpen = false }
+        )
+    }
+
+    if (uiState.flightState.isSheetOpen) {
+        FlightBookingDialog(
+            flightState = uiState.flightState,
+            onSelectOffer = { viewModel.selectFlightOffer(it) },
+            onSelectSeat = { viewModel.selectSeat(it) },
+            onBookFlight = { viewModel.bookFlight(it) },
+            onDismiss = { viewModel.closeFlightSheet() }
+        )
+    }
+
+    if (isLootboxOpen) {
+        LootboxDialog(
+            lootboxState = uiState.lootboxState,
+            onOpenLootbox = { viewModel.openLootbox() },
+            onDismiss = { isLootboxOpen = false }
+        )
+    }
+
+    if (uiState.taxiState.isSheetOpen) {
+        TaxiBottomSheet(
+            taxiState = uiState.taxiState,
+            trafficScore = uiState.weather?.trafficScore ?: 4,
+            trafficAdvice = uiState.weather?.trafficAdvice ?: "Движение свободное",
+            onSelectTariff = { viewModel.selectTaxiTariff(it) },
+            onSelectDestination = { viewModel.selectTaxiDestination(it) },
+            onOrderTaxi = { viewModel.orderTaxi() },
+            onCancelTaxi = { viewModel.cancelTaxi() },
+            onDismiss = { viewModel.closeTaxiSheet() }
+        )
+    }
+
+    if (uiState.foodState.isSheetOpen) {
+        FoodBottomSheet(
+            foodState = uiState.foodState,
+            onSelectRestaurant = { viewModel.selectRestaurant(it) },
+            onAddToCart = { viewModel.addToCart(it) },
+            onRemoveFromCart = { viewModel.removeFromCart(it) },
+            onOrderFood = { viewModel.orderFood() },
+            onCancelOrder = { viewModel.cancelFoodOrder() },
+            onDismiss = { viewModel.closeFoodSheet() }
+        )
+    }
+
+    if (uiState.isGrassModalOpen) {
+        GrassLockDialog(
+            onGrassUploaded = { viewModel.onGrassUploaded() },
+            onDismiss = { viewModel.setGrassModal(false) }
+        )
+    }
+
     selectedDayDetail?.let { day ->
         DailyDetailDialog(
             item = day,
@@ -165,8 +285,18 @@ internal fun MainScreenContent(
     onSegmentSelected: (ConditionSegment) -> Unit,
     onTabSelected: (BottomTab) -> Unit,
     onRatingChanged: (Int) -> Unit,
+    onToggleHourlyExpanded: () -> Unit,
+    onCloudsCleared: () -> Unit,
+    onRefreshAiFact: () -> Unit,
+    onOpenPaywall: () -> Unit,
+    onOpenAdPromo: () -> Unit,
+    onOpenFlight: () -> Unit,
+    onOpenLootbox: () -> Unit,
+    onOpenTaxi: () -> Unit,
+    onOpenFood: () -> Unit,
     onOpenCityPicker: () -> Unit,
     onOpenUmbrellaShop: () -> Unit,
+    onOpenGrassModal: () -> Unit,
     onDayClick: (DailyItem) -> Unit,
     onNextCity: () -> Unit,
     onPrevCity: () -> Unit,
@@ -203,8 +333,8 @@ internal fun MainScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
+                .padding(horizontal = 14.dp),
+            contentPadding = PaddingValues(top = 6.dp, bottom = 120.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Offline warning banner
@@ -216,7 +346,7 @@ internal fun MainScreenContent(
                         border = BorderStroke(0.8.dp, Color(0x60FFFFFF)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp)
+                            .padding(bottom = 10.dp)
                             .clickable { onRefresh() }
                     ) {
                         Row(
@@ -244,26 +374,78 @@ internal fun MainScreenContent(
 
             val weather = uiState.weather
             if (weather != null) {
-                // Section 1: Golden Capsule Header + Slanted Temperature + Dots
-                item(key = "golden_hero_header") {
-                    GoldenCapsuleHeader(
-                        weather = weather,
-                        citiesCount = uiState.cities.size,
-                        selectedCityIndex = uiState.selectedCityIndex,
-                        onSelectCityIndex = onSelectCityIndex,
-                        onHeaderClick = onOpenCityPicker
+                // Section 1: Cloud Swipe or Golden Capsule Header
+                if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
+                    item(key = "cloud_swipe_header") {
+                        CloudSwipeHeader(
+                            onCleared = onCloudsCleared,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)
+                        )
+                    }
+                } else {
+                    item(key = "golden_hero_header") {
+                        GoldenCapsuleHeader(
+                            weather = weather,
+                            citiesCount = uiState.cities.size,
+                            selectedCityIndex = uiState.selectedCityIndex,
+                            onSelectCityIndex = onSelectCityIndex,
+                            onHeaderClick = onOpenCityPicker
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+
+                // Section 2: AI Fact Block (refs/premium_ads.png)
+                item(key = "ai_fact_block") {
+                    AiFactCard(
+                        aiFact = uiState.aiFact,
+                        onClick = onOpenGrassModal
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                // Section 3: Premium Subscription Banner (refs/premium_ads.png)
+                item(key = "premium_banner") {
+                    PremiumBanner(
+                        isPremiumPurchased = uiState.isPremiumPurchased,
+                        onOpenPaywall = onOpenPaywall
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                // Section 4: Satirical Ad Banner (refs/premium_ads.png)
+                if (uiState.showAds) {
+                    item(key = "ad_banner") {
+                        AdBannerCard(
+                            onClick = onOpenAdPromo
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                // Section 5: 2x2 Services Grid (refs/cards_travel.png, refs/cards_taxi_food.png)
+                item(key = "services_grid") {
+                    ServicesGrid(
+                        onOpenFlight = onOpenFlight,
+                        onOpenLootbox = onOpenLootbox,
+                        onOpenTaxi = onOpenTaxi,
+                        onOpenFood = onOpenFood,
+                        cardBackground = themeColors.cardBackground,
+                        cardBorder = themeColors.cardBorder
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Section 2: Card 1 (5 Segments + Condition/Hourly + Rate Stars)
+                // Section 6: Card 1 (5 Segments + Condition/Hourly + Rate Stars)
                 item(key = "hourly_card") {
                     HourlyWeatherCard(
                         weather = weather,
                         selectedSegment = uiState.selectedSegment,
+                        isHourlyExpanded = uiState.isHourlyExpanded,
                         userRating = uiState.userRating,
                         showRatingThankYou = uiState.showRatingThankYou,
                         onSegmentSelected = onSegmentSelected,
+                        onToggleHourlyExpanded = onToggleHourlyExpanded,
                         onRatingChanged = onRatingChanged,
                         cardBackground = themeColors.cardBackground,
                         cardBorder = themeColors.cardBorder
@@ -271,7 +453,7 @@ internal fun MainScreenContent(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Section 3: Card 2 (10-Day Forecast with Umbrella Shop Banner)
+                // Section 7: Card 2 (10-Day Forecast with Umbrella Shop Banner)
                 item(key = "daily_card") {
                     TenDayForecastCard(
                         dailyList = weather.daily,
@@ -299,16 +481,16 @@ internal fun MainScreenContent(
             }
         }
 
-        // Full-Size Bottom Navigation Bar (4 tabs: Главная, Карта, Список, Поиск)
+        // Full-Size Bottom Navigation Bar (5 tabs: Главная, Карта, Вид, Список, Поиск)
         FullSizeBottomBar(
             selectedTab = uiState.selectedTab,
             onTabSelected = onTabSelected,
-            barBackground = themeColors.bottomBarBackground,
-            barBorder = themeColors.cardBorder,
+            barBackground = Color(0xF0151E28),
+            barBorder = Color(0x60FFFFFF),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 14.dp, start = 16.dp, end = 16.dp)
+                .padding(bottom = 12.dp, start = 14.dp, end = 14.dp)
         )
 
         // Floating FPS Overlay in top left corner
@@ -481,15 +663,411 @@ private fun GoldenCapsuleHeader(
 }
 
 /**
+ * AI Fact Card (refs/premium_ads.png)
+ */
+@Composable
+private fun AiFactCard(
+    aiFact: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0x35000000),
+        border = BorderStroke(0.8.dp, Color(0x30FFFFFF)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("✨", fontSize = 20.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "А знали ли вы...",
+                    color = Color(0xFFFFD54F),
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = aiFact.removePrefix("✨ "),
+                    color = Color.White.copy(alpha = 0.95f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Premium Banner (refs/premium_ads.png)
+ */
+@Composable
+private fun PremiumBanner(
+    isPremiumPurchased: Boolean,
+    onOpenPaywall: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0x40000000),
+        border = BorderStroke(0.8.dp, Color(0x35FFFFFF)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenPaywall)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Больше советов и эксклюзивных функций",
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (isPremiumPurchased) Color(0xFF2E7D32) else Color(0xFF1976D2),
+                border = BorderStroke(0.8.dp, if (isPremiumPurchased) Color(0xFF81C784) else Color(0xFF64B5F6))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isPremiumPurchased) {
+                        Text(
+                            text = "★ ПРЕМИУМ",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Подписка Премиум",
+                                color = Color.White,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "5.99 BYN",
+                                    color = Color(0xFFFFD54F),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "29.99",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 9.sp,
+                                    textDecoration = TextDecoration.LineThrough
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Green Ad Banner (refs/premium_ads.png)
+ */
+@Composable
+private fun AdBannerCard(
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF1B5E20).copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0x40000000)
+                ) {
+                    Text(
+                        text = "РЕКЛАМА",
+                        color = Color(0xFFA5D6A7),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = "Дизайнеры больше не нужны!",
+                    color = Color.White,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    text = "Научим делать сайты с помощью нейросетей за 15 минут",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 10.5.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0x35000000),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.LaptopMac,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 2x2 Services Grid (refs/cards_travel.png, refs/cards_taxi_food.png)
+ */
+@Composable
+private fun ServicesGrid(
+    onOpenFlight: () -> Unit,
+    onOpenLootbox: () -> Unit,
+    onOpenTaxi: () -> Unit,
+    onOpenFood: () -> Unit,
+    cardBackground: Color,
+    cardBorder: Color
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Row 1: Flights & Lootboxes
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Card 1: Flights to Dubai
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = cardBackground,
+                border = BorderStroke(0.8.dp, cardBorder),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(102.dp)
+                    .clickable(onClick = onOpenFlight)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "✈ Путешествия",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 11.sp
+                        )
+                        Text("›", color = Color.White, fontSize = 14.sp)
+                    }
+
+                    Column {
+                        Text(
+                            text = "Билеты в Дубай",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Вы недавно смотрели...",
+                            color = Color.White.copy(alpha = 0.65f),
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // Card 2: Lootboxes
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = cardBackground,
+                border = BorderStroke(0.8.dp, cardBorder),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(102.dp)
+                    .clickable(onClick = onOpenLootbox)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🎁 Лутбоксы",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text("›", color = Color.White, fontSize = 14.sp)
+                    }
+
+                    Column {
+                        Text(
+                            text = "Не повезло с погодой?",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Повезет тут!",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Row 2: Taxi & Food
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Card 3: Taxi
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = cardBackground,
+                border = BorderStroke(0.8.dp, cardBorder),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(102.dp)
+                    .clickable(onClick = onOpenTaxi)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "🚖 Такси",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 11.sp
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFFB300),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Куда едем? ->",
+                                color = Color(0xFF1E232A),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Card 4: Food Delivery
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = cardBackground,
+                border = BorderStroke(0.8.dp, cardBorder),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(102.dp)
+                    .clickable(onClick = onOpenFood)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "🍕 Еда",
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 11.sp
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFF7043),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Что желаете? ->",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * 2. Карточка «Погодные условия» — 5 сегментов в ряд + контент + блок «Оцените погоду»
  */
 @Composable
 private fun HourlyWeatherCard(
     weather: WeatherDomainData,
     selectedSegment: ConditionSegment,
+    isHourlyExpanded: Boolean,
     userRating: Int?,
     showRatingThankYou: Boolean,
     onSegmentSelected: (ConditionSegment) -> Unit,
+    onToggleHourlyExpanded: () -> Unit,
     onRatingChanged: (Int) -> Unit,
     cardBackground: Color,
     cardBorder: Color
@@ -559,217 +1137,254 @@ private fun HourlyWeatherCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Subtitle
-            Text(
-                text = when (selectedSegment) {
-                    ConditionSegment.WEATHER -> "Температура (°C)"
-                    ConditionSegment.RAIN -> "Вероятность осадков (%)"
-                    ConditionSegment.WIND -> "Скорость ветра (м/с)"
-                    ConditionSegment.CLOTHES -> "Рекомендации по одежде"
-                    ConditionSegment.TRAFFIC -> "Дорожная ситуация"
-                },
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Normal,
-                modifier = Modifier.padding(start = 4.dp)
-            )
+            // Subtitle + Expand / Collapse Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = when (selectedSegment) {
+                        ConditionSegment.WEATHER -> "Почасовой прогноз"
+                        ConditionSegment.RAIN -> "Вероятность осадков (%)"
+                        ConditionSegment.WIND -> "Скорость ветра (м/с)"
+                        ConditionSegment.CLOTHES -> "Рекомендации по одежде"
+                        ConditionSegment.TRAFFIC -> "Дорожная ситуация"
+                    },
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Dynamic content depending on selected segment
-            when (selectedSegment) {
-                ConditionSegment.WEATHER -> {
-                    // Standard 6-column hourly weather row
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Toggle Button (refs/rate_stars.png "Развернуть v")
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0x25FFFFFF),
+                    modifier = Modifier.clickable(onClick = onToggleHourlyExpanded)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(weather.hourly, key = { it.hourLabel }) { item ->
-                            HourlyItemColumn(
-                                item = item,
-                                selectedSegment = ConditionSegment.WEATHER
-                            )
-                        }
-                    }
-                }
-
-                ConditionSegment.RAIN -> {
-                    // High-contrast Precipitation Block
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0x22FFFFFF), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Текущая вероятность осадков:",
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 13.sp
-                            )
-                            val currentPop = weather.hourly.firstOrNull()?.pop ?: 0
-                            Text(
-                                text = "$currentPop%",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(weather.hourly, key = { it.hourLabel }) { item ->
-                                HourlyItemColumn(
-                                    item = item,
-                                    selectedSegment = ConditionSegment.RAIN
-                                )
-                            }
-                        }
-                    }
-                }
-
-                ConditionSegment.WIND -> {
-                    // High-contrast Wind Block
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0x22FFFFFF), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Скорость ветра",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 12.sp
-                                )
-                                Text(
-                                    text = "${weather.windSpeed} м/с",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "Порывы до",
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 12.sp
-                                )
-                                val gust = (weather.windSpeed * 1.4).roundToInt()
-                                Text(
-                                    text = "$gust м/с",
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(weather.hourly, key = { it.hourLabel }) { item ->
-                                HourlyItemColumn(
-                                    item = item,
-                                    selectedSegment = ConditionSegment.WIND
-                                )
-                            }
-                        }
-                    }
-                }
-
-                ConditionSegment.CLOTHES -> {
-                    // Clothing advice card
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color(0x28FFFFFF),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "🧥", fontSize = 28.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Совет по гардеробу на сегодня",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = weather.clothingAdvice,
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 13.sp,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                        }
-                    }
-                }
-
-                ConditionSegment.TRAFFIC -> {
-                    // Traffic situation card
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color(0x28FFFFFF),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "🚦", fontSize = 28.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Дорожная обстановка",
-                                        color = Color.White,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFFFFA000)
-                                    ) {
-                                        Text(
-                                            text = "${weather.trafficScore} баллов",
-                                            color = Color.White,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = weather.trafficAdvice,
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
+                        Text(
+                            text = if (isHourlyExpanded) "Свернуть" else "Развернуть",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = if (isHourlyExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
+
+            // Collapsible Content
+            AnimatedVisibility(
+                visible = isHourlyExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    when (selectedSegment) {
+                        ConditionSegment.WEATHER -> {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(weather.hourly, key = { it.hourLabel }) { item ->
+                                    HourlyItemColumn(
+                                        item = item,
+                                        selectedSegment = ConditionSegment.WEATHER
+                                    )
+                                }
+                            }
+                        }
+
+                        ConditionSegment.RAIN -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x22FFFFFF), RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Текущая вероятность осадков:",
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        fontSize = 13.sp
+                                    )
+                                    val currentPop = weather.hourly.firstOrNull()?.pop ?: 0
+                                    Text(
+                                        text = "$currentPop%",
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(weather.hourly, key = { it.hourLabel }) { item ->
+                                        HourlyItemColumn(
+                                            item = item,
+                                            selectedSegment = ConditionSegment.RAIN
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        ConditionSegment.WIND -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x22FFFFFF), RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Текущая скорость ветра:",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 11.5.sp
+                                        )
+                                        Text(
+                                            text = "${weather.windSpeed} м/с",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Text(
+                                        text = when {
+                                            weather.windSpeed < 5 -> "Слабый ветерок"
+                                            weather.windSpeed < 10 -> "Умеренный ветер"
+                                            weather.windSpeed < 15 -> "Сильный порывистый"
+                                            else -> "Штормовое предупреждение"
+                                        },
+                                        color = Color(0xFF81D4FA),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(weather.hourly, key = { it.hourLabel }) { item ->
+                                        HourlyItemColumn(
+                                            item = item,
+                                            selectedSegment = ConditionSegment.WIND
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        ConditionSegment.CLOTHES -> {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0x28FFFFFF),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = TShirtIcon,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "Совет на сегодня",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = weather.clothingAdvice,
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        ConditionSegment.TRAFFIC -> {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0x28FFFFFF),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "🚦", fontSize = 28.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Дорожная обстановка",
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFFFFA000)
+                                            ) {
+                                                Text(
+                                                    text = "${weather.trafficScore} баллов",
+                                                    color = Color.White,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = weather.trafficAdvice,
+                                            color = Color.White.copy(alpha = 0.9f),
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
             HorizontalDivider(color = Color(0x18FFFFFF), thickness = 0.6.dp)
             Spacer(modifier = Modifier.height(6.dp))
 
@@ -802,7 +1417,7 @@ private fun HourlyWeatherCard(
                     }
                 }
 
-                // 5 Interactive stars capsule
+                // 5 Interactive stars capsule (3 active by default)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color(0x38000000),
@@ -859,15 +1474,15 @@ private fun SegmentTabItem(
             Icon(
                 imageVector = icon,
                 contentDescription = title,
-                tint = if (isSelected) Color(0xFF222222) else Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(15.dp)
+                tint = if (isSelected) Color(0xFF1E88E5) else Color.White,
+                modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = title,
-                fontSize = 9.sp,
+                fontSize = 9.5.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) Color(0xFF222222) else Color.White.copy(alpha = 0.8f),
+                color = if (isSelected) Color(0xFF1E88E5) else Color.White.copy(alpha = 0.9f),
                 maxLines = 1,
                 softWrap = false
             )
@@ -882,52 +1497,64 @@ private fun HourlyItemColumn(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(52.dp)
+        modifier = Modifier.width(44.dp)
     ) {
         Text(
             text = item.hourLabel,
-            color = Color.White.copy(alpha = 0.90f),
+            color = Color.White.copy(alpha = 0.9f),
             fontSize = 12.5.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            softWrap = false,
-            textAlign = TextAlign.Center
+            fontWeight = FontWeight.Medium
         )
-
         Spacer(modifier = Modifier.height(4.dp))
 
-        WeatherIcon(
-            iconType = if (selectedSegment == ConditionSegment.RAIN) {
-                WeatherIconType.RAIN
-            } else {
-                item.iconType
-            },
-            size = 24.dp
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        val valueText = when (selectedSegment) {
-            ConditionSegment.WEATHER -> "${item.temp}°"
-            ConditionSegment.RAIN -> "${item.pop}%"
-            ConditionSegment.WIND -> "${item.wind.roundToInt()} м/с"
-            else -> "${item.temp}°"
+        when (selectedSegment) {
+            ConditionSegment.WEATHER -> {
+                WeatherIcon(iconType = item.iconType, size = 26.dp)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${item.temp}°",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            ConditionSegment.RAIN -> {
+                Icon(
+                    imageVector = Icons.Default.WaterDrop,
+                    contentDescription = null,
+                    tint = Color(0xFF64B5F6),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${item.pop}%",
+                    color = Color.White,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            ConditionSegment.WIND -> {
+                Icon(
+                    imageVector = Icons.Default.Air,
+                    contentDescription = null,
+                    tint = Color(0xFF81D4FA),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${item.wind.roundToInt()}",
+                    color = Color.White,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            else -> {}
         }
-
-        Text(
-            text = valueText,
-            color = Color.White,
-            fontSize = 13.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            softWrap = false,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
 /**
- * 4. Карточка 10-дневного прогноза со вставкой «Зонтики» между Пн и Вт (refs/rate_stars.png)
+ * 4. Карточка 10-дневного прогноза (refs/rate_stars.png)
  */
 @Composable
 private fun TenDayForecastCard(
@@ -938,10 +1565,8 @@ private fun TenDayForecastCard(
     cardBackground: Color,
     cardBorder: Color
 ) {
-    if (dailyList.isEmpty()) return
-
-    val overallMin = dailyList.minOf { it.minTemp }
-    val overallMax = dailyList.maxOf { it.maxTemp }
+    val overallMin = remember(dailyList) { dailyList.minOfOrNull { it.minTemp } ?: 10 }
+    val overallMax = remember(dailyList) { dailyList.maxOfOrNull { it.maxTemp } ?: 25 }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -952,87 +1577,76 @@ private fun TenDayForecastCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            dailyList.forEachIndexed { index, item ->
+            // Header: 10-дневный прогноз
+            Text(
+                text = "10-дневный прогноз",
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Day rows
+            dailyList.take(10).forEachIndexed { index, item ->
                 DailyForecastRow(
                     item = item,
-                    currentTemp = if (index == 0) currentTemp else null,
                     overallMin = overallMin,
                     overallMax = overallMax,
+                    currentTemp = currentTemp,
                     onClick = { onDayClick(item) }
                 )
-
-                // Insert Umbrella Offer between Monday (index 1) and Tuesday (index 2)
-                if (index == 1) {
+                if (index < dailyList.size - 1) {
                     HorizontalDivider(
-                        color = Color(0x1AFFFFFF),
+                        color = Color(0x18FFFFFF),
                         thickness = 0.6.dp,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-
-                    // Umbrella banner row
-                    UmbrellaOfferRow(onClick = onOpenUmbrellaShop)
-                }
-
-                if (index < dailyList.lastIndex) {
-                    HorizontalDivider(
-                        color = Color(0x1AFFFFFF),
-                        thickness = 0.6.dp,
-                        modifier = Modifier.padding(vertical = 2.dp)
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
             }
-        }
-    }
-}
 
-/**
- * Полоса «🌂 Зонтики от 29.99 BYN / Смотреть ›» (refs/rate_stars.png)
- */
-@Composable
-private fun UmbrellaOfferRow(
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0x22FFFFFF),
-        border = BorderStroke(0.6.dp, Color(0x35FFFFFF)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "🌂", fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Зонтики от ",
-                    color = Color.White,
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "29.99 BYN",
-                    color = Color(0xFF00E676),
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = Color(0x25FFFFFF), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Umbrella Shop Row (refs/rate_stars.png)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onOpenUmbrellaShop)
+                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "🌂", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Зонтики от 29.99 BYN",
+                        color = Color.White,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Смотреть",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "›",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-
-            Text(
-                text = "Смотреть ›",
-                color = Color.White,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.SemiBold
-            )
         }
     }
 }
@@ -1040,9 +1654,9 @@ private fun UmbrellaOfferRow(
 @Composable
 private fun DailyForecastRow(
     item: DailyItem,
-    currentTemp: Int?,
     overallMin: Int,
     overallMax: Int,
+    currentTemp: Int,
     onClick: () -> Unit
 ) {
     Row(
@@ -1050,52 +1664,37 @@ private fun DailyForecastRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 3.dp),
+            .padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Day name (e.g. "Сегодня", "Пн", "Вт"...)
+        // Day label
         Text(
             text = item.dayLabel,
             color = Color.White,
             fontSize = 14.5.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.width(68.dp)
         )
 
-        // Weather Icon with optional POP % underneath
+        // Weather icon
         Box(
-            modifier = Modifier.width(38.dp),
+            modifier = Modifier.width(36.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                WeatherIcon(
-                    iconType = item.iconType,
-                    size = 22.dp
-                )
-                if (item.pop >= 15) {
-                    Text(
-                        text = "${item.pop}%",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            WeatherIcon(iconType = item.iconType, size = 24.dp)
         }
-
-        Spacer(modifier = Modifier.width(8.dp))
 
         // Min temperature
         Text(
             text = "${item.minTemp}°",
-            color = Color.White.copy(alpha = 0.75f),
+            color = Color.White.copy(alpha = 0.65f),
             fontSize = 14.5.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Normal,
             textAlign = TextAlign.End,
             modifier = Modifier.width(32.dp)
         )
 
-        // Temperature range gradient bar with current temp dot for "Сегодня"
+        // Gradient range bar
         TemperatureRangeBar(
             minTemp = item.minTemp,
             maxTemp = item.maxTemp,
@@ -1120,7 +1719,8 @@ private fun DailyForecastRow(
 }
 
 /**
- * 5. Полноразмерный нижний таб-бар с 4 вкладками: Главная, Карта, Список, Поиск (refs/bottom_nav.png, refs/rate_stars.png)
+ * 5-Tab High-Contrast Bottom Navigation Bar (refs/bottom_nav.png, refs/theme_copper.png)
+ * Tabs: Главная, Карта, Вид, Список, Поиск
  */
 @Composable
 private fun FullSizeBottomBar(
@@ -1136,12 +1736,12 @@ private fun FullSizeBottomBar(
             .height(64.dp),
         shape = RoundedCornerShape(32.dp),
         color = barBackground,
-        border = BorderStroke(0.8.dp, barBorder)
+        border = BorderStroke(1.2.dp, barBorder)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1156,6 +1756,12 @@ private fun FullSizeBottomBar(
                 icon = Icons.Outlined.Map,
                 isSelected = selectedTab == BottomTab.MAP,
                 onClick = { onTabSelected(BottomTab.MAP) }
+            )
+            BottomTabItem(
+                label = "Вид",
+                icon = Icons.Default.Palette,
+                isSelected = selectedTab == BottomTab.THEMES,
+                onClick = { onTabSelected(BottomTab.THEMES) }
             )
             BottomTabItem(
                 label = "Список",
@@ -1182,25 +1788,24 @@ private fun BottomTabItem(
 ) {
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Icon capsule
         Box(
             modifier = Modifier
-                .size(width = if (isSelected) 44.dp else 28.dp, height = 28.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (isSelected) Color(0x551976D2) else Color.Transparent),
+                .size(width = if (isSelected) 42.dp else 28.dp, height = 26.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(if (isSelected) Color(0xFF1E88E5) else Color.Transparent),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f),
-                modifier = Modifier.size(20.dp)
+                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.size(19.dp)
             )
         }
 
@@ -1208,9 +1813,9 @@ private fun BottomTabItem(
 
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 10.5.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.65f)
+            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f)
         )
     }
 }

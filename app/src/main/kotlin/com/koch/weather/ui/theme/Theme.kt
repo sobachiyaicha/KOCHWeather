@@ -64,6 +64,39 @@ fun getThemePalette(mode: AppThemeMode): CustomThemeColors {
             accentPill = Color(0xFFFF8A65),
             bottomBarBackground = Color(0x992B0D08)
         )
+        AppThemeMode.CYBERPUNK -> CustomThemeColors(
+            gradientBrush = Brush.verticalGradient(
+                listOf(Color(0xFF0D0221), Color(0xFF240046), Color(0xFF3C096C))
+            ),
+            cardBackground = Color(0xFF19053B),
+            cardBorder = Color(0xFF7B2CBF),
+            textPrimary = Color.White,
+            textSecondary = Color(0xFFE0AAFF),
+            accentPill = Color(0xFF00E5FF),
+            bottomBarBackground = Color(0x9910002B)
+        )
+        AppThemeMode.BLOODY_SUNSET -> CustomThemeColors(
+            gradientBrush = Brush.verticalGradient(
+                listOf(Color(0xFF2B090D), Color(0xFF590D15), Color(0xFF8B121E))
+            ),
+            cardBackground = Color(0xFF23070A),
+            cardBorder = Color(0xFF7A1521),
+            textPrimary = Color.White,
+            textSecondary = Color(0xFFFFCDD2),
+            accentPill = Color(0xFFFF5252),
+            bottomBarBackground = Color(0x991F0508)
+        )
+        AppThemeMode.AURORA_BOREALIS -> CustomThemeColors(
+            gradientBrush = Brush.verticalGradient(
+                listOf(Color(0xFF05131E), Color(0xFF0C2B36), Color(0xFF134E4A))
+            ),
+            cardBackground = Color(0xFF082229),
+            cardBorder = Color(0xFF1A535C),
+            textPrimary = Color.White,
+            textSecondary = Color(0xFFB2DFDB),
+            accentPill = Color(0xFF69F0AE),
+            bottomBarBackground = Color(0x99041219)
+        )
     }
 }
 
