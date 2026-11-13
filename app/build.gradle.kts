@@ -1,20 +1,24 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
 }
 
+// Read local.properties OUTSIDE the `android { }` block: inside it, `java`
+// resolves to the Gradle `java` extension, not the package.
+val localProperties = Properties().apply {
+  val localPropFile = rootProject.file("local.properties")
+  if (localPropFile.exists()) {
+    localPropFile.inputStream().use { load(it) }
+  }
+}
+val trafficApiKey = localProperties.getProperty("TRAFFIC_API_KEY") ?: ""
+
 android {
   namespace = "com.koch.weather"
   compileSdk = 36
-
-  val localProperties = java.util.Properties().apply {
-    val localPropFile = rootProject.file("local.properties")
-    if (localPropFile.exists()) {
-      localPropFile.inputStream().use { load(it) }
-    }
-  }
-  val trafficApiKey = localProperties.getProperty("TRAFFIC_API_KEY") ?: ""
 
   defaultConfig {
     applicationId = "com.koch.weather"
