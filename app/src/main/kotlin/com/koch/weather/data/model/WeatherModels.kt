@@ -108,19 +108,35 @@ data class WeatherDomainData(
     val weatherCode: Int,
     val iconType: WeatherIconType,
     val clothingAdvice: String,
-    val trafficScore: Int = 4,
-    val trafficAdvice: String = "Движение свободное",
+    val trafficScore: Int? = null,
+    val trafficAdvice: String = "Нет данных о пробках",
     val hourly: List<HourlyItem>,
     val daily: List<DailyItem>,
     val isOffline: Boolean = false,
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
-enum class AppThemeMode {
-    BLUE_SKY,
-    COPPER_SUNSET,
-    FOREST,
-    MARS
+@Serializable
+data class CityWeatherSummary(
+    val city: CityLocation,
+    val currentTemp: Int? = null,
+    val conditionDescription: String = "",
+    val iconType: WeatherIconType = WeatherIconType.PARTLY_CLOUDY_DAY,
+    val minTemp: Int? = null,
+    val maxTemp: Int? = null,
+    val trafficScore: Int? = null,
+    val trafficAdvice: String = "",
+    val isLoading: Boolean = false
+)
+
+enum class AppThemeMode(val titleRu: String) {
+    BLUE_SKY("Голубое небо"),
+    COPPER_SUNSET("Медный закат"),
+    FOREST("Изумрудный лес"),
+    MARS("Планета Марс"),
+    CYBERPUNK("Неоновый киберпанк"),
+    BLOODY_SUNSET("Кровавый закат"),
+    AURORA_BOREALIS("Северное сияние")
 }
 
 enum class ConditionSegment {
@@ -134,8 +150,13 @@ enum class ConditionSegment {
 enum class BottomTab {
     HOME,
     MAP,
+    THEMES,
     LIST,
-    SEARCH
+    SEARCH;
+
+    companion object {
+        val CITIES: BottomTab get() = LIST
+    }
 }
 
 @Serializable
@@ -202,8 +223,34 @@ data class MainScreenUiState(
 
     // UI state
     val currentTheme: AppThemeMode = AppThemeMode.BLUE_SKY,
+    val availableThemes: Set<AppThemeMode> = setOf(
+        AppThemeMode.BLUE_SKY,
+        AppThemeMode.COPPER_SUNSET,
+        AppThemeMode.FOREST,
+        AppThemeMode.MARS
+    ),
     val selectedSegment: ConditionSegment = ConditionSegment.WEATHER,
     val selectedTab: BottomTab = BottomTab.HOME,
+
+    // Folding states
+    val isHourlyExpanded: Boolean = false,
+
+    // Cloud Lock Screen (15s timer / swipe gesture)
+    val isCloudLocked: Boolean = false,
+    val isCloudsCleared: Boolean = false,
+
+    // Premium & Ads
+    val isPremiumPurchased: Boolean = false,
+    val showAds: Boolean = true,
+
+    // AI Facts
+    val aiFact: String = "Чтобы точно узнать погоду, нужно посмотреть в окно",
+
+    // Services state (2x2 Grid + Modals)
+    val lootboxState: LootboxState = LootboxState(),
+    val taxiState: TaxiState = TaxiState(),
+    val foodState: FoodState = FoodState(),
+    val flightState: FlightState = FlightState(),
 
     // Rating widget (Phase 3)
     val rating: Float = 3.5f,
@@ -215,12 +262,13 @@ data class MainScreenUiState(
     val umbrellas: List<UmbrellaItem> = DefaultUmbrellas.items,
 
     // Satirical & interactive features
-    val isCloudsCleared: Boolean = false,
     val isGrassModalOpen: Boolean = false,
     val isGrassUploaded: Boolean = false,
     val isCongratsModalOpen: Boolean = false,
 
-    // Search
+    // Fullscreen Screens: List of Cities & Search
+    val citySummaries: List<CityWeatherSummary> = emptyList(),
+    val isLoadingCitiesWeather: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<CityLocation> = emptyList(),
     val isSearching: Boolean = false

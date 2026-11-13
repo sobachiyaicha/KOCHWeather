@@ -13,7 +13,10 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
-class WeatherRepository(context: Context) {
+class WeatherRepository @JvmOverloads constructor(
+    context: Context,
+    private val trafficRepository: TrafficRepository = TrafficRepository()
+) {
     private val client = OpenMeteoClient()
     private val cache = WeatherCache(context.applicationContext)
     private val json = Json {
@@ -139,7 +142,9 @@ class WeatherRepository(context: Context) {
         val minTemp = dailyDto?.temperature2mMin?.firstOrNull()?.roundToInt() ?: (curTemp - 6)
 
         val clothingAdvice = WmoHelper.getClothingAdvice(curTemp, wmoCode)
-        val (trafficScore, trafficAdvice) = WmoHelper.getTrafficAdvice(wmoCode, curTemp)
+        val trafficInfo = trafficRepository.getTraffic(city)
+        val trafficScore = trafficInfo.score
+        val trafficAdvice = trafficInfo.description
 
         // Hourly mapping
         val hourlyList = mutableListOf<HourlyItem>()
@@ -310,8 +315,8 @@ class WeatherRepository(context: Context) {
             weatherCode = wmoCode,
             iconType = iconType,
             clothingAdvice = WmoHelper.getClothingAdvice(temp, wmoCode),
-            trafficScore = WmoHelper.getTrafficAdvice(wmoCode, temp).first,
-            trafficAdvice = WmoHelper.getTrafficAdvice(wmoCode, temp).second,
+            trafficScore = null,
+            trafficAdvice = "Нет данных о пробках",
             hourly = getMockHourly(temp, wmoCode, iconType),
             daily = getMockDaily(temp),
             isOffline = isOffline
