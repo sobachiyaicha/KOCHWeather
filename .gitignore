@@ -25,3 +25,6 @@ refs_src/
 
 # Scratch build log dumps (real evidence lives in shots/)
 assemble_out.txt
+
+# Local build scratch: temp files, caches. Never committed, never on C:
+.local/
