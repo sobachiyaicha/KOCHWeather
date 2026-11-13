@@ -28,3 +28,6 @@ assemble_out.txt
 
 # Local build scratch: temp files, caches. Never committed, never on C:
 .local/
+
+# One-off device-side test scripts (logs stay tracked)
+shots/*.sh
