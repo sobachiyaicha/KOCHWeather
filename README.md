@@ -60,6 +60,7 @@ $env:JAVA_HOME = "D:\jdk-17\jdk-17.0.12+7"
 - `shots/` — скриншоты с G8342 (`r7_*`, `r9_*`, `r10_*`, `s4_*`), `gfxinfo*`, `logcat*`, `dynamics/`.
 - `_history/reports/phase-4/` — отчёты ролей: `device-qa.md`, `feature-qa-final.md`, `visual-critic-*.md`, `code-reviewer-*.md`, `perf-qa-final.md`, `judge.md`, `ui-coder-*.md`.
 - `ACCEPTANCE.md` — матрица R1–R23 со статусами и путями к доказательствам.
+- `USER_REQUIREMENTS.md` — свод требований и указаний пользователя (правки, запреты, решения).
 
 ## Команда и процесс
 
