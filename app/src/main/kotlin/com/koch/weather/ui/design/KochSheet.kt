@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -148,29 +149,49 @@ fun KochSheet(
                             Box(modifier = Modifier.fillMaxWidth()) { hero() }
                         }
 
-                        if (lazyContent != null) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .fillMaxWidth(),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                    start = KochSpace.xl,
-                                    end = KochSpace.xl,
-                                    top = KochSpace.m,
-                                    bottom = KochSpace.l
-                                ),
-                                content = lazyContent
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .fillMaxWidth()
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = KochSpace.xl)
-                                    .padding(top = KochSpace.m, bottom = KochSpace.s)
-                            ) {
-                                content()
+                        // Контент листа. Нижняя кромка обрезается не «в упор к CTA»:
+                        // над футером лежит мягкая шторка-фейд, а у списка увеличен нижний
+                        // отступ — обрезанный ряд читается как «можно скроллить», а не как брак.
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .fillMaxWidth()
+                        ) {
+                            if (lazyContent != null) {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        start = KochSpace.xl,
+                                        end = KochSpace.xl,
+                                        top = KochSpace.m,
+                                        bottom = KochSpace.x2l
+                                    ),
+                                    content = lazyContent
+                                )
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = KochSpace.xl)
+                                        .padding(top = KochSpace.m, bottom = KochSpace.x2l)
+                                ) {
+                                    content()
+                                }
+                            }
+
+                            if (footer != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .height(KochSpace.x2l)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(Color.Transparent, colors.sheetSurface)
+                                            )
+                                        )
+                                )
                             }
                         }
 

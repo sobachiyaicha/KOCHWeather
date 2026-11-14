@@ -376,6 +376,8 @@ internal fun MainScreenContent(
     val themeColors = getThemePalette(uiState.currentTheme)
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
     var showDebugFps by remember { mutableStateOf(false) }
+    // Позиция ленты не переживает уход с главной: возвращаемся всегда к шапке.
+    val listState = remember { androidx.compose.foundation.lazy.LazyListState() }
 
     ProvideKochColors(uiState.currentTheme) {
         val koch = LocalKochColors.current
@@ -458,6 +460,10 @@ internal fun MainScreenContent(
                 // Контент живёт ВЫШЕ бара: вьюпорт списка укорачивается на высоту нижнего бара,
                 // поэтому карточки не рисуются под ним даже в середине скролла (дефект run 3).
                 LazyColumn(
+                    // Обычный remember (не rememberSaveable): при возврате с «Карты»/«Вида»
+                    // главная открывается сверху, а не в сохранённой позиции у футера —
+                    // иначе кажется, что сервисные блоки «пропали» (дефект run 4b).
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
