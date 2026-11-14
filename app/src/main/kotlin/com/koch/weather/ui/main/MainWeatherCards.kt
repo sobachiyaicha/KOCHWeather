@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -199,17 +200,31 @@ internal fun HourlyWeatherCard(
         HorizontalDivider(color = colors.textPrimary.copy(alpha = 0.08f), thickness = 0.8.dp)
         Spacer(Modifier.height(KochSpace.m))
 
-        // Блок оценки: звёзды всегда видны, «Развернуть» раскрывает подпись.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // Блок оценки: средняя оценка читается всегда (R3), звёзды — под ней.
+        Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = "Оцените погоду",
                 style = KochType.titleSection,
-                color = colors.textPrimary,
-                modifier = Modifier.weight(1f)
+                color = colors.textPrimary
             )
+            Text(
+                text = when {
+                    showRatingThankYou -> "Спасибо за отзыв! (${userRating ?: 3} ★)"
+                    userRating != null -> "Ваша оценка: $userRating ★ · в среднем сегодня: 3.5 ★"
+                    else -> "В среднем сегодня: 3.5 ★"
+                },
+                style = KochType.caption,
+                color = if (showRatingThankYou) colors.accentPromo else colors.textTertiary,
+                maxLines = 2
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = KochSpace.s),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
                 modifier = Modifier
                     .clip(KochShape.pill)
@@ -231,39 +246,39 @@ internal fun HourlyWeatherCard(
                     )
                 }
             }
-        }
-
-        Row(
-            modifier = Modifier
-                .padding(top = KochSpace.xs)
-                .clip(KochShape.pill)
-                .clickable { ratingExpanded = !ratingExpanded }
-                .padding(vertical = 4.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (ratingExpanded) "Свернуть" else "Развернуть",
-                style = KochType.caption,
-                color = colors.textTertiary
-            )
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                imageVector = if (ratingExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = null,
-                tint = colors.textTertiary,
-                modifier = Modifier.size(14.dp)
-            )
+            Spacer(Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .clip(KochShape.pill)
+                    .clickable { ratingExpanded = !ratingExpanded }
+                    .padding(vertical = 4.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (ratingExpanded) "Свернуть" else "Развернуть",
+                    style = KochType.caption,
+                    color = colors.textTertiary
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = if (ratingExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = colors.textTertiary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
 
         if (ratingExpanded) {
             Text(
-                text = when {
-                    showRatingThankYou -> "Спасибо за отзыв! (${userRating ?: 3} ★)"
-                    userRating != null -> "Ваша оценка: $userRating ★"
-                    else -> "В среднем сегодня: 3.5 ★"
+                text = if (userRating != null) {
+                    "Ваша оценка сохранена: $userRating ★"
+                } else {
+                    "Нажмите на звезду, чтобы оценить погоду"
                 },
-                style = KochType.sub,
-                color = if (showRatingThankYou) colors.accentPromo else colors.textSecondary
+                style = KochType.caption,
+                color = colors.textTertiary,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }
@@ -313,7 +328,11 @@ private fun HourlyRow(items: List<HourlyItem>, segment: ConditionSegment) {
         horizontalArrangement = Arrangement.spacedBy(KochSpace.m)
     ) {
         items(items, key = { it.hourLabel }) { item ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // Минимальная ширина: числа не должны сжиматься до обрезки («1» вместо «15»).
+                modifier = Modifier.widthIn(min = 36.dp)
+            ) {
                 Text(
                     text = item.hourLabel,
                     style = KochType.caption,
@@ -351,7 +370,11 @@ internal fun TenDayForecastCard(
     val colors = LocalKochColors.current
     val overallMin = remember(dailyList) { dailyList.minOfOrNull { it.minTemp } ?: 10 }
     val overallMax = remember(dailyList) { dailyList.maxOfOrNull { it.maxTemp } ?: 25 }
-    val umbrellaIndex = 1 // сразу после «Пн», как в refs/rate_stars.png
+    // Зонтики — сразу после «Пн» (refs/rate_stars.png). Ищем по подписи дня, а не по индексу:
+    // список может начинаться и с «Сегодня», и с «Пн».
+    val umbrellaIndex = remember(dailyList) {
+        dailyList.indexOfFirst { it.dayLabel.startsWith("Пн") }.takeIf { it >= 0 } ?: 1
+    }
 
     KochCard(
         shape = KochShape.cardLg,

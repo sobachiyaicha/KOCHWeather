@@ -241,7 +241,7 @@ internal fun ServicesGrid(
             )
             ServiceCard(
                 label = "Лутбоксы",
-                title = "Не повезло с погодой? Повезет тут!",
+                title = "Не повезло с погодой? Повезёт тут!",
                 icon = Icons.Default.CardGiftcard,
                 iconTint = colors.accentPromo,
                 showChevron = true,

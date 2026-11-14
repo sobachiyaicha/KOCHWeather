@@ -330,4 +330,9 @@ data class MainScreenUiState(
 ) {
     /** Единственная семантика для UI: рисовать ли облачную вуаль прямо сейчас. */
     val isCloudVeilVisible: Boolean get() = isCloudLocked && !isCloudsCleared
+
+    /** Фоновые фото для тем; null => UI оставляет текущий градиент. */
+    val skyBlueImageUrl: String? get() = imageUrls[ImageCategory.SKY_BLUE]?.firstOrNull()
+    val skySunsetImageUrl: String? get() = imageUrls[ImageCategory.SKY_SUNSET]?.firstOrNull()
+    val skyNorthernImageUrl: String? get() = imageUrls[ImageCategory.SKY_NORTHERN]?.firstOrNull()
 }

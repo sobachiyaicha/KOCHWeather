@@ -401,7 +401,7 @@ internal fun MainScreenContent(
                 ) {
                     // Пока облака не стёрты — жест принадлежит им: карусель городов НЕ листаем
                     // (дефект run 3: свайп стирания уводил на Дубай).
-                    if (uiState.isCloudLocked && !uiState.isCloudsCleared && !cloudVeilDismissed) {
+                    if (uiState.isCloudVeilVisible && !cloudVeilDismissed) {
                         return@pointerInput
                     }
                     detectHorizontalDragGestures(
@@ -655,10 +655,8 @@ internal fun MainScreenContent(
             }
 
             // Облачная вуаль (refs/cloud_swipe.png, 2:40) — ровно один раз за сессию.
-            // После стирания не возвращается: локальный латч + персистентный isCloudsCleared.
-            val veilVisible = uiState.isCloudLocked &&
-                !uiState.isCloudsCleared &&
-                !cloudVeilDismissed
+            // Контракт VM: isCloudVeilVisible = isCloudLocked && !isCloudsCleared (персист).
+            val veilVisible = uiState.isCloudVeilVisible && !cloudVeilDismissed
             if (veilVisible) {
                 CloudVeilOverlay(
                     onCleared = {

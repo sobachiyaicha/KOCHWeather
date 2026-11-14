@@ -10,7 +10,10 @@ enum class ImageCategory(val titleRu: String) {
     FOOD_NUGGETS("Наггетсы"),
     FOOD_PIROSHKI("Пирожки"),
     FOOD_HOTDOG("Хот-дог"),
-    FOOD_COFFEE("Кофе")
+    FOOD_COFFEE("Кофе"),
+    SKY_BLUE("Небо: голубая тема"),
+    SKY_SUNSET("Небо: медная тема"),
+    SKY_NORTHERN("Небо: северное сияние")
 }
 
 /**
@@ -177,6 +180,33 @@ object ImageCatalog {
                 url = "$UPLOAD/f/f1/Iced_Coffee_20240730-135859.jpg/500px-Iced_Coffee_20240730-135859.jpg",
                 descriptionRu = "Айс-кофе со взбитыми сливками",
                 sourcePageUrl = COMMONS_FILE + "Iced_Coffee_20240730-135859.jpg"
+            )
+        ),
+        ImageCategory.SKY_BLUE to listOf(
+            RemoteImage(
+                id = "sky_blue_cumulus",
+                category = ImageCategory.SKY_BLUE,
+                url = "$UPLOAD/a/a0/White_Cumulus_Clouds_against_Blue_Sky_%282%29.jpg/500px-White_Cumulus_Clouds_against_Blue_Sky_%282%29.jpg",
+                descriptionRu = "Дневное небо с кучевыми облаками",
+                sourcePageUrl = COMMONS_FILE + "White_Cumulus_Clouds_against_Blue_Sky_(2).jpg"
+            )
+        ),
+        ImageCategory.SKY_SUNSET to listOf(
+            RemoteImage(
+                id = "sky_sunset_red_clouds",
+                category = ImageCategory.SKY_SUNSET,
+                url = "$UPLOAD/7/7b/Red_cloudy_sunset_-_Ontario%2C_Canada.jpg/500px-Red_cloudy_sunset_-_Ontario%2C_Canada.jpg",
+                descriptionRu = "Медно-красное закатное небо в облаках",
+                sourcePageUrl = COMMONS_FILE + "Red_cloudy_sunset_-_Ontario,_Canada.jpg"
+            )
+        ),
+        ImageCategory.SKY_NORTHERN to listOf(
+            RemoteImage(
+                id = "sky_northern_aurora",
+                category = ImageCategory.SKY_NORTHERN,
+                url = "$UPLOAD/3/31/Aurora_and_perseids.jpg/500px-Aurora_and_perseids.jpg",
+                descriptionRu = "Северное сияние над заснеженным берегом",
+                sourcePageUrl = COMMONS_FILE + "Aurora_and_perseids.jpg"
             )
         )
     )

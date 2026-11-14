@@ -2,6 +2,7 @@ package com.koch.weather.data
 
 import com.koch.weather.data.model.ImageCatalog
 import com.koch.weather.data.model.ImageCategory
+import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.repository.ImageRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,7 +37,10 @@ class ImageCatalogTest {
             ImageCategory.FOOD_NUGGETS,
             ImageCategory.FOOD_PIROSHKI,
             ImageCategory.FOOD_HOTDOG,
-            ImageCategory.FOOD_COFFEE
+            ImageCategory.FOOD_COFFEE,
+            ImageCategory.SKY_BLUE,
+            ImageCategory.SKY_SUNSET,
+            ImageCategory.SKY_NORTHERN
         )
         required.forEach { category ->
             assertTrue(
@@ -60,6 +64,14 @@ class ImageCatalogTest {
         val all = repository.getAllImages()
         assertEquals(all.size, all.map { it.id }.toSet().size)
         assertEquals(all.size, all.map { it.url }.toSet().size)
+    }
+
+    @Test
+    fun skyBackgroundUrls_areExposedInUiState() {
+        val state = MainScreenUiState(imageUrls = repository.getUrlsByCategory())
+        assertEquals(repository.getUrls(ImageCategory.SKY_BLUE).first(), state.skyBlueImageUrl)
+        assertEquals(repository.getUrls(ImageCategory.SKY_SUNSET).first(), state.skySunsetImageUrl)
+        assertEquals(repository.getUrls(ImageCategory.SKY_NORTHERN).first(), state.skyNorthernImageUrl)
     }
 
     @Test

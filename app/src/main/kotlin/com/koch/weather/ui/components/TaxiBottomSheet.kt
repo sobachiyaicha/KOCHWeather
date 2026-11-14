@@ -235,7 +235,7 @@ private fun TariffCard(
     val colors = LocalKochColors.current
     Column(
         modifier = Modifier
-            .width(104.dp)
+            .width(112.dp)
             .heightIn(min = 92.dp)
             .clip(RoundedCornerShape(KochRadius.panel))
             .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.surfaceAlt)
@@ -257,7 +257,7 @@ private fun TariffCard(
             text = tariff.titleRu,
             style = KochType.bodyStrong,
             color = colors.textPrimary,
-            maxLines = 1
+            maxLines = 2
         )
         Text(
             text = "~${tariff.etaMinutes} мин",

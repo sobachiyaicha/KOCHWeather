@@ -1,5 +1,6 @@
 package com.koch.weather.ui.components
 
+import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -24,13 +25,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -41,6 +46,8 @@ import com.koch.weather.ui.theme.KochShape
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
 import com.koch.weather.ui.theme.LocalKochColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -48,8 +55,14 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 
 /**
- * R12: полноэкранная карта OSM. Хром — плавающее стекло поверх карты:
- * капсула-хедер, рабочая кнопка «центр», нижняя карточка с атрибуцией.
+ * R12: полноэкранная карта OSM. Хром — плавающее стекло поверх карты.
+ *
+ * Производительность (perf-qa):
+ *  - `Configuration.load` (диск) вынесен в IO-корутину, а не в `remember` на main;
+ *  - `MapView` создаётся в `AndroidView.factory` только после подготовки конфига и только
+ *    когда этот экран реально скомпонован (главная под картой больше не живёт);
+ *  - `setTilesScaledToDpi` убран — меньше пересчётов тайлов;
+ *  - маркер — точка-булавка (GradientDrawable), а не системная иконка «рука».
  */
 @Composable
 fun WeatherMapScreen(
@@ -63,53 +76,60 @@ fun WeatherMapScreen(
 
     val colors = LocalKochColors.current
     val context = LocalContext.current
-    val mapView = remember {
-        Configuration.getInstance().apply {
-            load(context, context.getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE))
-            userAgentValue = context.packageName
+    var mapReady by remember { mutableStateOf(false) }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
+    val pinColor = colors.accent
+
+    // Дисковый load конфигурации osmdroid — только в IO, не на главном потоке.
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            Configuration.getInstance().apply {
+                load(
+                    context,
+                    context.getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE)
+                )
+                userAgentValue = context.packageName
+            }
         }
-        MapView(context).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            setTilesScaledToDpi(true)
-            setUseDataConnection(true)
-            controller.setZoom(12.0)
-            controller.setCenter(GeoPoint(latitude, longitude))
-        }
+        mapReady = true
     }
 
-    LaunchedEffect(latitude, longitude, cityName, currentTemp) {
-        mapView.controller.setZoom(12.0)
-        mapView.controller.setCenter(GeoPoint(latitude, longitude))
-        mapView.overlays.removeAll { it is Marker }
-        mapView.overlays.add(
-            Marker(mapView).apply {
+    // Центр и маркер обновляются при смене города; карта может появиться позже первого кадра.
+    LaunchedEffect(mapReady, latitude, longitude, cityName, currentTemp) {
+        val view = mapView ?: return@LaunchedEffect
+        view.controller.setZoom(12.0)
+        view.controller.setCenter(GeoPoint(latitude, longitude))
+        view.overlays.removeAll { it is Marker }
+        view.overlays.add(
+            Marker(view).apply {
                 position = GeoPoint(latitude, longitude)
                 title = cityName
                 snippet = currentTemp?.let { "$it°" } ?: "Погода"
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                icon = pinDrawable(pinColor)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             }
         )
-        mapView.invalidate()
+        view.invalidate()
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, mapView) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                else -> Unit
+        val view = mapView
+        if (view == null) {
+            onDispose { }
+        } else {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> view.onResume()
+                    Lifecycle.Event.ON_PAUSE -> view.onPause()
+                    else -> Unit
+                }
             }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            mapView.onDetach()
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                view.onDetach()
+            }
         }
     }
 
@@ -118,10 +138,25 @@ fun WeatherMapScreen(
             .fillMaxSize()
             .background(Color(0xFF101820))
     ) {
-        androidx.compose.ui.viewinterop.AndroidView(
-            factory = { mapView },
-            modifier = Modifier.fillMaxSize()
-        )
+        if (mapReady) {
+            AndroidView(
+                factory = { ctx ->
+                    MapView(ctx).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        setUseDataConnection(true)
+                        controller.setZoom(12.0)
+                        controller.setCenter(GeoPoint(latitude, longitude))
+                        mapView = this
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Верхний скрим: хром читается на любой карте.
         Box(
@@ -135,7 +170,6 @@ fun WeatherMapScreen(
                 )
         )
 
-        // Плавающая капсула-хедер вместо непрозрачной полосы.
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -185,14 +219,15 @@ fun WeatherMapScreen(
             }
         }
 
-        // Кнопка «центр»: реально возвращает карту к городу (была декоративная иконка + X).
         KochIconButton(
             icon = Icons.Default.MyLocation,
             contentDescription = "Центр карты — выбранный город",
             onClick = {
-                mapView.controller.animateTo(GeoPoint(latitude, longitude))
-                mapView.controller.setZoom(12.0)
-                mapView.invalidate()
+                mapView?.let { view ->
+                    view.controller.animateTo(GeoPoint(latitude, longitude))
+                    view.controller.setZoom(12.0)
+                    view.invalidate()
+                }
             },
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -202,7 +237,6 @@ fun WeatherMapScreen(
             containerAlpha = 0.85f
         )
 
-        // Нижняя карточка: город, температура и обязательная атрибуция OSM.
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -252,3 +286,18 @@ fun WeatherMapScreen(
         }
     }
 }
+
+/** Точка-булавка вместо системной иконки: простое кольцо в цвете акцента. */
+private fun pinDrawable(color: Color): GradientDrawable = GradientDrawable().apply {
+    shape = GradientDrawable.OVAL
+    setColor(color.toArgb())
+    setStroke(6, android.graphics.Color.WHITE)
+    setBounds(0, 0, 42, 42)
+}
+
+private fun Color.toArgb(): Int = android.graphics.Color.argb(
+    (alpha * 255).toInt(),
+    (red * 255).toInt(),
+    (green * 255).toInt(),
+    (blue * 255).toInt()
+)

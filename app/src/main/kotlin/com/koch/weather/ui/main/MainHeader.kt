@@ -69,7 +69,8 @@ internal fun GoldenCapsuleHeader(
         ) {
             androidx.compose.material3.Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    // В референсе капсула занимает ~74 % ширины экрана, а не всю строку.
+                    .fillMaxWidth(0.84f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

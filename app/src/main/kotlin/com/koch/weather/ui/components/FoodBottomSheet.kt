@@ -88,63 +88,72 @@ fun FoodBottomSheet(
     KochSheet(
         onDismiss = onDismiss,
         maxHeightFraction = 0.88f,
-        content = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.s),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DeliveryDining,
-                    contentDescription = null,
-                    tint = colors.accentPromo,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(KochSpace.m))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Доставка горячей еды",
-                        style = KochType.titleCard,
-                        color = colors.textPrimary
+        // Меню ленивое: строки с фото компонуются только когда попадают в вьюпорт.
+        lazyContent = {
+            item(key = "food_header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = KochSpace.s),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeliveryDining,
+                        contentDescription = null,
+                        tint = colors.accentPromo,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Text(
-                        text = "Согреем в любую погоду за 25 минут",
-                        style = KochType.sub,
-                        color = colors.textTertiary,
-                        maxLines = 1
-                    )
+                    Spacer(Modifier.width(KochSpace.m))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Доставка горячей еды",
+                            style = KochType.titleCard,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = "Согреем в любую погоду за 25 минут",
+                            style = KochType.sub,
+                            color = colors.textTertiary,
+                            maxLines = 1
+                        )
+                    }
+                    KochCloseButton(onClick = onDismiss)
                 }
-                KochCloseButton(onClick = onDismiss)
             }
 
             if (activeOrder != null) {
-                ActiveOrderCard(order = activeOrder, modifier = Modifier.padding(top = KochSpace.l))
-            } else {                // Чипы ресторанов переносятся по строкам: «Surf Coffee» больше не режется краем.
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = KochSpace.l),
-                    horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-                    verticalArrangement = Arrangement.spacedBy(KochSpace.s)
-                ) {
-                    foodState.restaurants.forEach { restaurant ->
-                        KochChip(
-                            text = restaurant.name,
-                            selected = restaurant.id == foodState.selectedRestaurant?.id,
-                            onClick = { onSelectRestaurant(restaurant) }
-                        )
+                item(key = "active_order") {
+                    ActiveOrderCard(
+                        order = activeOrder,
+                        modifier = Modifier.padding(top = KochSpace.l)
+                    )
+                }
+            } else {
+                item(key = "restaurants") {
+                    // Чипы ресторанов переносятся по строкам: «Surf Coffee» не режется краем.
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = KochSpace.l),
+                        horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
+                        verticalArrangement = Arrangement.spacedBy(KochSpace.s)
+                    ) {
+                        foodState.restaurants.forEach { restaurant ->
+                            KochChip(
+                                text = restaurant.name,
+                                selected = restaurant.id == foodState.selectedRestaurant?.id,
+                                onClick = { onSelectRestaurant(restaurant) }
+                            )
+                        }
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxWidth().padding(top = KochSpace.m)) {
-                    foodState.menuItems.forEach { item ->
-                        MenuRow(
-                            item = item,
-                            count = foodState.cart[item] ?: 0,
-                            imageUrl = foodPhotoUrl(item.id, photoUrls),
-                            onAdd = { onAddToCart(item) },
-                            onRemove = { onRemoveFromCart(item) }
-                        )
-                    }
+                items(foodState.menuItems, key = { it.id }) { item ->
+                    MenuRow(
+                        item = item,
+                        count = foodState.cart[item] ?: 0,
+                        imageUrl = foodPhotoUrl(item.id, photoUrls),
+                        onAdd = { onAddToCart(item) },
+                        onRemove = { onRemoveFromCart(item) }
+                    )
                 }
             }
         },

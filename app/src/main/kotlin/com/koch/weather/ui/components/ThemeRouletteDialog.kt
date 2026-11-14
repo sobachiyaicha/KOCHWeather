@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,6 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.semantics.Role
@@ -85,8 +91,10 @@ fun ThemeRouletteDialog(
     }
 
     val isPreviewUnlocked = previewTheme in availableThemes
-    val above = neighbourTheme(previewTheme, allThemes, -1)
-    val below = neighbourTheme(previewTheme, allThemes, +1)
+    // Как в refs/congrats.png: сверху «Оформление Лес», снизу «Оформление Планета Марс».
+    // Это не «призы с замком», а два варианта оформления — поэтому замка на них нет.
+    val above = AppThemeMode.FOREST
+    val below = AppThemeMode.MARS
 
     KochSheet(
         onDismiss = onDismiss,
@@ -103,7 +111,6 @@ fun ThemeRouletteDialog(
 
             ThemeTicket(
                 theme = above,
-                isUnlocked = above in availableThemes,
                 onClick = { previewTheme = above },
                 modifier = Modifier.padding(top = KochSpace.s)
             )
@@ -134,7 +141,6 @@ fun ThemeRouletteDialog(
 
             ThemeTicket(
                 theme = below,
-                isUnlocked = below in availableThemes,
                 onClick = { previewTheme = below }
             )
 
@@ -160,6 +166,13 @@ fun ThemeRouletteDialog(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPreviewUnlocked) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = colors.accentSuccess,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Доступно",
                         style = KochType.caption,
@@ -216,21 +229,57 @@ private fun neighbourTheme(
     return all[next]
 }
 
-/** Карточка-«билет» с превью темы: подпись «Оформление …», замок у закрытой. */
+/** Короткая подпись приза: в референсе «Лес» и «Планета Марс», а не полное имя темы. */
+private fun ticketLabel(theme: AppThemeMode): String = when (theme) {
+    AppThemeMode.FOREST -> "Лес"
+    AppThemeMode.MARS -> "Планета Марс"
+    else -> theme.titleRu
+}
+
+/**
+ * Карточка-«билет» как в refs/congrats.png: текстура темы, диагональные штрихи,
+ * пунктирная рамка, подпись «Оформление …». Замка нет — это вариант оформления, не приз.
+ */
 @Composable
 private fun ThemeTicket(
     theme: AppThemeMode,
-    isUnlocked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(KochRadius.input)
+    val dashColor = Color.White.copy(alpha = 0.6f)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 62.dp)
+            .heightIn(min = 64.dp)
             .clip(shape)
             .background(themePreviewBrush(theme))
+            .drawBehind {
+                // Текстура: диагональные штрихи поверх градиента темы.
+                val step = 14.dp.toPx()
+                val stroke = 2.dp.toPx()
+                var x = -size.height
+                while (x < size.width + size.height) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.05f),
+                        start = Offset(x, 0f),
+                        end = Offset(x + size.height, size.height),
+                        strokeWidth = stroke
+                    )
+                    x += step
+                }
+                // Пунктирная рамка «билета».
+                drawRoundRect(
+                    color = dashColor,
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            floatArrayOf(7.dp.toPx(), 5.dp.toPx())
+                        )
+                    ),
+                    cornerRadius = CornerRadius(KochRadius.input.toPx())
+                )
+            }
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = KochSpace.l, vertical = KochSpace.s),
         contentAlignment = Alignment.Center
@@ -243,29 +292,12 @@ private fun ThemeTicket(
                 textAlign = TextAlign.Center
             )
             Text(
-                text = theme.titleRu,
+                text = ticketLabel(theme),
                 style = KochType.bodyStrong,
                 color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 2
             )
-        }
-        if (!isUnlocked) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(22.dp)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(Color.Black.copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "Тема закрыта",
-                    tint = Color.White.copy(alpha = 0.85f),
-                    modifier = Modifier.size(12.dp)
-                )
-            }
         }
     }
 }
@@ -299,7 +331,7 @@ private fun PhonePreview(
                 shape = RoundedCornerShape(20.dp),
                 // Fit, а не Crop: фронтальное фото должно попадать в рамку целиком,
                 // иначе от телефона остаётся кусок обоев.
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 fallback = { PhoneMock(theme) }
             )
         } else {

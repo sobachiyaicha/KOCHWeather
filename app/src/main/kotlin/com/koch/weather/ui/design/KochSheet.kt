@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -54,7 +56,12 @@ fun KochSheet(
     showHandle: Boolean = true,
     maxHeightFraction: Float = 0.86f,
     hero: (@Composable BoxScope.() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
+    content: @Composable ColumnScope.() -> Unit = {},
+    /**
+     * Ленивый контент вместо скроллируемой колонки: нужен там, где строк много и в них фото
+     * (меню еды). Один и тот же слой, тот же отступ и та же высота листа.
+     */
+    lazyContent: (LazyListScope.() -> Unit)? = null,
     footer: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val colors = LocalKochColors.current
@@ -141,15 +148,30 @@ fun KochSheet(
                             Box(modifier = Modifier.fillMaxWidth()) { hero() }
                         }
 
-                        Column(
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .fillMaxWidth()
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = KochSpace.xl)
-                                .padding(top = KochSpace.m, bottom = KochSpace.s)
-                        ) {
-                            content()
+                        if (lazyContent != null) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .fillMaxWidth(),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                    start = KochSpace.xl,
+                                    end = KochSpace.xl,
+                                    top = KochSpace.m,
+                                    bottom = KochSpace.l
+                                ),
+                                content = lazyContent
+                            )
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = KochSpace.xl)
+                                    .padding(top = KochSpace.m, bottom = KochSpace.s)
+                            ) {
+                                content()
+                            }
                         }
 
                         if (footer != null) {

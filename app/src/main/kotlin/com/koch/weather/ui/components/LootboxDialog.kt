@@ -88,7 +88,7 @@ fun LootboxDialog(
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "Не повезло с погодой? Повезет тут!",
+                        text = "Не повезло с погодой? Повезёт тут!",
                         style = KochType.sub,
                         color = colors.textTertiary,
                         maxLines = 1

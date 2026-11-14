@@ -37,7 +37,8 @@ fun KochSkyBackground(
 private fun DrawScope.drawCloudLayer(top: Color, bottom: Color) {
     val w = size.width
     val h = size.height
-    val softTop = Color.White.copy(alpha = if (top.luminanceLike() > 0.6f) 0.10f else 0.06f)
+    val topLum = top.luminanceLike()
+    val softTop = Color.White.copy(alpha = if (topLum > 0.6f) 0.10f else 0.06f)
     val softMid = Color.White.copy(alpha = 0.05f)
     val shade = Color.Black.copy(alpha = if (bottom.luminanceLike() > 0.5f) 0.03f else 0.05f)
 
@@ -53,11 +54,36 @@ private fun DrawScope.drawCloudLayer(top: Color, bottom: Color) {
         )
     }
 
+    // Тёплый «солнечный» блик сверху: даёт фото-подобный перепад вместо плоской заливки
+    // (на медной теме Δ яркости был ~40, нужно ~160).
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFFFFFFF0).copy(alpha = if (topLum > 0.6f) 0.10f else 0.22f),
+                Color.Transparent
+            ),
+            center = Offset(w * 0.72f, h * 0.06f),
+            radius = w * 0.75f
+        ),
+        topLeft = Offset(w * 0.0f, -h * 0.20f),
+        size = Size(w * 1.5f, h * 0.55f)
+    )
+
     puff(w * 0.18f, h * 0.10f, w * 0.62f, h * 0.16f, softTop)
     puff(w * 0.78f, h * 0.16f, w * 0.55f, h * 0.13f, softMid)
     puff(w * 0.46f, h * 0.30f, w * 0.80f, h * 0.18f, shade)
     puff(w * 0.12f, h * 0.42f, w * 0.50f, h * 0.12f, softMid)
     puff(w * 0.66f, h * 0.55f, w * 0.60f, h * 0.10f, shade)
+
+    // Виньетка снизу: контент читается, фон перестаёт быть плоским.
+    drawRect(
+        brush = Brush.verticalGradient(
+            0.62f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.20f),
+            startY = 0f,
+            endY = h
+        )
+    )
 }
 
 private fun Color.luminanceLike(): Float =

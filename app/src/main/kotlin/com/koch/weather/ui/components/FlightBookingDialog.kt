@@ -161,6 +161,8 @@ fun FlightBookingDialog(
                         onClick = { showSeats = true }
                     )
                 }
+                // Нижний зазор: последняя карточка/чипы не прилипают к CTA.
+                Spacer(Modifier.height(KochSpace.m))
             }
         },
         footer = {
