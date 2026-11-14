@@ -54,7 +54,6 @@ android {
       isProfileable = true
       signingConfig = signingConfigs.getByName("debug")
       matchingFallbacks += listOf("release")
-      versionNameSuffix = "-benchmark"
     }
   }
   compileOptions {

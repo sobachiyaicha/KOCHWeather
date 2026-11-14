@@ -157,9 +157,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val prefs = cache.getUiPreferences()
             val restoredTheme = ThemeRestorePolicy.resolve(prefs.themeId, unlocked)
             _uiState.update { state ->
-                // Не откатываем очистку облаков, если пользователь успел стереть
-                // вуаль раньше, чем DataStore вернул сохранённый флаг.
-                val cloudsCleared = prefs.cloudsCleared || state.isCloudsCleared
+                // Вуаль показывается один раз за запуск приложения: сохранённый
+                // в DataStore флаг не скрывает её при старте. После стирания в
+                // текущей сессии она больше не появляется, при следующем
+                // запуске — снова.
+                val cloudsCleared = state.isCloudsCleared
                 state.copy(
                     availableThemes = unlocked,
                     themeCatalog = ThemeCatalog.build(unlocked),
@@ -258,7 +260,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private fun startCloudLockTimer() {
         cloudTimerJob?.cancel()
         cloudTimerJob = viewModelScope.launch(Dispatchers.IO) {
-            delay(15_000)
+            delay(4_000)
             _uiState.update { state ->
                 if (!state.isCloudsCleared) {
                     state.copy(isCloudLocked = true)
