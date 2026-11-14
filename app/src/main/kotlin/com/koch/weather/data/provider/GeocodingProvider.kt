@@ -5,6 +5,7 @@ import com.koch.weather.data.model.CitySearchResult
 import com.koch.weather.data.model.WeatherErrorReason
 import com.koch.weather.data.model.WeatherFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class GeocodingSource(val displayNameRu: String) {
     PHOTON("Photon (OSM)"),
@@ -24,7 +25,23 @@ interface GeocodingProvider {
  */
 class GeocodingChain(private val providers: List<GeocodingProvider>) {
 
-    suspend fun search(query: String): CitySearchResult {
+    /**
+     * Общий бюджет поиска — 12 секунд. Photon имеет собственные 4 с, после
+     * его таймаута сразу стартует Nominatim; UI показывает isSearching и может
+     * отменить job (OkHttp Call.cancel()).
+     */
+    suspend fun search(query: String): CitySearchResult =
+        withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+            searchInternal(query)
+        } ?: CitySearchResult.Failure(
+            WeatherFailure(
+                WeatherErrorReason.TIMEOUT,
+                "Поиск города занял больше ${SEARCH_TIMEOUT_MS / 1000} секунд. " +
+                    "Проверьте соединение и повторите."
+            )
+        )
+
+    private suspend fun searchInternal(query: String): CitySearchResult {
         if (query.isBlank()) return CitySearchResult.Success(emptyList())
         if (providers.isEmpty()) {
             return CitySearchResult.Failure(
@@ -64,5 +81,9 @@ class GeocodingChain(private val providers: List<GeocodingProvider>) {
                 )
             )
         }
+    }
+
+    companion object {
+        const val SEARCH_TIMEOUT_MS = 12_000L
     }
 }

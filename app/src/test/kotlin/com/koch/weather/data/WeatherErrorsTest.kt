@@ -22,6 +22,25 @@ class WeatherErrorsTest {
     }
 
     @Test
+    fun connectTimeout_mapsToConnectTimeoutAndIsRussian() {
+        val failure = WeatherErrors.from(SocketTimeoutException("connect timed out"))
+        assertEquals(WeatherErrorReason.CONNECT_TIMEOUT, failure.reason)
+        assertTrue(failure.messageRu.contains("подключиться"))
+        assertTrue(failure.messageRu.contains("интернет", ignoreCase = true))
+    }
+
+    @Test
+    fun errorMessage_containsAttemptTime() {
+        val failure = WeatherErrors.from(IOException("broken pipe"))
+        val message = failure.messageWithTimeRu
+        assertTrue(message.contains(failure.messageRu))
+        assertTrue(
+            "Ожидалось время попытки: $message",
+            message.matches(Regex(".*\\(попытка в \\d{2}:\\d{2}\\)"))
+        )
+    }
+
+    @Test
     fun unknownHost_mapsToNoNetwork() {
         val failure = WeatherErrors.from(UnknownHostException("api.met.no"))
         assertEquals(WeatherErrorReason.NO_NETWORK, failure.reason)

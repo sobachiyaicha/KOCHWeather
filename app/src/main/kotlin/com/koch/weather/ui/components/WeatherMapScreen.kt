@@ -94,8 +94,9 @@ fun WeatherMapScreen(
         mapReady = true
     }
 
-    // Центр и маркер обновляются при смене города; карта может появиться позже первого кадра.
-    LaunchedEffect(mapReady, latitude, longitude, cityName, currentTemp) {
+    // Центр и маркер обновляются при смене города и ПОСЛЕ создания MapView (ключ mapView):
+    // иначе первый проход видит null и маркер не ставится — даже когда погоды нет.
+    LaunchedEffect(mapReady, mapView, latitude, longitude, cityName, currentTemp) {
         val view = mapView ?: return@LaunchedEffect
         view.controller.setZoom(12.0)
         view.controller.setCenter(GeoPoint(latitude, longitude))
@@ -104,7 +105,7 @@ fun WeatherMapScreen(
             Marker(view).apply {
                 position = GeoPoint(latitude, longitude)
                 title = cityName
-                snippet = currentTemp?.let { "$it°" } ?: "Погода"
+                snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
                 icon = pinDrawable(pinColor)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             }
@@ -205,11 +206,9 @@ fun WeatherMapScreen(
                     Text(
                         text = buildString {
                             append("Карта · OpenStreetMap")
-                            if (currentTemp != null) {
-                                append(" · ")
-                                append(currentTemp)
-                                append("°")
-                            }
+                            append(" · ")
+                            // Нет погоды — не пропускаем, а честно пишем «Нет данных».
+                            append(currentTemp?.let { "$it°" } ?: "Нет данных")
                         },
                         style = KochType.caption,
                         color = colors.textTertiary,

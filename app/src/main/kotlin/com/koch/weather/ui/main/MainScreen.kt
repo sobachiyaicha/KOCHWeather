@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -658,11 +659,21 @@ internal fun MainScreenContent(
             // Контракт VM: isCloudVeilVisible = isCloudLocked && !isCloudsCleared (персист).
             val veilVisible = uiState.isCloudVeilVisible && !cloudVeilDismissed
             if (veilVisible) {
+                // Вуаль НЕ должна накрывать нижний бар: считаем высоту бара + системный инсет
+                // и оставляем эту полосу вне оверлея. Иначе в состоянии «нет данных» табы
+                // перестают нажиматься (дефект run 4).
+                val density = LocalDensity.current
+                val barsHeight = with(density) {
+                    (WindowInsets.navigationBars.getBottom(density) + 88.dp.roundToPx()).toDp()
+                }
                 CloudVeilOverlay(
                     onCleared = {
                         onCloudVeilDismissed()
                         onCloudsCleared()
-                    }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = barsHeight)
                 )
             }
         }

@@ -63,7 +63,7 @@ object WeatherUiReducer {
                 },
                 isOffline = true,
                 isWeatherUnavailable = keptWeather == null,
-                weatherErrorMessage = failure.messageRu,
+                weatherErrorMessage = failure.messageWithTimeRu,
                 weatherLastUpdated = keptWeather?.lastUpdated,
                 weatherSource = if (keptWeather != null) {
                     state.weatherSource
@@ -75,7 +75,7 @@ object WeatherUiReducer {
                 } else {
                     WeatherSource.NONE.attributionRu
                 },
-                weatherSourceNote = failure.messageRu,
+                weatherSourceNote = failure.messageWithTimeRu,
                 isLoading = false,
                 isRefreshing = false
             )

@@ -125,6 +125,31 @@ class ProviderChainTest {
     }
 
     @Test
+    fun bothConnectTimeouts_returnAllFailedWithoutWaitingBudget() = runTest {
+        val chain = WeatherProviderChain(
+            listOf(
+                FakeProvider(
+                    WeatherSource.MET_NO,
+                    ProviderFetchResult.Failure(
+                        WeatherFailure(WeatherErrorReason.CONNECT_TIMEOUT, "connect timed out")
+                    )
+                ),
+                FakeProvider(
+                    WeatherSource.OPEN_METEO,
+                    ProviderFetchResult.Failure(
+                        WeatherFailure(WeatherErrorReason.CONNECT_TIMEOUT, "connect timed out")
+                    )
+                )
+            )
+        )
+        val result = chain.fetch(59.9, 30.3)
+        assertTrue(result is WeatherProviderChainResult.AllFailed)
+        val attempts = (result as WeatherProviderChainResult.AllFailed).failedAttempts
+        assertEquals(2, attempts.size)
+        assertTrue(attempts.all { it.failure.reason == WeatherErrorReason.CONNECT_TIMEOUT })
+    }
+
+    @Test
     fun overallTimeout_returnsAllFailedWithinThirtySeconds() = runTest {
         val chain = WeatherProviderChain(
             listOf(

@@ -13,7 +13,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class OpenMeteoClient(
-    connectTimeoutSeconds: Long = 10,
+    connectTimeoutSeconds: Long = 6,
     readTimeoutSeconds: Long = 10,
     callTimeoutSeconds: Long = 12
 ) {

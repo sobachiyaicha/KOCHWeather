@@ -7,6 +7,7 @@ import com.koch.weather.data.model.WeatherFailure
 import com.koch.weather.data.provider.GeocodingChain
 import com.koch.weather.data.provider.GeocodingProvider
 import com.koch.weather.data.provider.GeocodingSource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,6 +20,15 @@ class GeocodingChainTest {
         private val result: CitySearchResult
     ) : GeocodingProvider {
         override suspend fun search(query: String): CitySearchResult = result
+    }
+
+    private class HangingGeocoding(
+        override val source: GeocodingSource
+    ) : GeocodingProvider {
+        override suspend fun search(query: String): CitySearchResult {
+            delay(60_000)
+            return CitySearchResult.Success(emptyList())
+        }
     }
 
     private val spb = CityLocation("Санкт-Петербург", 59.9386, 30.3141, "Россия")
@@ -94,6 +104,23 @@ class GeocodingChainTest {
         val message = (result as CitySearchResult.Failure).failure.messageRu
         assertTrue(message.contains("Photon"))
         assertTrue(message.contains("Nominatim"))
+    }
+
+    @Test
+    fun searchBudget_returnsRussianTimeoutWithTime() = runTest {
+        val chain = GeocodingChain(
+            listOf(
+                HangingGeocoding(GeocodingSource.PHOTON),
+                HangingGeocoding(GeocodingSource.NOMINATIM)
+            )
+        )
+        val result = chain.search("Санкт-Петербург")
+        assertTrue(result is CitySearchResult.Failure)
+        val failure = (result as CitySearchResult.Failure).failure
+        assertEquals(WeatherErrorReason.TIMEOUT, failure.reason)
+        assertTrue(failure.messageRu.contains("12"))
+        assertTrue(failure.messageRu.contains("Поиск", ignoreCase = true))
+        assertTrue(failure.messageWithTimeRu.contains("попытка в"))
     }
 
     @Test

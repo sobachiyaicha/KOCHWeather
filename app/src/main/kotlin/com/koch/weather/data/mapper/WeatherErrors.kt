@@ -32,10 +32,22 @@ object WeatherErrors {
             "Сервер погоды вернул пустой ответ. Повторите попытку."
         )
 
-        is SocketTimeoutException -> WeatherFailure(
-            WeatherErrorReason.TIMEOUT,
-            "Сервер погоды не отвечает. Проверьте соединение и повторите."
-        )
+        is SocketTimeoutException -> {
+            // Connect timeout не повторяем: если оба провайдера не установили
+            // соединение, «нет данных» должно появиться сразу, а не через 30 с.
+            val isConnectTimeout = error.message?.contains("connect", ignoreCase = true) == true
+            if (isConnectTimeout) {
+                WeatherFailure(
+                    WeatherErrorReason.CONNECT_TIMEOUT,
+                    "Не удалось подключиться к серверу погоды. Проверьте интернет и повторите."
+                )
+            } else {
+                WeatherFailure(
+                    WeatherErrorReason.TIMEOUT,
+                    "Сервер погоды не отвечает. Проверьте соединение и повторите."
+                )
+            }
+        }
 
         is UnknownHostException -> WeatherFailure(
             WeatherErrorReason.NO_NETWORK,

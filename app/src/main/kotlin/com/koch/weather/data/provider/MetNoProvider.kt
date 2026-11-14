@@ -125,7 +125,7 @@ class MetNoProvider(
             ProviderFetchResult.Failure(
                 WeatherFailure(
                     reason = mapped.reason,
-                    messageRu = "MET Norway недоступен: ${e.message ?: mapped.messageRu}."
+                    messageRu = "MET Norway: ${mapped.messageRu}"
                 )
             )
         }
@@ -151,7 +151,7 @@ class MetNoProvider(
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             // Первая попытка короче, чтобы при cold-start timeout осталось время
             // на повтор в рамках общего 20-секундного предохранителя.
-            .connectTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
             .callTimeout(12, TimeUnit.SECONDS)

@@ -1,5 +1,6 @@
 package com.koch.weather.data.provider
 
+import com.koch.weather.data.api.executeAsync
 import com.koch.weather.data.model.CityLocation
 import com.koch.weather.data.model.CitySearchResult
 import com.koch.weather.data.model.WeatherErrorReason
@@ -48,7 +49,7 @@ class NominatimGeocodingProvider(
                 .header("Accept", "application/json")
                 .build()
             try {
-                client.newCall(request).execute().use { response ->
+                client.executeAsync(request).use { response ->
                     if (!response.isSuccessful) {
                         return@withLock CitySearchResult.Failure(
                             WeatherFailure(
@@ -76,10 +77,11 @@ class NominatimGeocodingProvider(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                val mapped = com.koch.weather.data.mapper.WeatherErrors.from(e)
                 CitySearchResult.Failure(
                     WeatherFailure(
-                        WeatherErrorReason.NO_NETWORK,
-                        "Nominatim недоступен: ${e.message ?: "ошибка сети"}."
+                        mapped.reason,
+                        "Nominatim: ${mapped.messageRu}"
                     )
                 )
             }
@@ -125,9 +127,10 @@ class NominatimGeocodingProvider(
         }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            // Резерв должен успеть в общий бюджет поиска ~12 с.
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(8, TimeUnit.SECONDS)
             .build()
     }
 }

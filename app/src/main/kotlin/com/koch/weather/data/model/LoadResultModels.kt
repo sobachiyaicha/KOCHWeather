@@ -1,5 +1,9 @@
 package com.koch.weather.data.model
 
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 /** Состояние погодных данных в UI. */
 enum class WeatherDataState {
     /** Первичная загрузка, данных ещё нет. */
@@ -17,6 +21,7 @@ enum class WeatherDataState {
 
 enum class WeatherErrorReason {
     NO_NETWORK,
+    CONNECT_TIMEOUT,
     TIMEOUT,
     HTTP_ERROR,
     PARSE_ERROR,
@@ -27,8 +32,17 @@ enum class WeatherErrorReason {
 
 data class WeatherFailure(
     val reason: WeatherErrorReason,
-    val messageRu: String
-)
+    val messageRu: String,
+    /** Время фактической попытки; UI показывает его рядом с причиной. */
+    val attemptedAt: Long = System.currentTimeMillis()
+) {
+    val attemptedAtLabelRu: String
+        get() = SimpleDateFormat("HH:mm", Locale.forLanguageTag("ru"))
+            .format(Date(attemptedAt))
+
+    val messageWithTimeRu: String
+        get() = "$messageRu (попытка в $attemptedAtLabelRu)"
+}
 
 /**
  * Откуда пришли погодные данные. UI показывает attribution и причину

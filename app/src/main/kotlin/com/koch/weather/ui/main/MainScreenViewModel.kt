@@ -339,7 +339,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 if (state.selectedCity?.name != city.name) {
                     return@update state
                 }
-                WeatherUiReducer.apply(state, result, isConnected)
+                // isRefreshing снимаем здесь же: иначе флаг «залипал» и кнопка «Повторить»
+                // навсегда оставалась в состоянии «Обновляем…» и была disabled (run 4).
+                WeatherUiReducer.apply(state, result, isConnected).copy(isRefreshing = false)
             }
 
             val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
@@ -831,11 +833,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     it.copy(
                         searchResults = emptyList(),
                         isSearching = false,
-                        searchError = result.failure.messageRu
+                        searchError = result.failure.messageWithTimeRu
                     )
                 }
             }
         }
+    }
+
+    /** Отмена активного поиска (кнопка «Отмена» в UI); Call.cancel() внутри. */
+    fun cancelSearch() {
+        searchJob?.cancel()
+        _uiState.update { it.copy(isSearching = false) }
     }
 
     fun clearSearch() {

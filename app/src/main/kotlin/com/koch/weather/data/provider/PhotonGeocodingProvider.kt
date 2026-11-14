@@ -1,5 +1,6 @@
 package com.koch.weather.data.provider
 
+import com.koch.weather.data.api.executeAsync
 import com.koch.weather.data.model.CityLocation
 import com.koch.weather.data.model.CitySearchResult
 import com.koch.weather.data.model.WeatherErrorReason
@@ -38,7 +39,7 @@ class PhotonGeocodingProvider(
             .header("Accept", "application/json")
             .build()
         try {
-            client.newCall(request).execute().use { response ->
+            client.executeAsync(request).use { response ->
                 if (!response.isSuccessful) {
                     return@withContext CitySearchResult.Failure(
                         WeatherFailure(
@@ -66,10 +67,11 @@ class PhotonGeocodingProvider(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            val mapped = com.koch.weather.data.mapper.WeatherErrors.from(e)
             CitySearchResult.Failure(
                 WeatherFailure(
-                    WeatherErrorReason.NO_NETWORK,
-                    "Photon недоступен: ${e.message ?: "ошибка сети"}."
+                    mapped.reason,
+                    "Photon: ${mapped.messageRu}"
                 )
             )
         }
@@ -111,9 +113,10 @@ class PhotonGeocodingProvider(
         }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            // Быстрый каскад: Photon не должен задерживать Nominatim дольше 4 с.
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(4, TimeUnit.SECONDS)
+            .callTimeout(6, TimeUnit.SECONDS)
             .build()
     }
 }
