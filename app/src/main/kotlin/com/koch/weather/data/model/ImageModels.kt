@@ -3,8 +3,14 @@ package com.koch.weather.data.model
 enum class ImageCategory(val titleRu: String) {
     TRAVEL_DUBAI("Дубай и путешествия"),
     IPHONE("iPhone 16 Pro Max"),
+    IPHONE_FRONT("iPhone, фронтально с включённым экраном"),
     AD_LAPTOP("Реклама: ноутбук"),
-    FOOD("Блюда и рестораны")
+    FOOD("Блюда и рестораны"),
+    FOOD_FRIES("Картофель фри"),
+    FOOD_NUGGETS("Наггетсы"),
+    FOOD_PIROSHKI("Пирожки"),
+    FOOD_HOTDOG("Хот-дог"),
+    FOOD_COFFEE("Кофе")
 }
 
 /**
@@ -72,6 +78,15 @@ object ImageCatalog {
                 sourcePageUrl = COMMONS_FILE + "IPhone_16_Pro_series.jpg"
             )
         ),
+        ImageCategory.IPHONE_FRONT to listOf(
+            RemoteImage(
+                id = "iphone_14_pro_max_front_screen_on",
+                category = ImageCategory.IPHONE_FRONT,
+                url = "$UPLOAD/0/00/Deep_Purple_iPhone_14_Pro_Max_front_photo.jpg/960px-Deep_Purple_iPhone_14_Pro_Max_front_photo.jpg",
+                descriptionRu = "iPhone 14 Pro Max, фронтальная сторона, экран включён",
+                sourcePageUrl = COMMONS_FILE + "Deep_Purple_iPhone_14_Pro_Max_front_photo.jpg"
+            )
+        ),
         ImageCategory.AD_LAPTOP to listOf(
             RemoteImage(
                 id = "macbook_pro_on_desk",
@@ -116,6 +131,51 @@ object ImageCatalog {
                 url = "$UPLOAD/2/2e/Almond_croissant_-_Bread_%26_Milk_2024-06-27.jpg/960px-Almond_croissant_-_Bread_%26_Milk_2024-06-27.jpg",
                 descriptionRu = "Миндальный круассан",
                 sourcePageUrl = COMMONS_FILE + "Almond_croissant_-_Bread_%26_Milk_2024-06-27.jpg"
+            )
+        ),
+        ImageCategory.FOOD_FRIES to listOf(
+            RemoteImage(
+                id = "french_fries_truffle_oil",
+                category = ImageCategory.FOOD_FRIES,
+                url = "$UPLOAD/8/8e/Truffle_oil_french_fries_%2833024792848%29.jpg/960px-Truffle_oil_french_fries_%2833024792848%29.jpg",
+                descriptionRu = "Картофель фри с зеленью",
+                sourcePageUrl = COMMONS_FILE + "Truffle_oil_french_fries_(33024792848).jpg"
+            )
+        ),
+        ImageCategory.FOOD_NUGGETS to listOf(
+            RemoteImage(
+                id = "chicken_nuggets_on_a_plate",
+                category = ImageCategory.FOOD_NUGGETS,
+                url = "$UPLOAD/6/65/Chicken_nuggets_on_a_plate.jpg/960px-Chicken_nuggets_on_a_plate.jpg",
+                descriptionRu = "Куриные наггетсы на тарелке",
+                sourcePageUrl = COMMONS_FILE + "Chicken_nuggets_on_a_plate.jpg"
+            )
+        ),
+        ImageCategory.FOOD_PIROSHKI to listOf(
+            RemoteImage(
+                id = "pirozhki_03",
+                category = ImageCategory.FOOD_PIROSHKI,
+                url = "$UPLOAD/d/df/%D0%9F%D0%B8%D1%80%D0%BE%D0%B6%D0%BA%D0%B8_03.jpg/960px-%D0%9F%D0%B8%D1%80%D0%BE%D0%B6%D0%BA%D0%B8_03.jpg",
+                descriptionRu = "Русские пирожки с начинкой",
+                sourcePageUrl = COMMONS_FILE + "%D0%9F%D0%B8%D1%80%D0%BE%D0%B6%D0%BA%D0%B8_03.jpg"
+            )
+        ),
+        ImageCategory.FOOD_HOTDOG to listOf(
+            RemoteImage(
+                id = "hot_dog_09",
+                category = ImageCategory.FOOD_HOTDOG,
+                url = "$UPLOAD/3/3a/Hot_Dog_09.jpg/960px-Hot_Dog_09.jpg",
+                descriptionRu = "Хот-дог с кетчупом и горчицей",
+                sourcePageUrl = COMMONS_FILE + "Hot_Dog_09.jpg"
+            )
+        ),
+        ImageCategory.FOOD_COFFEE to listOf(
+            RemoteImage(
+                id = "iced_coffee_2024",
+                category = ImageCategory.FOOD_COFFEE,
+                url = "$UPLOAD/f/f1/Iced_Coffee_20240730-135859.jpg/960px-Iced_Coffee_20240730-135859.jpg",
+                descriptionRu = "Айс-кофе со взбитыми сливками",
+                sourcePageUrl = COMMONS_FILE + "Iced_Coffee_20240730-135859.jpg"
             )
         )
     )

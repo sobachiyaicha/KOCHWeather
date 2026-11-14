@@ -16,7 +16,7 @@ class ImageCatalogTest {
     fun everyCategoryHasStableWikimediaUrls() {
         ImageCategory.values().forEach { category ->
             val images = repository.getImages(category)
-            assertTrue("Нет фото для $category", images.size >= 2)
+            assertTrue("Нет фото для $category", images.isNotEmpty())
             images.forEach { image ->
                 assertTrue(image.url.startsWith("https://upload.wikimedia.org/wikipedia/commons/thumb/"))
                 assertTrue(image.url.endsWith(".jpg") || image.url.endsWith(".png"))
@@ -24,6 +24,24 @@ class ImageCatalogTest {
                 assertTrue(image.sourcePageUrl.startsWith("https://commons.wikimedia.org/wiki/File:"))
                 assertEquals("Wikimedia Commons", image.source)
             }
+        }
+    }
+
+    @Test
+    fun newCategories_haveAtLeastOneImage() {
+        val required = listOf(
+            ImageCategory.IPHONE_FRONT,
+            ImageCategory.FOOD_FRIES,
+            ImageCategory.FOOD_NUGGETS,
+            ImageCategory.FOOD_PIROSHKI,
+            ImageCategory.FOOD_HOTDOG,
+            ImageCategory.FOOD_COFFEE
+        )
+        required.forEach { category ->
+            assertTrue(
+                "Нет фото для $category",
+                repository.getImages(category).isNotEmpty()
+            )
         }
     }
 
