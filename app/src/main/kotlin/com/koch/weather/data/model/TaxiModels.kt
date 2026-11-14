@@ -1,5 +1,6 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
 import com.koch.weather.data.deeplink.GeoPoint
 import kotlinx.serialization.Serializable
 import kotlin.math.cos
@@ -26,6 +27,7 @@ enum class TaxiRideStatus(val titleRu: String) {
     COMPLETED("Поездка успешно завершена")
 }
 
+@Immutable
 @Serializable
 data class TaxiDestination(
     val id: String,
@@ -99,6 +101,7 @@ object DefaultTaxiDestinations {
     )
 }
 
+@Immutable
 @Serializable
 data class TaxiRide(
     val orderId: String,
@@ -113,6 +116,7 @@ data class TaxiRide(
     val etaMinutes: Int
 )
 
+@Immutable
 data class TaxiState(
     val isSheetOpen: Boolean = false,
     val selectedTariff: TaxiTariffType = TaxiTariffType.ECONOMY,

@@ -1,5 +1,6 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -59,6 +60,7 @@ data class GeocodingResult(
     val admin1: String? = null
 )
 
+@Immutable
 @Serializable
 data class CityLocation(
     val name: String,
@@ -84,6 +86,7 @@ enum class WeatherIconType {
     THUNDERSTORM
 }
 
+@Immutable
 @Serializable
 data class HourlyItem(
     val hourLabel: String,
@@ -97,6 +100,7 @@ data class HourlyItem(
     val popKnown: Boolean = true
 )
 
+@Immutable
 @Serializable
 data class DailyItem(
     val dayLabel: String,
@@ -109,6 +113,7 @@ data class DailyItem(
     val popKnown: Boolean = true
 )
 
+@Immutable
 @Serializable
 data class WeatherDomainData(
     val cityName: String,
@@ -133,6 +138,7 @@ data class WeatherDomainData(
     val dataSourceLabel: String? = null
 )
 
+@Immutable
 @Serializable
 data class CityWeatherSummary(
     val city: CityLocation,
@@ -176,6 +182,7 @@ enum class BottomTab {
     }
 }
 
+@Immutable
 @Serializable
 data class UmbrellaItem(
     val id: String,
@@ -228,6 +235,7 @@ object DefaultUmbrellas {
     )
 }
 
+@Immutable
 data class MainScreenUiState(
     val isLoading: Boolean = false,
     val weather: WeatherDomainData? = null,
@@ -277,7 +285,9 @@ data class MainScreenUiState(
     // Folding states
     val isHourlyExpanded: Boolean = false,
 
-    // Cloud Lock Screen (15s timer / swipe gesture)
+    // Cloud Lock Screen (15s timer / swipe gesture).
+    // isCloudsCleared=true — пользователь уже стёр вуаль; флаг переживает force-stop,
+    // поэтому после перезапуска сразу видна погода, без «0 %».
     val isCloudLocked: Boolean = false,
     val isCloudsCleared: Boolean = false,
 
@@ -285,6 +295,7 @@ data class MainScreenUiState(
     // подтверждения: requestPremiumPurchase() -> UI-диалог -> confirmPremiumPurchase().
     val isPremiumPurchased: Boolean = false,
     val isPremiumPurchasePending: Boolean = false,
+    val premiumOffer: PremiumOffer = PremiumOffer(),
     val showAds: Boolean = true,
 
     // AI Facts
@@ -316,4 +327,7 @@ data class MainScreenUiState(
     val searchQuery: String = "",
     val searchResults: List<CityLocation> = emptyList(),
     val isSearching: Boolean = false
-)
+) {
+    /** Единственная семантика для UI: рисовать ли облачную вуаль прямо сейчас. */
+    val isCloudVeilVisible: Boolean get() = isCloudLocked && !isCloudsCleared
+}

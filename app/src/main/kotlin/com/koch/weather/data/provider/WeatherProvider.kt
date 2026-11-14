@@ -6,6 +6,9 @@ import com.koch.weather.data.model.WeatherErrorReason
 import com.koch.weather.data.model.WeatherFailure
 import com.koch.weather.data.model.WeatherSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Единый User-Agent для OSM/MET Norway: без него MET отвечает 403. */
@@ -54,19 +57,74 @@ sealed interface WeatherProviderChainResult {
 }
 
 /**
- * Последовательно пробует провайдеров: MetNo → OpenMeteo. Ошибки первого
- * источника сохраняются, чтобы UI показал причину failover-а.
+ * Параллельная гонка провайдеров: MetNo и OpenMeteo стартуют одновременно,
+ * первый успешный ответ побеждает, проигравший отменяется. Так первый запуск
+ * после pm clear не ждёт последовательно два таймаута.
  */
 class WeatherProviderChain(private val providers: List<WeatherProvider>) {
 
     /**
-     * Общий предохранитель: даже если MET и Open-Meteo по очереди висят на
-     * таймаутах, UI получает «нет данных» не позже чем через 20 секунд.
+     * Общий бюджет на гонку — 30 секунд (UI показывает прогресс/скелетон).
+     * Если ни один провайдер не ответил, отдаём честный TIMEOUT.
      */
     suspend fun fetch(latitude: Double, longitude: Double): WeatherProviderChainResult =
         withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
-            fetchInternal(latitude, longitude)
-        } ?: WeatherProviderChainResult.AllFailed(
+            race(latitude, longitude)
+        } ?: timeoutFailure()
+
+    private suspend fun race(
+        latitude: Double,
+        longitude: Double
+    ): WeatherProviderChainResult = coroutineScope {
+        if (providers.isEmpty()) {
+            return@coroutineScope WeatherProviderChainResult.AllFailed(emptyList())
+        }
+
+        val results = Channel<Pair<WeatherSource, ProviderFetchResult>>(providers.size)
+        val jobs = providers.map { provider ->
+            launch {
+                val result = try {
+                    provider.fetchForecast(latitude, longitude)
+                } catch (e: CancellationException) {
+                    return@launch
+                } catch (e: Exception) {
+                    ProviderFetchResult.Failure(WeatherErrors.from(e))
+                }
+                // Если гонку уже выиграл другой провайдер, канал закрыт.
+                try {
+                    results.send(provider.source to result)
+                } catch (_: Exception) {
+                    // проигравший/отменённый запрос — ожидаемо
+                }
+            }
+        }
+
+        val failedAttempts = mutableListOf<ProviderAttemptFailure>()
+        repeat(providers.size) {
+            val (source, result) = results.receive()
+            when (result) {
+                is ProviderFetchResult.Success -> {
+                    jobs.forEach { it.cancel() }
+                    results.close()
+                    return@coroutineScope WeatherProviderChainResult.Success(
+                        response = result.response,
+                        source = source,
+                        fetchedAt = result.fetchedAt,
+                        fromProviderCache = result.fromProviderCache,
+                        failedAttempts = failedAttempts.toList()
+                    )
+                }
+
+                is ProviderFetchResult.Failure -> failedAttempts.add(
+                    ProviderAttemptFailure(source, result.failure)
+                )
+            }
+        }
+        WeatherProviderChainResult.AllFailed(failedAttempts)
+    }
+
+    private fun timeoutFailure(): WeatherProviderChainResult =
+        WeatherProviderChainResult.AllFailed(
             listOf(
                 ProviderAttemptFailure(
                     source = WeatherSource.NONE,
@@ -78,37 +136,7 @@ class WeatherProviderChain(private val providers: List<WeatherProvider>) {
             )
         )
 
-    private suspend fun fetchInternal(
-        latitude: Double,
-        longitude: Double
-    ): WeatherProviderChainResult {
-        val failedAttempts = mutableListOf<ProviderAttemptFailure>()
-        for (provider in providers) {
-            val result = try {
-                provider.fetchForecast(latitude, longitude)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                ProviderFetchResult.Failure(WeatherErrors.from(e))
-            }
-            when (result) {
-                is ProviderFetchResult.Success -> return WeatherProviderChainResult.Success(
-                    response = result.response,
-                    source = provider.source,
-                    fetchedAt = result.fetchedAt,
-                    fromProviderCache = result.fromProviderCache,
-                    failedAttempts = failedAttempts.toList()
-                )
-
-                is ProviderFetchResult.Failure -> failedAttempts.add(
-                    ProviderAttemptFailure(provider.source, result.failure)
-                )
-            }
-        }
-        return WeatherProviderChainResult.AllFailed(failedAttempts)
-    }
-
     companion object {
-        const val TOTAL_TIMEOUT_MS = 20_000L
+        const val TOTAL_TIMEOUT_MS = 30_000L
     }
 }

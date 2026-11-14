@@ -1,7 +1,9 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class Restaurant(
     val id: String,
@@ -12,6 +14,7 @@ data class Restaurant(
     val bannerColorHex: Long
 )
 
+@Immutable
 @Serializable
 data class FoodItem(
     val id: String,
@@ -30,6 +33,7 @@ enum class FoodOrderStatus(val titleRu: String) {
     DELIVERED("Заказ доставлен! Приятного аппетита")
 }
 
+@Immutable
 @Serializable
 data class FoodOrder(
     val orderId: String,
@@ -41,6 +45,7 @@ data class FoodOrder(
     val etaMinutes: Int
 )
 
+@Immutable
 data class FoodState(
     val isSheetOpen: Boolean = false,
     val restaurants: List<Restaurant> = emptyList(),

@@ -250,8 +250,8 @@ private fun ThemeCard(
                     text = item.titleRu,
                     style = KochType.bodyStrong,
                     color = colors.textPrimary,
-                    maxLines = 1,
-                    softWrap = false
+                    // Две строки: «Неоновый киберпанк» не обязан влезать в одну.
+                    maxLines = 2
                 )
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -263,7 +263,7 @@ private fun ThemeCard(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = if (item.isUnlocked) "Доступно" else "Открывается в лутбоксах",
+                        text = if (item.isUnlocked) "Доступно" else "В лутбоксах",
                         style = KochType.caption,
                         color = if (item.isUnlocked) colors.accentSuccess else colors.accentPromo,
                         maxLines = 1,

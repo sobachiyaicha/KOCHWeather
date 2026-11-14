@@ -20,6 +20,7 @@ class ImageCatalogTest {
             images.forEach { image ->
                 assertTrue(image.url.startsWith("https://upload.wikimedia.org/wikipedia/commons/thumb/"))
                 assertTrue(image.url.endsWith(".jpg") || image.url.endsWith(".png"))
+                assertTrue("Ожидалось компактное превью 500px: ${image.url}", image.url.contains("/500px-"))
                 assertFalse("utm-параметры не нужны: ${image.url}", image.url.contains("?"))
                 assertTrue(image.sourcePageUrl.startsWith("https://commons.wikimedia.org/wiki/File:"))
                 assertEquals("Wikimedia Commons", image.source)

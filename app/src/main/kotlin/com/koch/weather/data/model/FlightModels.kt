@@ -1,7 +1,9 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class FlightOffer(
     val id: String,
@@ -18,6 +20,7 @@ data class FlightOffer(
     val isDirect: Boolean = true
 )
 
+@Immutable
 @Serializable
 data class FlightBooking(
     val bookingReference: String,
@@ -29,6 +32,7 @@ data class FlightBooking(
     val bookingTimestamp: Long = System.currentTimeMillis()
 )
 
+@Immutable
 data class FlightState(
     val isSheetOpen: Boolean = false,
     val offers: List<FlightOffer> = emptyList(),

@@ -1,7 +1,6 @@
 package com.koch.weather.ui.components
 
 import android.content.Context
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -16,11 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.ImageLoader
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.koch.weather.data.model.ImageCatalog
 import okhttp3.OkHttpClient
@@ -30,7 +31,7 @@ import okhttp3.OkHttpClient
  *
  * upload.wikimedia.org answers 429 to the default empty User-Agent, so every request carries
  * [ImageCatalog.WIKIMEDIA_USER_AGENT]. The loader is a process-wide singleton: one OkHttp client
- * and one memory/disk cache for all screens.
+ * and one memory/disk cache for all screens. Crossfade выключен: лишний слой на каждый кадр.
  */
 private object WikimediaImageLoader {
     @Volatile
@@ -51,7 +52,7 @@ private object WikimediaImageLoader {
                 .build()
             val loader = ImageLoader.Builder(context.applicationContext)
                 .okHttpClient(client)
-                .crossfade(true)
+                .crossfade(false)
                 .build()
             instance = loader
             return loader
@@ -60,8 +61,11 @@ private object WikimediaImageLoader {
 }
 
 /**
- * Network photo with mandatory loading and error placeholders (no emoji, no heavy blur).
- * Cropped to fill the slot, which is what the card/thumbnail layouts need.
+ * Сетевое фото.
+ *
+ * Быстрый путь (по умолчанию) — `AsyncImage` без сабкомпозиции: только заливка-плейсхолдер.
+ * Медленный (только там, где нужен составной фолбэк, например мокап телефона в рулетке) —
+ * `SubcomposeAsyncImage` с переданным [fallback].
  */
 @Composable
 fun RemotePhoto(
@@ -77,30 +81,26 @@ fun RemotePhoto(
     val context = LocalContext.current
     val imageLoader = remember(context) { WikimediaImageLoader.get(context) }
 
-    SubcomposeAsyncImage(
-        model = url,
-        imageLoader = imageLoader,
-        contentDescription = contentDescription,
-        contentScale = contentScale,
-        modifier = modifier.clip(shape),
-        loading = { fallback?.invoke() ?: PhotoPlaceholder(placeholderIcon, placeholderTint) },
-        error = { fallback?.invoke() ?: PhotoPlaceholder(placeholderIcon, placeholderTint) }
-    )
-}
-
-@Composable
-private fun PhotoPlaceholder(icon: ImageVector, tint: Color) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0x33000000)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
+    if (fallback != null) {
+        SubcomposeAsyncImage(
+            model = url,
+            imageLoader = imageLoader,
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier.clip(shape),
+            loading = { fallback.invoke() },
+            error = { fallback.invoke() }
+        )
+    } else {
+        val placeholder = remember { ColorPainter(Color(0x33FFFFFF)) }
+        AsyncImage(
+            model = url,
+            imageLoader = imageLoader,
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier.clip(shape),
+            placeholder = placeholder,
+            error = placeholder
         )
     }
 }

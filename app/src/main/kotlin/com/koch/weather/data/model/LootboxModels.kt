@@ -1,5 +1,6 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 enum class LootRarity(val titleRu: String, val colorHex: Long) {
@@ -19,6 +20,7 @@ enum class LootRewardType {
     COFFEE
 }
 
+@Immutable
 @Serializable
 data class LootReward(
     val id: String,
@@ -31,6 +33,7 @@ data class LootReward(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Immutable
 data class LootboxState(
     val isOpening: Boolean = false,
     val lastReward: LootReward? = null,

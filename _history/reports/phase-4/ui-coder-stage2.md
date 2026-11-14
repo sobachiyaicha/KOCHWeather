@@ -102,7 +102,30 @@ BUILD SUCCESSFUL in 9s
 удалён), `FoodBottomSheet` (категории фото), `ThemeRouletteDialog` (фото + фолбэк),
 `WeatherImage` (`fallback`), `Tokens.kt` (Inter).
 
-## 7. Что осталось / риски
+## 7. Уборка (после приёмки этапа 2)
+
+- **Удалены файлы:** `ui/components/CityPickerDialog.kt` (заменён переходом на «Список»),
+  `ui/components/FullScreenScaffold.kt` (его `FullScreenScaffold`/`FullScreenEmptyState` больше
+  не вызывались). `DataSourceFooter` вынесен в отдельный файл `ui/components/DataSourceFooter.kt`
+  (тот же пакет — импорты у вызывающих не менялись) и переведён на токены.
+- **Удалены мёртвые примитивы:** `KochSecondaryButton`, `KochChevron` (нигде не вызывались),
+  `KochPanelShape` (не использовался).
+- **Фон главной** переведён на `KochSkyBackground` (градиент темы + процедурные облака) —
+  примитив был написан, но не подключён; теперь используется и даёт «небо с облаками» без
+  сетевых фото и без blur.
+- **Удалены неиспользуемые импорты:** 45 в `MainScreen.kt` и ещё 19 в остальных файлах `ui/`
+  (автопроверка по простому имени, с whitelist для `getValue`/`setValue`/операторов).
+  Файлы `data/**` не изменялись: случайно затронутые три репозитория восстановлены из Git.
+- **Проверка FPS:** единственное место — `MainScreen.kt:649`
+  `if (BuildConfig.DEBUG && showDebugFps)`; жест — долгое нажатие по футеру источника.
+  В `benchmark`/`release` (`isDebuggable = false`) `BuildConfig.DEBUG = false`, оверлей не
+  компонируется вообще.
+- **Шрифт:** оставлены 4 веса (400/500/600/700), 800 → Bold.
+
+Контрольная сборка после уборки: `BUILD SUCCESSFUL in 16s`, предупреждений 0
+(лог `.local/build_cleanup.txt`).
+
+## 8. Что осталось / риски
 
 1. `device-qa`: `assembleDebug`, install на G8342, **холодный старт** (ANR-фикс data-coder
    проверить после этих правок), свежие `r2_*` — главная (обе темы), облака, рулетка, список,

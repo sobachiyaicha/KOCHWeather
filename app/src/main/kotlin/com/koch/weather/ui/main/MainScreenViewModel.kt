@@ -114,15 +114,25 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // Load unlocked themes from Lootbox / Cache
+        // Load unlocked themes, persisted theme and cloud-veil flag.
         viewModelScope.launch(Dispatchers.IO) {
             val unlocked = lootboxRepository.getUnlockedThemes()
-            _uiState.update {
-                it.copy(
+            val prefs = cache.getUiPreferences()
+            val restoredTheme = ThemePreferenceCodec.decode(prefs.themeId)
+                ?.takeIf { it in unlocked }
+            _uiState.update { state ->
+                // Не откатываем очистку облаков, если пользователь успел стереть
+                // вуаль раньше, чем DataStore вернул сохранённый флаг.
+                val cloudsCleared = prefs.cloudsCleared || state.isCloudsCleared
+                state.copy(
                     availableThemes = unlocked,
-                    themeCatalog = ThemeCatalog.build(unlocked)
+                    themeCatalog = ThemeCatalog.build(unlocked),
+                    currentTheme = restoredTheme ?: state.currentTheme,
+                    isCloudsCleared = cloudsCleared,
+                    isCloudLocked = if (cloudsCleared) false else state.isCloudLocked
                 )
             }
+            startCloudLockTimer()
         }
 
         // Initialize cities, cache, static content and only then network — всё на IO.
@@ -178,8 +188,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             fetchWeatherQuietly(targetCity)
         }
 
-        // 15-second timer for interactive cloud lock screen
-        startCloudLockTimer()
     }
 
     private fun startCloudLockTimer() {
@@ -445,10 +453,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // ------------------------------------------------------------------------
     fun unlockClouds() {
         _uiState.update { it.copy(isCloudLocked = false, isCloudsCleared = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            cache.setCloudsCleared(true)
+        }
     }
 
+    /** Явный сброс (например, тестовая кнопка): снова показать вуаль. */
     fun lockClouds() {
         _uiState.update { it.copy(isCloudLocked = true, isCloudsCleared = false) }
+        viewModelScope.launch(Dispatchers.IO) {
+            cache.setCloudsCleared(false)
+        }
     }
 
     fun onCloudsCleared() {
@@ -470,7 +485,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // Theme Management
     // ------------------------------------------------------------------------
     fun setTheme(theme: AppThemeMode) {
+        if (theme !in _uiState.value.availableThemes) return
         _uiState.update { it.copy(currentTheme = theme) }
+        viewModelScope.launch(Dispatchers.IO) {
+            cache.setCurrentTheme(ThemePreferenceCodec.encode(theme))
+        }
     }
 
     fun toggleTheme() {
@@ -606,10 +625,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             val reward = lootboxRepository.openLootbox(tomorrowDesc)
             val unlockedThemes = lootboxRepository.getUnlockedThemes()
+            val newTheme = ThemePreferenceCodec.decode(reward.unlockedThemeName)
             _uiState.update { state ->
-                val newTheme = reward.unlockedThemeName?.let {
-                    try { AppThemeMode.valueOf(it) } catch (_: Exception) { null }
-                }
                 state.copy(
                     availableThemes = unlockedThemes,
                     themeCatalog = ThemeCatalog.build(unlockedThemes),
@@ -622,6 +639,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                         unlockedThemes = unlockedThemes
                     )
                 )
+            }
+            if (newTheme != null) {
+                cache.setCurrentTheme(ThemePreferenceCodec.encode(newTheme))
             }
         }
     }

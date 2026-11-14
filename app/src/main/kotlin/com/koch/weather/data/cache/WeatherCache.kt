@@ -26,6 +26,12 @@ data class CachedForecast(
     val sourceId: String? = null
 )
 
+/** UI-настройки, переживающие force-stop. */
+data class UiPreferences(
+    val themeId: String? = null,
+    val cloudsCleared: Boolean = false
+)
+
 class WeatherCache(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -35,6 +41,8 @@ class WeatherCache(private val context: Context) {
     private val KEY_LAST_UPDATED = longPreferencesKey("last_updated_time")
     private val KEY_IS_PREMIUM = booleanPreferencesKey("is_premium_purchased")
     private val KEY_UNLOCKED_THEMES = stringSetPreferencesKey("unlocked_themes_set")
+    private val KEY_CURRENT_THEME = stringPreferencesKey("current_theme")
+    private val KEY_CLOUDS_CLEARED = booleanPreferencesKey("clouds_cleared")
 
     private fun cityKey(cityName: String) =
         stringPreferencesKey("weather_${cityName.trim().lowercase(Locale.ROOT).replace(" ", "_")}")
@@ -84,6 +92,35 @@ class WeatherCache(private val context: Context) {
         } catch (_: Exception) {
             emptySet()
         }
+    }
+
+    /** Тема и флаг облаков читаются одним снапшотом DataStore. */
+    suspend fun getUiPreferences(): UiPreferences = withContext(Dispatchers.IO) {
+        try {
+            val prefs = context.dataStore.data.first()
+            UiPreferences(
+                themeId = prefs[KEY_CURRENT_THEME],
+                cloudsCleared = prefs[KEY_CLOUDS_CLEARED] ?: false
+            )
+        } catch (_: Exception) {
+            UiPreferences()
+        }
+    }
+
+    suspend fun setCurrentTheme(themeId: String) = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.edit { prefs ->
+                prefs[KEY_CURRENT_THEME] = themeId
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun setCloudsCleared(cleared: Boolean) = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.edit { prefs ->
+                prefs[KEY_CLOUDS_CLEARED] = cleared
+            }
+        } catch (_: Exception) {}
     }
 
     suspend fun saveForecast(

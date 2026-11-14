@@ -1,5 +1,7 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Одна строка каталога тем для экрана «Вид» (R15).
  *
@@ -7,12 +9,27 @@ package com.koch.weather.data.model
  * придумывает «выпавшие» темы: если тема не сохранена как разблокированная,
  * она показывается закрытой.
  */
+@Immutable
 data class ThemeCatalogItem(
     val theme: AppThemeMode,
     val titleRu: String,
     val isUnlocked: Boolean,
     val isLootboxExclusive: Boolean
 )
+
+/** Сериализация выбранной темы в DataStore без падений на старых значениях. */
+object ThemePreferenceCodec {
+    fun decode(raw: String?): AppThemeMode? =
+        raw?.let {
+            try {
+                AppThemeMode.valueOf(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    fun encode(theme: AppThemeMode): String = theme.name
+}
 
 object ThemeCatalog {
 

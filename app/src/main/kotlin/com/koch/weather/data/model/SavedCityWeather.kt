@@ -1,5 +1,7 @@
 package com.koch.weather.data.model
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Сохранённый город для экрана «Список» (R13).
  *
@@ -7,6 +9,7 @@ package com.koch.weather.data.model
  * остаются null, а UI обязан показать «Нет данных». Никаких синтетических
  * температур здесь не появляется.
  */
+@Immutable
 data class SavedCityWeather(
     val city: CityLocation,
     val tempC: Int? = null,

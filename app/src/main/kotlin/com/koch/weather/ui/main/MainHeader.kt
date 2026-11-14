@@ -65,7 +65,7 @@ internal fun GoldenCapsuleHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp)
+                .padding(top = 40.dp)
         ) {
             androidx.compose.material3.Surface(
                 modifier = Modifier

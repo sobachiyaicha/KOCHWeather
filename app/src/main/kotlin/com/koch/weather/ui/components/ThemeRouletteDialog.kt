@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -97,17 +98,17 @@ fun ThemeRouletteDialog(
                 style = KochType.titleSheet,
                 color = Color.White,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.l)
+                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.s)
             )
 
             ThemeTicket(
                 theme = above,
                 isUnlocked = above in availableThemes,
                 onClick = { previewTheme = above },
-                modifier = Modifier.padding(top = KochSpace.l)
+                modifier = Modifier.padding(top = KochSpace.s)
             )
 
-            Spacer(Modifier.height(KochSpace.m))
+            Spacer(Modifier.height(KochSpace.s))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -137,14 +138,15 @@ fun ThemeRouletteDialog(
                 onClick = { previewTheme = below }
             )
 
-            Spacer(Modifier.height(KochSpace.s))
+            Spacer(Modifier.height(KochSpace.xs))
 
-            LazyRow(
+            // Чипы тем: перенос по строкам (FlowRow), поэтому ни один не режется краем экрана.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-                contentPadding = PaddingValues(vertical = 2.dp)
+                verticalArrangement = Arrangement.spacedBy(KochSpace.s)
             ) {
-                items(allThemes, key = { it.name }) { theme ->
+                allThemes.forEach { theme ->
                     KochChip(
                         text = theme.titleRu,
                         selected = theme == previewTheme,
@@ -226,11 +228,11 @@ private fun ThemeTicket(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 74.dp)
+            .heightIn(min = 62.dp)
             .clip(shape)
             .background(themePreviewBrush(theme))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = KochSpace.l, vertical = KochSpace.m),
+            .padding(horizontal = KochSpace.l, vertical = KochSpace.s),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -245,8 +247,7 @@ private fun ThemeTicket(
                 style = KochType.bodyStrong,
                 color = Color.White,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false
+                maxLines = 2
             )
         }
         if (!isUnlocked) {
@@ -283,8 +284,8 @@ private fun PhonePreview(
     val shape = RoundedCornerShape(24.dp)
     Box(
         modifier = modifier
-            .width(132.dp)
-            .height(190.dp)
+            .width(118.dp)
+            .height(160.dp)
             .clip(shape)
             .background(Color(0xFF101418))
             .padding(5.dp),
@@ -296,7 +297,9 @@ private fun PhonePreview(
                 contentDescription = "iPhone с оформлением ${theme.titleRu}",
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(20.dp),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                // Fit, а не Crop: фронтальное фото должно попадать в рамку целиком,
+                // иначе от телефона остаётся кусок обоев.
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 fallback = { PhoneMock(theme) }
             )
         } else {

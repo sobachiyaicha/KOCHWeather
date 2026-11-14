@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -72,6 +73,14 @@ private val CardTextShadow = TextStyle(
 private fun formatWeatherTime(epochMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMillis))
 
+/** Порядок блоков ленты: стабильные списки, не пересоздаются на каждую рекомпозицию. */
+private val CleanFeedOrder: List<String> = listOf(
+    "hourly_card", "daily_card", "services_grid", "ai_fact_block", "premium_banner", "ad_banner"
+)
+private val PromoFeedOrder: List<String> = listOf(
+    "ai_fact_block", "premium_banner", "ad_banner", "services_grid", "hourly_card", "daily_card"
+)
+
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
@@ -83,6 +92,9 @@ fun MainScreen(
     var isAdPromoOpen by remember { mutableStateOf(false) }
     var isLootboxOpen by remember { mutableStateOf(false) }
     var selectedDayDetail by remember { mutableStateOf<DailyItem?>(null) }
+    // Облачная вуаль — один раз за сессию. Латч живёт здесь, чтобы не сбрасываться при
+    // уходе с главной на другую вкладку (там MainScreenContent выходит из композиции).
+    var cloudVeilDismissed by rememberSaveable { mutableStateOf(false) }
 
     // «Список» must show fresh cached values every time the tab is opened.
     LaunchedEffect(uiState.selectedTab) {
@@ -94,9 +106,14 @@ fun MainScreen(
     // Провайдер темы поднят на уровень MainScreen: листы и полноэкранные страницы открываются
     // из этого composable, а не из MainScreenContent, и обязаны видеть ту же палитру.
     ProvideKochColors(uiState.currentTheme) {
-        MainScreenContent(
-        uiState = uiState,
-        onRefresh = { viewModel.refresh() },
+        // Рендерим только активный экран: на карте главная больше не остаётся скомпонованной
+        // под MapView (дефект perf-qa) — экономит композицию и GPU-слой.
+        if (uiState.selectedTab == BottomTab.HOME) {
+            MainScreenContent(
+                uiState = uiState,
+                cloudVeilDismissed = cloudVeilDismissed,
+                onCloudVeilDismissed = { cloudVeilDismissed = true },
+                onRefresh = { viewModel.refresh() },
         onRetryWeather = { viewModel.retryWeather() },
         onSelectCityIndex = { viewModel.selectCityByIndex(it) },
         onSegmentSelected = { viewModel.setSegment(it) },
@@ -138,7 +155,8 @@ fun MainScreen(
             }
         },
         modifier = modifier
-    )
+            )
+        }
 
     // Modals and Sheets
     if (uiState.isUmbrellaShopOpen) {
@@ -242,6 +260,7 @@ fun MainScreen(
         PaywallDialog(
             isPremiumPurchased = uiState.isPremiumPurchased,
             isPending = uiState.isPremiumPurchasePending,
+            offer = uiState.premiumOffer,
             onRequestPurchase = { viewModel.requestPremiumPurchase() },
             onConfirmPurchase = { viewModel.confirmPremiumPurchase() },
             onCancelPending = { viewModel.cancelPremiumPurchase() },
@@ -257,7 +276,8 @@ fun MainScreen(
                 isPaywallOpen = true
             },
             onDismiss = { isAdPromoOpen = false },
-            imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull()
+            imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull(),
+            offer = uiState.premiumOffer
         )
     }
 
@@ -328,6 +348,8 @@ fun MainScreen(
 @Composable
 internal fun MainScreenContent(
     uiState: MainScreenUiState,
+    cloudVeilDismissed: Boolean,
+    onCloudVeilDismissed: () -> Unit,
     onRefresh: () -> Unit,
     onRetryWeather: () -> Unit,
     onSelectCityIndex: (Int) -> Unit,
@@ -370,7 +392,18 @@ internal fun MainScreenContent(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .pointerInput(uiState.cities.size, uiState.selectedCityIndex) {
+                .pointerInput(
+                    uiState.cities.size,
+                    uiState.selectedCityIndex,
+                    uiState.isCloudLocked,
+                    uiState.isCloudsCleared,
+                    cloudVeilDismissed
+                ) {
+                    // Пока облака не стёрты — жест принадлежит им: карусель городов НЕ листаем
+                    // (дефект run 3: свайп стирания уводил на Дубай).
+                    if (uiState.isCloudLocked && !uiState.isCloudsCleared && !cloudVeilDismissed) {
+                        return@pointerInput
+                    }
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, dragAmount ->
                             dragAccumulator += dragAmount
@@ -412,15 +445,17 @@ internal fun MainScreenContent(
                     }
                 }
             ) { innerPadding ->
-                // High performance LazyColumn with stable keys.
+                // Контент живёт ВЫШЕ бара: вьюпорт списка укорачивается на высоту нижнего бара,
+                // поэтому карточки не рисуются под ним даже в середине скролла (дефект run 3).
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
-                        .padding(horizontal = 20.dp),
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = innerPadding.calculateBottomPadding()),
                     contentPadding = PaddingValues(
                         top = 6.dp,
-                        bottom = innerPadding.calculateBottomPadding() + 8.dp
+                        bottom = 8.dp
                     ),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -502,84 +537,48 @@ internal fun MainScreenContent(
                 // Голубая тема — порядок clean_main/bottom_nav: погода сразу под шапкой.
                 // Остальные темы — «перегруженный» порядок theme_copper/f_063: промо сверху.
                 val cleanOrder = uiState.currentTheme == AppThemeMode.BLUE_SKY
+                val feedOrder = if (cleanOrder) CleanFeedOrder else PromoFeedOrder
 
-                val hourlyBlock: @Composable () -> Unit = {
-                    HourlyWeatherCard(
-                        weather = weather,
-                        selectedSegment = uiState.selectedSegment,
-                        userRating = uiState.userRating,
-                        showRatingThankYou = uiState.showRatingThankYou,
-                        onSegmentSelected = onSegmentSelected,
-                        onRatingChanged = onRatingChanged
-                    )
-                    Spacer(modifier = Modifier.height(KochSpace.m))
-                }
-
-                val dailyBlock: @Composable () -> Unit = {
-                    TenDayForecastCard(
-                        dailyList = weather.daily,
-                        currentTemp = weather.currentTemp,
-                        onDayClick = onDayClick,
-                        onOpenUmbrellaShop = onOpenUmbrellaShop
-                    )
-                    Spacer(modifier = Modifier.height(KochSpace.m))
-                }
-
-                val servicesBlock: @Composable () -> Unit = {
-                    ServicesGrid(
-                        onOpenFlight = onOpenFlight,
-                        onOpenLootbox = onOpenLootbox,
-                        onOpenTaxi = onOpenTaxi,
-                        onOpenFood = onOpenFood
-                    )
-                    Spacer(modifier = Modifier.height(KochSpace.m))
-                }
-
-                val aiFactBlock: @Composable () -> Unit = {
-                    AiFactCard(aiFact = uiState.aiFact, onClick = onOpenGrassModal)
-                    Spacer(modifier = Modifier.height(KochSpace.m))
-                }
-
-                val premiumBlock: @Composable () -> Unit = {
-                    PremiumBanner(
-                        isPremiumPurchased = uiState.isPremiumPurchased,
-                        onOpenPaywall = onOpenPaywall
-                    )
-                    Spacer(modifier = Modifier.height(KochSpace.m))
-                }
-
-                val adBlock: @Composable () -> Unit = {
-                    if (uiState.showAds) {
-                        AdBannerCard(
-                            imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull(),
-                            onClick = onOpenAdPromo
-                        )
+                feedOrder.forEach { key ->
+                    if (key == "ad_banner" && !uiState.showAds) return@forEach
+                    item(key = key) {
+                        when (key) {
+                            "hourly_card" -> HourlyWeatherCard(
+                                weather = weather,
+                                selectedSegment = uiState.selectedSegment,
+                                userRating = uiState.userRating,
+                                showRatingThankYou = uiState.showRatingThankYou,
+                                onSegmentSelected = onSegmentSelected,
+                                onRatingChanged = onRatingChanged
+                            )
+                            "daily_card" -> TenDayForecastCard(
+                                dailyList = weather.daily,
+                                currentTemp = weather.currentTemp,
+                                onDayClick = onDayClick,
+                                onOpenUmbrellaShop = onOpenUmbrellaShop
+                            )
+                            "services_grid" -> ServicesGrid(
+                                onOpenFlight = onOpenFlight,
+                                onOpenLootbox = onOpenLootbox,
+                                onOpenTaxi = onOpenTaxi,
+                                onOpenFood = onOpenFood
+                            )
+                            "ai_fact_block" -> AiFactCard(
+                                aiFact = uiState.aiFact,
+                                onClick = onOpenGrassModal
+                            )
+                            "premium_banner" -> PremiumBanner(
+                                isPremiumPurchased = uiState.isPremiumPurchased,
+                                offer = uiState.premiumOffer,
+                                onOpenPaywall = onOpenPaywall
+                            )
+                            "ad_banner" -> AdBannerCard(
+                                imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull(),
+                                onClick = onOpenAdPromo
+                            )
+                        }
                         Spacer(modifier = Modifier.height(KochSpace.m))
                     }
-                }
-
-                val feedBlocks: List<Pair<String, @Composable () -> Unit>> = if (cleanOrder) {
-                    listOf(
-                        "hourly_card" to hourlyBlock,
-                        "daily_card" to dailyBlock,
-                        "services_grid" to servicesBlock,
-                        "ai_fact_block" to aiFactBlock,
-                        "premium_banner" to premiumBlock,
-                        "ad_banner" to adBlock
-                    )
-                } else {
-                    listOf(
-                        "ai_fact_block" to aiFactBlock,
-                        "premium_banner" to premiumBlock,
-                        "ad_banner" to adBlock,
-                        "services_grid" to servicesBlock,
-                        "hourly_card" to hourlyBlock,
-                        "daily_card" to dailyBlock
-                    )
-                }
-
-                feedBlocks.forEach { (key, block) ->
-                    item(key = key) { block() }
                 }
 
                 // Attribution: the label and the failover/cache note come from the contract
@@ -655,10 +654,18 @@ internal fun MainScreenContent(
                 )
             }
 
-            // Full-screen cloud veil: dense clouds cover the whole screen until the user wipes
-            // them away with a finger (refs/cloud_swipe.png).
-            if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
-                CloudVeilOverlay(onCleared = onCloudsCleared)
+            // Облачная вуаль (refs/cloud_swipe.png, 2:40) — ровно один раз за сессию.
+            // После стирания не возвращается: локальный латч + персистентный isCloudsCleared.
+            val veilVisible = uiState.isCloudLocked &&
+                !uiState.isCloudsCleared &&
+                !cloudVeilDismissed
+            if (veilVisible) {
+                CloudVeilOverlay(
+                    onCleared = {
+                        onCloudVeilDismissed()
+                        onCloudsCleared()
+                    }
+                )
             }
         }
     }

@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.koch.weather.data.model.PremiumOffer
 import com.koch.weather.ui.components.RemotePhoto
 import com.koch.weather.ui.design.KochCard
 import com.koch.weather.ui.design.KochMaterial
@@ -95,6 +96,7 @@ internal fun AiFactCard(
 @Composable
 internal fun PremiumBanner(
     isPremiumPurchased: Boolean,
+    offer: PremiumOffer,
     onOpenPaywall: () -> Unit
 ) {
     val colors = LocalKochColors.current
@@ -137,13 +139,13 @@ internal fun PremiumBanner(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "5.99 BYN",
+                                text = offer.priceLabel,
                                 style = KochType.caption,
                                 color = Color.White
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "29.99",
+                                text = offer.oldPriceLabel,
                                 style = KochType.caption,
                                 color = Color.White.copy(alpha = 0.55f),
                                 textDecoration = TextDecoration.LineThrough
@@ -319,7 +321,7 @@ private fun ServiceCard(
                 text = title,
                 style = KochType.bodyStrong,
                 color = colors.textPrimary,
-                maxLines = 2
+                maxLines = 3
             )
         }
         if (description != null) {
@@ -327,7 +329,7 @@ private fun ServiceCard(
                 text = description,
                 style = KochType.sub,
                 color = colors.textTertiary,
-                maxLines = 3
+                maxLines = 4
             )
         }
         if (chip != null) {

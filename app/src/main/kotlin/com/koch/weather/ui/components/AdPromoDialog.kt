@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
+import com.koch.weather.data.model.PremiumOffer
 import com.koch.weather.ui.design.KochCloseButton
 import com.koch.weather.ui.design.KochPrimaryButton
 import com.koch.weather.ui.design.KochSheet
@@ -38,7 +39,8 @@ import com.koch.weather.ui.theme.LocalKochColors
 fun AdPromoDialog(
     onOpenPaywall: () -> Unit,
     onDismiss: () -> Unit,
-    imageUrl: String? = null
+    imageUrl: String? = null,
+    offer: PremiumOffer = PremiumOffer()
 ) {
     val colors = LocalKochColors.current
 
@@ -111,7 +113,7 @@ fun AdPromoDialog(
         footer = {
             Column {
                 KochPrimaryButton(
-                    text = "Подписка Премиум · 5.99 BYN",
+                    text = "Подписка Премиум · ${offer.priceLabel}",
                     onClick = onOpenPaywall
                 )
                 Spacer(Modifier.height(KochSpace.s))

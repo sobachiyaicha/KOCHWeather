@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import com.koch.weather.data.model.PremiumOffer
 import com.koch.weather.ui.design.KochCloseButton
 import com.koch.weather.ui.design.KochPanel
 import com.koch.weather.ui.design.KochPrimaryButton
@@ -37,13 +38,17 @@ import com.koch.weather.ui.theme.LocalKochColors
 /**
  * Пейволл. Два шага в одном листе:
  *  1) витрина → кнопка только запрашивает покупку (`requestPremiumPurchase`);
- *  2) подтверждение → `confirmPremiumPurchase`, пока `isPending` — спиннер и disabled.
+ *  2) подтверждение → `confirmPremiumPurchase`, пока идёт запись — спиннер и disabled.
  * Обхода нет: без подтверждения подписка не активируется (блокер №7).
+ *
+ * Все ценники/период/примечание берутся из одного state — [PremiumOffer] (data-coder):
+ * тариф «Годовой VIP», 5.99 BYN, период «год», «списание один раз». Никаких «в месяц».
  */
 @Composable
 fun PaywallDialog(
     isPremiumPurchased: Boolean,
     isPending: Boolean,
+    offer: PremiumOffer = PremiumOffer(),
     onRequestPurchase: () -> Unit,
     onConfirmPurchase: () -> Unit,
     onCancelPending: () -> Unit,
@@ -78,6 +83,7 @@ fun PaywallDialog(
         content = {
             if (showConfirm) {
                 ConfirmPurchaseContent(
+                    offer = offer,
                     isConfirming = confirming,
                     onConfirm = {
                         confirming = true
@@ -90,6 +96,7 @@ fun PaywallDialog(
                 )
             } else {
                 ShowroomContent(
+                    offer = offer,
                     isPremiumPurchased = isPremiumPurchased,
                     onDismiss = onDismiss,
                     onResetPremium = onResetPremium
@@ -121,6 +128,7 @@ fun PaywallDialog(
 
 @Composable
 private fun ShowroomContent(
+    offer: PremiumOffer,
     isPremiumPurchased: Boolean,
     onDismiss: () -> Unit,
     onResetPremium: () -> Unit
@@ -167,14 +175,21 @@ private fun ShowroomContent(
 
     KochPanel {
         Text(
-            text = "Тариф «Годовой VIP»",
+            text = "Тариф «${offer.tariffTitleRu}»",
             style = KochType.bodyStrong,
             color = colors.textPrimary
         )
         Text(
-            text = "Скидка 80% только сегодня",
+            text = offer.discountLabel,
             style = KochType.sub,
             color = colors.accentPromo
+        )
+        Text(
+            // Период и условие — одной согласованной формулировкой из того же state:
+            // «за год · списание один раз». Никакого «в месяц» при годовом тарифе.
+            text = "${offer.periodLabel} · ${offer.billingNoteRu}",
+            style = KochType.caption,
+            color = colors.textTertiary
         )
         Spacer(Modifier.height(KochSpace.xs))
         Row(
@@ -183,14 +198,14 @@ private fun ShowroomContent(
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End
         ) {
             Text(
-                text = "29.99 BYN",
+                text = offer.oldPriceLabel,
                 style = KochType.caption,
                 color = colors.textTertiary,
                 textDecoration = TextDecoration.LineThrough,
                 modifier = Modifier.padding(end = KochSpace.s)
             )
             Text(
-                text = "5.99 BYN",
+                text = offer.priceLabel,
                 style = KochType.numberPrice,
                 color = colors.textPrimary
             )
@@ -226,6 +241,7 @@ private fun ShowroomContent(
 
 @Composable
 private fun ConfirmPurchaseContent(
+    offer: PremiumOffer,
     isConfirming: Boolean,
     onConfirm: () -> Unit,
     onCancel: () -> Unit
@@ -239,12 +255,12 @@ private fun ConfirmPurchaseContent(
         modifier = Modifier.padding(top = KochSpace.m, bottom = KochSpace.s)
     )
     Text(
-        text = "Погода ПРЕМИУМ · Годовой VIP",
+        text = "Погода ПРЕМИУМ · ${offer.tariffTitleRu}",
         style = KochType.bodyStrong,
         color = colors.textPrimary
     )
     Text(
-        text = "5.99 BYN в месяц · списание один раз",
+        text = "${offer.priceLabel} ${offer.periodLabel} · ${offer.billingNoteRu}",
         style = KochType.sub,
         color = colors.textTertiary
     )

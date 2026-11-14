@@ -23,6 +23,17 @@ class ProviderChainTest {
         override suspend fun fetchForecast(latitude: Double, longitude: Double) = result
     }
 
+    private class DelayedProvider(
+        override val source: WeatherSource,
+        private val delayMs: Long,
+        private val result: ProviderFetchResult
+    ) : WeatherProvider {
+        override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult {
+            delay(delayMs)
+            return result
+        }
+    }
+
     private class ThrowingProvider(override val source: WeatherSource) : WeatherProvider {
         override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult =
             throw IllegalStateException("boom")
@@ -40,21 +51,49 @@ class ProviderChainTest {
     private val response = WeatherApiResponse()
 
     @Test
-    fun firstProviderSuccess_doesNotCallSecond() = runTest {
+    fun fastMetWinsRace_againstSlowOpenMeteo() = runTest {
         val chain = WeatherProviderChain(
             listOf(
-                FakeProvider(WeatherSource.MET_NO, ProviderFetchResult.Success(response, 111L)),
-                FakeProvider(WeatherSource.OPEN_METEO, ProviderFetchResult.Success(response, 222L))
+                DelayedProvider(
+                    WeatherSource.MET_NO,
+                    0,
+                    ProviderFetchResult.Success(response, 111L)
+                ),
+                DelayedProvider(
+                    WeatherSource.OPEN_METEO,
+                    10_000,
+                    ProviderFetchResult.Success(response, 222L)
+                )
             )
         )
         val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
         assertEquals(WeatherSource.MET_NO, result.source)
         assertEquals(111L, result.fetchedAt)
-        assertTrue(result.failedAttempts.isEmpty())
     }
 
     @Test
-    fun metNoFailure_fallsBackToOpenMeteo_andKeepsReason() = runTest {
+    fun fastOpenMeteoWinsRace_againstSlowMet() = runTest {
+        val chain = WeatherProviderChain(
+            listOf(
+                DelayedProvider(
+                    WeatherSource.MET_NO,
+                    10_000,
+                    ProviderFetchResult.Success(response, 111L)
+                ),
+                DelayedProvider(
+                    WeatherSource.OPEN_METEO,
+                    0,
+                    ProviderFetchResult.Success(response, 222L)
+                )
+            )
+        )
+        val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
+        assertEquals(WeatherSource.OPEN_METEO, result.source)
+        assertEquals(222L, result.fetchedAt)
+    }
+
+    @Test
+    fun metNoFailure_doesNotBlockOpenMeteoSuccess() = runTest {
         val failure = WeatherFailure(WeatherErrorReason.TIMEOUT, "MET Norway не отвечает")
         val chain = WeatherProviderChain(
             listOf(
@@ -64,9 +103,6 @@ class ProviderChainTest {
         )
         val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
         assertEquals(WeatherSource.OPEN_METEO, result.source)
-        assertEquals(1, result.failedAttempts.size)
-        assertEquals(WeatherSource.MET_NO, result.failedAttempts.first().source)
-        assertEquals(WeatherErrorReason.TIMEOUT, result.failedAttempts.first().failure.reason)
     }
 
     @Test
@@ -89,7 +125,7 @@ class ProviderChainTest {
     }
 
     @Test
-    fun overallTimeout_returnsAllFailedWithinTwentySeconds() = runTest {
+    fun overallTimeout_returnsAllFailedWithinThirtySeconds() = runTest {
         val chain = WeatherProviderChain(
             listOf(
                 HangingProvider(WeatherSource.MET_NO),
@@ -100,11 +136,12 @@ class ProviderChainTest {
         assertTrue(result is WeatherProviderChainResult.AllFailed)
         val attempt = (result as WeatherProviderChainResult.AllFailed).failedAttempts.first()
         assertEquals(WeatherErrorReason.TIMEOUT, attempt.failure.reason)
-        assertTrue(attempt.failure.messageRu.contains("20"))
+        assertTrue(attempt.failure.messageRu.contains("30"))
+        assertEquals(30_000L, WeatherProviderChain.TOTAL_TIMEOUT_MS)
     }
 
     @Test
-    fun throwingProvider_isCaughtAndNextProviderTried() = runTest {
+    fun throwingProvider_doesNotBreakSuccessfulRace() = runTest {
         val chain = WeatherProviderChain(
             listOf(
                 ThrowingProvider(WeatherSource.MET_NO),
@@ -113,6 +150,5 @@ class ProviderChainTest {
         )
         val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
         assertEquals(WeatherSource.OPEN_METEO, result.source)
-        assertEquals(1, result.failedAttempts.size)
     }
 }

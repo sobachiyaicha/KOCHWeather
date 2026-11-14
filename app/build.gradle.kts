@@ -44,7 +44,13 @@ android {
     create("benchmark") {
       initWith(getByName("release"))
       isDebuggable = false
-      isMinifyEnabled = false
+      // R18: benchmark should be release-like: R8 shrinks dex/JIT work.
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro"
+      )
       isProfileable = true
       signingConfig = signingConfigs.getByName("debug")
       matchingFallbacks += listOf("release")

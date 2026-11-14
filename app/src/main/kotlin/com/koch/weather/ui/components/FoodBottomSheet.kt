@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -117,12 +118,15 @@ fun FoodBottomSheet(
 
             if (activeOrder != null) {
                 ActiveOrderCard(order = activeOrder, modifier = Modifier.padding(top = KochSpace.l))
-            } else {                LazyRow(
-                    modifier = Modifier.padding(top = KochSpace.l),
+            } else {                // Чипы ресторанов переносятся по строкам: «Surf Coffee» больше не режется краем.
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = KochSpace.l),
                     horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-                    contentPadding = PaddingValues(vertical = 2.dp)
+                    verticalArrangement = Arrangement.spacedBy(KochSpace.s)
                 ) {
-                    items(foodState.restaurants, key = { it.id }) { restaurant ->
+                    foodState.restaurants.forEach { restaurant ->
                         KochChip(
                             text = restaurant.name,
                             selected = restaurant.id == foodState.selectedRestaurant?.id,

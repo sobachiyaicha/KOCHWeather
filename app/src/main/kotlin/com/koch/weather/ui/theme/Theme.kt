@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -15,7 +16,11 @@ import com.koch.weather.data.model.AppThemeMode
  *
  * Роли, а не оттенки: экран не знает, что такое `#1E232A`; он знает `surface`/`border`/`accent`.
  * Голубая тема — стекло поверх неба; медная и производные — плотные поверхности.
+ *
+ * `@Immutable`: объекты кешируются по теме (см. [kochColors]), поэтому одна и та же пара
+ * тема→палитра всегда даёт один и тот же экземпляр, и CompositionLocal не инвалидирует дерево.
  */
+@Immutable
 data class KochColors(
     val isDark: Boolean,
     val bgTop: Color,
@@ -169,27 +174,38 @@ private fun derived(
     )
 }
 
-fun kochColors(mode: AppThemeMode): KochColors = when (mode) {
-    AppThemeMode.BLUE_SKY -> SkyBlue
-    AppThemeMode.COPPER_SUNSET -> CopperSunset
-    AppThemeMode.FOREST -> derived(
-        Color(0xFF1B3B2B), Color(0xFF2C5E43), Color(0xFF427A5B), Color(0xFF162D21)
-    )
-    AppThemeMode.MARS -> derived(
-        Color(0xFF4A1A12), Color(0xFF7A2D20), Color(0xFFA84230), Color(0xFF33120C)
-    )
-    AppThemeMode.CYBERPUNK -> derived(
-        Color(0xFF0D0221), Color(0xFF240046), Color(0xFF3C096C), Color(0xFF19053B)
-    )
-    AppThemeMode.BLOODY_SUNSET -> derived(
-        Color(0xFF2B090D), Color(0xFF590D15), Color(0xFF8B121E), Color(0xFF23070A)
-    )
-    AppThemeMode.AURORA_BOREALIS -> derived(
-        Color(0xFF05131E), Color(0xFF0C2B36), Color(0xFF134E4A), Color(0xFF082229)
-    )
+/**
+ * Кеш палитр: одна тема — один экземпляр [KochColors].
+ * Раньше `derived()` создавал новый объект на каждый вызов, из-за чего `LocalKochColors`
+ * (staticCompositionLocalOf) менялся при каждом обновлении uiState и перекомпоновывал всё дерево
+ * на 5 темах из 7 (дефект из perf-qa).
+ */
+private val KochColorsCache = java.util.concurrent.ConcurrentHashMap<AppThemeMode, KochColors>()
+
+fun kochColors(mode: AppThemeMode): KochColors = KochColorsCache.getOrPut(mode) {
+    when (mode) {
+        AppThemeMode.BLUE_SKY -> SkyBlue
+        AppThemeMode.COPPER_SUNSET -> CopperSunset
+        AppThemeMode.FOREST -> derived(
+            Color(0xFF1B3B2B), Color(0xFF2C5E43), Color(0xFF427A5B), Color(0xFF162D21)
+        )
+        AppThemeMode.MARS -> derived(
+            Color(0xFF4A1A12), Color(0xFF7A2D20), Color(0xFFA84230), Color(0xFF33120C)
+        )
+        AppThemeMode.CYBERPUNK -> derived(
+            Color(0xFF0D0221), Color(0xFF240046), Color(0xFF3C096C), Color(0xFF19053B)
+        )
+        AppThemeMode.BLOODY_SUNSET -> derived(
+            Color(0xFF2B090D), Color(0xFF590D15), Color(0xFF8B121E), Color(0xFF23070A)
+        )
+        AppThemeMode.AURORA_BOREALIS -> derived(
+            Color(0xFF05131E), Color(0xFF0C2B36), Color(0xFF134E4A), Color(0xFF082229)
+        )
+    }
 }
 
-/** Легаси-структура: экраны этапа 2 ещё принимают её из MainScreen. */
+/** Легаси-структура: экраны этапа 2 ещё принимают её из MainScreen. Кешируется по теме. */
+@Immutable
 data class CustomThemeColors(
     val gradientBrush: Brush,
     val cardBackground: Color,
@@ -201,9 +217,11 @@ data class CustomThemeColors(
     val koch: KochColors
 )
 
-fun getThemePalette(mode: AppThemeMode): CustomThemeColors {
+private val LegacyPaletteCache = java.util.concurrent.ConcurrentHashMap<AppThemeMode, CustomThemeColors>()
+
+fun getThemePalette(mode: AppThemeMode): CustomThemeColors = LegacyPaletteCache.getOrPut(mode) {
     val k = kochColors(mode)
-    return CustomThemeColors(
+    CustomThemeColors(
         gradientBrush = k.gradient,
         cardBackground = if (k.isDark) k.surface else k.surfaceGlass,
         cardBorder = k.border,
