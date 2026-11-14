@@ -15,7 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import com.koch.weather.ui.theme.KochBorderWidth
 import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.KochShape
@@ -64,16 +68,30 @@ fun KochCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(fill)
-            .border(KochBorderWidth.hairline, borderColor, shape)
+            // Карточка рисуется ОДНИМ проходом: заливка, кант и верхний блик — это три
+            // `drawPath` по одному и тому же контуру. Раньше на каждую карточку в кадре
+            // приходилось 4 слоя (`clip` + `background` + `border` + дочерний Box
+            // `matchParentSize().background(brush)`), то есть лишний composable-layout-node
+            // и лишняя заливка во весь размер — на ленте из ~7 карточек это заметный
+            // вклад в 30 FPS. Кисть блика и контур кешируются до смены размера/темы.
+            .drawWithCache {
+                val outline = shape.createOutline(size, layoutDirection, this)
+                val path = when (outline) {
+                    is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
+                    is Outline.Generic -> outline.path
+                    is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
+                }
+                val highlight = topHighlightBrush()
+                val borderStroke = Stroke(width = KochBorderWidth.hairline.toPx())
+                // Порядок как раньше: заливка → кант → блик поверх (блик лёгкий, 12 % белого).
+                onDrawBehind {
+                    drawPath(path, fill)
+                    drawPath(path, borderColor, style = borderStroke)
+                    drawPath(path, highlight)
+                }
+            }
             .then(clickableModifier)
     ) {
-        // Верхний блик: единственный «глянец», который разрешён системой.
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(topHighlightBrush())
-        )
         Column(modifier = Modifier.padding(padding), content = content)
     }
 }

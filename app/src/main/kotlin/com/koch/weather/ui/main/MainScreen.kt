@@ -73,8 +73,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private fun formatWeatherTime(epochMillis: Long): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMillis))
+private fun formatWeatherTime(epochMillis: Long, formatter: SimpleDateFormat): String =
+    formatter.format(Date(epochMillis))
 
 /** Порядок блоков ленты: стабильные списки, не пересоздаются на каждую рекомпозицию. */
 private val CleanFeedOrder: List<String> = listOf(
@@ -558,6 +558,37 @@ internal fun MainScreenContent(
             }
         }
 
+        // Текст и цвет баннера «нет сети / кэш» считаются здесь и кешируются по состоянию
+        // данных. Раньше `buildString` + `SimpleDateFormat` + `formatWeatherTime` жили внутри
+        // content-лямбды LazyColumn и пересчитывались на каждой её переоценке (шапка, снимки
+        // города, любые изменения uiState) — форматирование даты в горячем пути ленты.
+        val weatherTimeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+        val offlineBannerText = remember(
+            uiState.weatherState,
+            uiState.weatherLastUpdated,
+            weatherTimeFormatter
+        ) {
+            when (uiState.weatherState) {
+                WeatherDataState.CACHED -> buildString {
+                    append("Сохранённый прогноз")
+                    uiState.weatherLastUpdated?.let { timestamp ->
+                        append(", ")
+                        append(formatWeatherTime(timestamp, weatherTimeFormatter))
+                    }
+                }
+
+                WeatherDataState.UNAVAILABLE -> "Нет данных о погоде"
+                else -> null
+            }
+        }
+        val offlineBannerColor = remember(uiState.weatherState) {
+            if (uiState.weatherState == WeatherDataState.UNAVAILABLE) {
+                Color(0xD9E53935)
+            } else {
+                Color(0xD9EF6C00)
+            }
+        }
+
         // Статус-бар: фон главной — всегда локальное фото темы под скримом, поэтому
         // яркость нельзя вывести из `bgTop` палитры (он не про фото). Белые иконки
         // читаются на затемнённом фото во всех темах; тёмные нужны только под
@@ -640,25 +671,11 @@ internal fun MainScreenContent(
             ) {
                 // Offline/cache banner is driven by the weather state, not by a bare flag:
                 // CACHED -> saved forecast with its timestamp, UNAVAILABLE -> no data, LIVE -> none.
-                val offlineBannerText: String? = when (uiState.weatherState) {
-                    WeatherDataState.CACHED -> buildString {
-                        append("Сохранённый прогноз")
-                        uiState.weatherLastUpdated?.let { timestamp ->
-                            append(", ")
-                            append(formatWeatherTime(timestamp))
-                        }
-                    }
-
-                    WeatherDataState.UNAVAILABLE -> "Нет данных о погоде"
-                    else -> null
-                }
+                // Сама строка посчитана выше и закеширована: content-лямбда LazyColumn
+                // не композируемая, `remember` внутри неё недоступен.
                 if (offlineBannerText != null) {
-                    val bannerColor = if (uiState.weatherState == WeatherDataState.UNAVAILABLE) {
-                        Color(0xD9E53935)
-                    } else {
-                        Color(0xD9EF6C00)
-                    }
-                    item(key = "offline_banner") {
+                    val bannerColor = offlineBannerColor
+                    item(key = "offline_banner", contentType = "offline_banner") {
                         Surface(
                             color = bannerColor,
                             shape = RoundedCornerShape(14.dp),
@@ -703,7 +720,7 @@ internal fun MainScreenContent(
                     // Section 0: шапка-капсула (refs/bottom_nav.png, 0:45). Облачная вуаль рисуется
                     // поверх, поэтому шапка остаётся в ленте. Анимация — только шапка и
                     // карточка условий: весь LazyColumn анимировать нельзя (jank).
-                    item(key = "golden_hero_header") {
+                    item(key = "golden_hero_header", contentType = "golden_hero_header") {
                         // M8: каждый слой рисуется из своего снимка — выходящий слой держит
                         // прежний город (СПб), входящий — новый (Москва).
                         citySnapshot?.let { snapshot ->
@@ -733,7 +750,11 @@ internal fun MainScreenContent(
 
                     feedOrder.forEach { key ->
                         if (key == "ad_banner" && !uiState.showAds) return@forEach
-                        item(key = key) {
+                        // `contentType` = тип блока: у каждого элемента ленты свой composable,
+                        // поэтому общий `null`-тип заставлял Compose переиспользовать
+                        // подслоты между разными по структуре блоками (лишняя работа на
+                        // пересоздании при прокрутке/смене состояния).
+                        item(key = key, contentType = key) {
                             if (key == "hourly_card") {
                                 // Тот же приём: снимок города+сегмента+оценки на слой.
                                 hourlySnapshot?.let { snapshot ->
@@ -798,7 +819,7 @@ internal fun MainScreenContent(
                     // Attribution: the label and the failover/cache note come from the contract
                     // (MET Norway / Open-Meteo / cache), never hardcoded in the UI.
                     if (uiState.weatherAttributionRu.isNotBlank()) {
-                        item(key = "data_source_footer") {
+                        item(key = "data_source_footer", contentType = "data_source_footer") {
                             // Долгое нажатие по футеру — скрытый debug-жест для FPS-метра.
                             Box(
                                 modifier = Modifier.pointerInput(Unit) {
@@ -815,7 +836,7 @@ internal fun MainScreenContent(
                         }
                     }
                 } else if (uiState.isLoading) {
-                    item(key = "loading_indicator") {
+                    item(key = "loading_indicator", contentType = "loading_indicator") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -830,7 +851,7 @@ internal fun MainScreenContent(
                     }
                 } else {
                     // Honest empty state: no synthetic numbers, explicit retry.
-                    item(key = "weather_unavailable") {
+                    item(key = "weather_unavailable", contentType = "weather_unavailable") {
                         WeatherUnavailableCard(
                             errorMessage = uiState.weatherErrorMessage,
                             isRefreshing = uiState.isRefreshing,
@@ -838,7 +859,7 @@ internal fun MainScreenContent(
                         )
                     }
                     if (uiState.weatherAttributionRu.isNotBlank()) {
-                        item(key = "data_source_footer_empty") {
+                        item(key = "data_source_footer_empty", contentType = "data_source_footer") {
                             Box(
                                 modifier = Modifier.pointerInput(Unit) {
                                     detectTapGestures(

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -219,6 +220,13 @@ internal fun AdBannerCard(
     onClick: () -> Unit
 ) {
     val colors = LocalKochColors.current
+    // Градиент баннера — объект `Brush`, а не цвет. Раньше он создавался в композиции
+    // элемента списка, то есть на каждый пересчёт; вынесен в `remember` по цветам темы.
+    val adGradient = remember(colors.accentAdTop, colors.accentAdBottom) {
+        Brush.verticalGradient(
+            listOf(colors.accentAdTop, colors.accentAdBottom)
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -227,11 +235,7 @@ internal fun AdBannerCard(
             // курьером за 30 минут…», «…доставка бесплатно.») читается целиком.
             .height(164.dp)
             .clip(RoundedCornerShape(KochRadius.card))
-            .background(
-                Brush.verticalGradient(
-                    listOf(colors.accentAdTop, colors.accentAdBottom)
-                )
-            )
+            .background(adGradient)
             .clickable(onClick = onClick)
     ) {
         Column(

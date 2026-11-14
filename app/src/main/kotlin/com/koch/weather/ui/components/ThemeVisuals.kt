@@ -18,6 +18,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.backgroundRes
+import com.koch.weather.data.model.previewRes
 import com.koch.weather.ui.theme.kochColors
 
 /**
@@ -35,11 +36,11 @@ internal fun themePreviewBrush(theme: AppThemeMode): Brush {
 internal fun themeAccentColor(theme: AppThemeMode): Color = kochColors(theme).bgLower
 
 /**
- * Во сколько раз уменьшать превью: 1080×1920 / 4 = 270×480 (≈ 0.5 МБ ARGB_8888).
+ * Во сколько раз уменьшать превью: 540×960 / 2 = 270×480 (≈ 0.5 МБ ARGB_8888).
  * Полный кадр (8.3 МБ) для карточки 160×104 dp не нужен — раньше 7 тем давали
  * пик ~58 МБ на экране «Вид» (M4 код-ревью Фазы 5).
  */
-private const val PREVIEW_SAMPLE_SIZE = 4
+private const val PREVIEW_SAMPLE_SIZE = 2
 
 /**
  * Кеш уменьшенных превью: не больше 8 записей (7 тем + запас), каждая ≈ 0.5 МБ,
@@ -64,7 +65,7 @@ private object ThemePreviewCache {
 /**
  * Декодирует уменьшенную копию локального фона темы. `BitmapFactory` вместо
  * `painterResource`, потому что только он умеет `inSampleSize`: painterResource
- * тянет полный 1080×1920 битмап и оставляет его в кеше ресурсов. `inScaled = false`
+ * тянет полный битмап 540×960 и оставляет его в кеше ресурсов. `inScaled = false`
  * не даёт декодеру дополнительно масштабировать кадр под плотность экрана
  * (`drawable-nodpi`). Ошибка/`OOM` не роняет экран — вызывающий откатывается на градиент.
  */
@@ -89,7 +90,7 @@ internal fun ThemePreviewImage(
     theme: AppThemeMode,
     modifier: Modifier = Modifier
 ) {
-    val res = theme.backgroundRes
+    val res = theme.previewRes ?: theme.backgroundRes
     if (res == null) {
         Box(modifier = modifier.background(themePreviewBrush(theme)).fillMaxSize())
         return

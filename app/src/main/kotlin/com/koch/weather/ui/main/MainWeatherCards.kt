@@ -1,6 +1,5 @@
 package com.koch.weather.ui.main
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -44,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -393,6 +393,7 @@ private fun PrecipitationChart(hours: List<HourlyItem>) {
     val measurer = rememberTextMeasurer()
     val barColorTop = colors.accent
     val barColorBottom = colors.accent.copy(alpha = 0.45f)
+    val labelColor = colors.textPrimary
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -411,121 +412,160 @@ private fun PrecipitationChart(hours: List<HourlyItem>) {
         }
         Spacer(Modifier.height(KochSpace.s))
 
-        Canvas(
+        // Раньше здесь был `Canvas`: его лямбда — это draw-фаза, поэтому на КАЖДОМ кадре
+        // скролла заново шли `measurer.measure` для 3 подписей оси + ~10 подписей часов
+        // (кеш TextMeasurer — 8 записей, то есть почти всегда промах), `Brush.verticalGradient`
+        // на каждый столбик и аллокация `placed`. Теперь текстовые лэйауты, геометрия
+        // и кисти считаются один раз на размер в `drawWithCache`, а в кадре — только
+        // draw-вызовы: математика и внешний вид не менялись.
+        Spacer(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(chartHeight)
-        ) {
-            val axisStyle = KochType.tab.copy(color = colors.textPrimary.copy(alpha = 0.72f))
-            val tickStyle = KochType.tab.copy(color = colors.textPrimary.copy(alpha = 0.82f))
-            val maxLabel = measurer.measure(text = formatMmRu(axisMax), style = axisStyle)
-            val zeroLabel = measurer.measure(text = "0", style = axisStyle)
-            val unitLabel = measurer.measure(text = "мм", style = axisStyle)
+                .drawWithCache {
+                    val axisStyle = KochType.tab.copy(color = labelColor.copy(alpha = 0.72f))
+                    val tickStyle = KochType.tab.copy(color = labelColor.copy(alpha = 0.82f))
+                    val maxLabel = measurer.measure(text = formatMmRu(axisMax), style = axisStyle)
+                    val zeroLabel = measurer.measure(text = "0", style = axisStyle)
+                    val unitLabel = measurer.measure(text = "мм", style = axisStyle)
 
-            val gap = 4.dp.toPx()
-            val unitGap = 8.dp.toPx()
-            // Жёлоб оси: «мм» и подпись максимума стоят на верхней линии шкалы левее
-            // столбиков, «0» — на нулевой. Ширина = самая широкая подпись + отступы,
-            // поэтому подписи оси не налезают ни на столбики, ни друг на друга.
-            val plotLeft = unitLabel.size.width + unitGap + maxLabel.size.width + gap
-            val plotWidth = (size.width - plotLeft).coerceAtLeast(1f)
-            val topLine = 14.dp.toPx()
-            val baseline = size.height - 18.dp.toPx()  // полоса под подписи часов
+                    val gap = 4.dp.toPx()
+                    val unitGap = 8.dp.toPx()
+                    // Жёлоб оси: «мм» и подпись максимума стоят на верхней линии шкалы левее
+                    // столбиков, «0» — на нулевой. Ширина = самая широкая подпись + отступы,
+                    // поэтому подписи оси не налезают ни на столбики, ни друг на друга.
+                    val plotLeft = unitLabel.size.width + unitGap + maxLabel.size.width + gap
+                    val plotWidth = (size.width - plotLeft).coerceAtLeast(1f)
+                    val topLine = 14.dp.toPx()
+                    val baseline = size.height - 18.dp.toPx()  // полоса под подписи часов
+                    val lineWidth = 1.dp.toPx()
 
-            drawLine(
-                color = colors.textPrimary.copy(alpha = 0.18f),
-                start = Offset(plotLeft, topLine),
-                end = Offset(size.width, topLine),
-                strokeWidth = 1.dp.toPx()
-            )
-            drawText(
-                textLayoutResult = unitLabel,
-                topLeft = Offset(0f, topLine - unitLabel.size.height / 2f)
-            )
-            drawText(
-                textLayoutResult = maxLabel,
-                topLeft = Offset(
-                    x = plotLeft - gap - maxLabel.size.width,
-                    y = topLine - maxLabel.size.height / 2f
-                )
-            )
-            drawLine(
-                color = colors.textPrimary.copy(alpha = 0.12f),
-                start = Offset(plotLeft, baseline),
-                end = Offset(size.width, baseline),
-                strokeWidth = 1.dp.toPx()
-            )
-            drawText(
-                textLayoutResult = zeroLabel,
-                topLeft = Offset(
-                    x = plotLeft - gap - zeroLabel.size.width,
-                    y = baseline - zeroLabel.size.height / 2f
-                )
-            )
+                    // Один–два часа не растягиваем на всю ширину: иначе единственный столбик
+                    // занимает половину карточки, а подпись уезжает от него. Мало часов — группа
+                    // центрируется с максимальным шагом 56 dp. Шаг подписей — тот же `slot`.
+                    val slot = if (visible.size >= 6) {
+                        plotWidth / visible.size
+                    } else {
+                        56.dp.toPx()
+                    }
+                    val startX = plotLeft + ((plotWidth - slot * visible.size) / 2f).coerceAtLeast(0f)
+                    val barWidth = (slot * 0.55f).coerceAtLeast(1.5.dp.toPx())
+                    val usableHeight = (baseline - topLine).coerceAtLeast(1f)
 
-            if (visible.isEmpty()) return@Canvas
+                    val bars = ArrayList<RainBar>(amounts.size)
+                    amounts.forEachIndexed { index, mm ->
+                        if (mm == null || mm <= 0.0) return@forEachIndexed
+                        val ratio = (mm / axisMax).toFloat().coerceIn(0f, 1f)
+                        // Минимум 2 dp: «след дождя» 0,1 мм не должен исчезать в ноль пикселей.
+                        val barHeight = (ratio * usableHeight).coerceAtLeast(2.dp.toPx())
+                        val left = startX + index * slot + (slot - barWidth) / 2f
+                        bars += RainBar(
+                            topLeft = Offset(left, baseline - barHeight),
+                            size = Size(barWidth, barHeight),
+                            brush = Brush.verticalGradient(
+                                colors = listOf(barColorTop, barColorBottom),
+                                startY = baseline - barHeight,
+                                endY = baseline
+                            )
+                        )
+                    }
 
-            // Один–два часа не растягиваем на всю ширину: иначе единственный столбик
-            // занимает половину карточки, а подпись уезжает от него. Мало часов — группа
-            // центрируется с максимальным шагом 56 dp. Шаг подписей — тот же `slot`.
-            val slot = if (visible.size >= 6) {
-                plotWidth / visible.size
-            } else {
-                56.dp.toPx()
-            }
-            val startX = plotLeft + ((plotWidth - slot * visible.size) / 2f).coerceAtLeast(0f)
-            val barWidth = (slot * 0.55f).coerceAtLeast(1.5.dp.toPx())
-            val usableHeight = (baseline - topLine).coerceAtLeast(1f)
+                    // Подписи часов — ровно под своим слотом: «22» всегда под баром 22:00,
+                    // а не на один слот правее (дефект кадра r14_10).
+                    val ticks = ArrayList<RainTick>(visible.size)
+                    if (visible.isNotEmpty()) {
+                        val placed = ArrayList<Pair<Float, Float>>(visible.size)
+                        val minGap = 2.dp.toPx()
 
-            amounts.forEachIndexed { index, mm ->
-                if (mm == null || mm <= 0.0) return@forEachIndexed
-                val ratio = (mm / axisMax).toFloat().coerceIn(0f, 1f)
-                // Минимум 2 dp: «след дождя» 0,1 мм не должен исчезать в ноль пикселей.
-                val barHeight = (ratio * usableHeight).coerceAtLeast(2.dp.toPx())
-                val left = startX + index * slot + (slot - barWidth) / 2f
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(barColorTop, barColorBottom),
-                        startY = baseline - barHeight,
-                        endY = baseline
-                    ),
-                    topLeft = Offset(left, baseline - barHeight),
-                    size = Size(barWidth, barHeight),
-                    cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-                )
-            }
+                        fun placeTick(index: Int) {
+                            val layout = measurer.measure(text = visible[index].hourLabel, style = tickStyle)
+                            val centered = startX + index * slot + (slot - layout.size.width) / 2f
+                            // Крайние подписи прижимаем к кромке, чтобы не рисовать за её пределами.
+                            val maxX = (size.width - layout.size.width).coerceAtLeast(0f)
+                            val x = centered.coerceIn(0f, maxX)
+                            val right = x + layout.size.width
+                            if (placed.any { right > it.first - minGap && x < it.second + minGap }) return
+                            placed += x to right
+                            ticks += RainTick(layout, Offset(x, baseline + 4.dp.toPx()))
+                        }
 
-            // Подписи часов — внутри Canvas и ровно под своим слотом: «22» всегда под
-            // баром 22:00, а не на один слот правее (дефект кадра r14_10).
-            val placed = mutableListOf<Pair<Float, Float>>()
-            val minGap = 2.dp.toPx()
+                        // Сначала часы с осадками (у них приоритет), затем сетка каждый третий час.
+                        visible.indices.forEach { index ->
+                            if ((amounts.getOrNull(index) ?: 0.0) > 0.0) placeTick(index)
+                        }
+                        for (index in visible.indices step 3) {
+                            if ((amounts.getOrNull(index) ?: 0.0) > 0.0) continue
+                            placeTick(index)
+                        }
+                    }
 
-            fun placeTick(index: Int) {
-                val layout = measurer.measure(text = visible[index].hourLabel, style = tickStyle)
-                val centered = startX + index * slot + (slot - layout.size.width) / 2f
-                // Крайние подписи прижимаем к кромке Canvas, чтобы не рисовать за его пределами.
-                val maxX = (size.width - layout.size.width).coerceAtLeast(0f)
-                val x = centered.coerceIn(0f, maxX)
-                val right = x + layout.size.width
-                if (placed.any { right > it.first - minGap && x < it.second + minGap }) return
-                placed += x to right
-                drawText(
-                    textLayoutResult = layout,
-                    topLeft = Offset(x, baseline + 4.dp.toPx())
-                )
-            }
+                    val topGridColor = labelColor.copy(alpha = 0.18f)
+                    val baselineGridColor = labelColor.copy(alpha = 0.12f)
 
-            // Сначала часы с осадками (у них приоритет), затем сетка каждый третий час.
-            visible.indices.forEach { index ->
-                if ((amounts.getOrNull(index) ?: 0.0) > 0.0) placeTick(index)
-            }
-            for (index in visible.indices step 3) {
-                if ((amounts.getOrNull(index) ?: 0.0) > 0.0) continue
-                placeTick(index)
-            }
-        }
+                    onDrawBehind {
+                        drawLine(
+                            color = topGridColor,
+                            start = Offset(plotLeft, topLine),
+                            end = Offset(size.width, topLine),
+                            strokeWidth = lineWidth
+                        )
+                        drawText(
+                            textLayoutResult = unitLabel,
+                            topLeft = Offset(0f, topLine - unitLabel.size.height / 2f)
+                        )
+                        drawText(
+                            textLayoutResult = maxLabel,
+                            topLeft = Offset(
+                                x = plotLeft - gap - maxLabel.size.width,
+                                y = topLine - maxLabel.size.height / 2f
+                            )
+                        )
+                        drawLine(
+                            color = baselineGridColor,
+                            start = Offset(plotLeft, baseline),
+                            end = Offset(size.width, baseline),
+                            strokeWidth = lineWidth
+                        )
+                        drawText(
+                            textLayoutResult = zeroLabel,
+                            topLeft = Offset(
+                                x = plotLeft - gap - zeroLabel.size.width,
+                                y = baseline - zeroLabel.size.height / 2f
+                            )
+                        )
+
+                        bars.forEach { bar ->
+                            drawRoundRect(
+                                brush = bar.brush,
+                                topLeft = bar.topLeft,
+                                size = bar.size,
+                                cornerRadius = CornerRadius(bar.size.width / 2f, bar.size.width / 2f)
+                            )
+                        }
+                        ticks.forEach { tick ->
+                            drawText(
+                                textLayoutResult = tick.layout,
+                                topLeft = tick.topLeft
+                            )
+                        }
+                    }
+                }
+        )
     }
 }
+
+/** Готовый столбик осадков: позиция, размер и кисть посчитаны вне draw-фазы. */
+private class RainBar(
+    val topLeft: Offset,
+    val size: Size,
+    val brush: Brush
+)
+
+/** Готовая подпись часа: текстовый лэйаут измерен один раз. */
+private class RainTick(
+    val layout: TextLayoutResult,
+    val topLeft: Offset
+)
 
 /** Компактное «дождя нет»: 56–64 dp вместо пустого графика на 104 dp + ряд часов. */
 @Composable
@@ -580,11 +620,15 @@ private fun formatRating(halfStars: Int): String =
 
 @Composable
 private fun HourlyRow(items: List<HourlyItem>, segment: ConditionSegment) {
+    // Палитра читается один раз на карточку, а не внутри каждой ячейки ряда.
+    val colors = LocalKochColors.current
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(KochSpace.m)
     ) {
-        items(items, key = { it.hourLabel }) { item ->
+        // `contentType` = сегмент: у «Погод. усл.», «Осадков» и «Ветра» одинаковая
+        // структура ячейки, поэтому подслоты переиспользуются при смене сегмента.
+        items(items, key = { it.hourLabel }, contentType = { segment }) { item ->
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 // Минимальная ширина: числа не должны сжиматься до обрезки («1» вместо «15»).
@@ -593,7 +637,7 @@ private fun HourlyRow(items: List<HourlyItem>, segment: ConditionSegment) {
                 Text(
                     text = item.hourLabel,
                     style = KochType.caption,
-                    color = LocalKochColors.current.textPrimary.copy(alpha = 0.8f),
+                    color = colors.textPrimary.copy(alpha = 0.8f),
                     maxLines = 1
                 )
                 Spacer(Modifier.height(KochSpace.xs))
@@ -606,7 +650,7 @@ private fun HourlyRow(items: List<HourlyItem>, segment: ConditionSegment) {
                         else -> "${item.temp}°"
                     },
                     style = KochType.bodyStrong,
-                    color = LocalKochColors.current.textPrimary,
+                    color = colors.textPrimary,
                     maxLines = 1
                 )
             }
@@ -707,19 +751,22 @@ private fun DailyForecastRow(
     onClick: () -> Unit
 ) {
     val colors = LocalKochColors.current
-    val dividerColor = colors.textPrimary.copy(alpha = 0.08f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // Разделитель — линией в drawBehind: не плодим composable-элемент на каждую строку.
-            .drawBehind {
-                if (showDivider) {
-                    val h = 0.5.dp.toPx()
-                    drawRect(
-                        color = dividerColor,
-                        topLeft = Offset(0f, size.height - h),
-                        size = Size(size.width, h)
-                    )
+            // Разделитель — линией в drawWithCache: не плодим composable-элемент на каждую
+            // строку и не пересчитываем dp/цвет на каждом кадре (10 строк в карточке).
+            .drawWithCache {
+                val dividerColor = colors.textPrimary.copy(alpha = 0.08f)
+                val dividerHeight = 0.5.dp.toPx()
+                onDrawBehind {
+                    if (showDivider) {
+                        drawRect(
+                            color = dividerColor,
+                            topLeft = Offset(0f, size.height - dividerHeight),
+                            size = Size(size.width, dividerHeight)
+                        )
+                    }
                 }
             }
             .clickable(onClick = onClick)
