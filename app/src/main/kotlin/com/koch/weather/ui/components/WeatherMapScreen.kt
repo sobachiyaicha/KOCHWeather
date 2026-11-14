@@ -1,6 +1,10 @@
 package com.koch.weather.ui.components
 
-import android.graphics.drawable.GradientDrawable
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -33,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -57,12 +62,12 @@ import org.osmdroid.views.overlay.Marker
 /**
  * R12: полноэкранная карта OSM. Хром — плавающее стекло поверх карты.
  *
- * Производительность (perf-qa):
- *  - `Configuration.load` (диск) вынесен в IO-корутину, а не в `remember` на main;
- *  - `MapView` создаётся в `AndroidView.factory` только после подготовки конфига и только
- *    когда этот экран реально скомпонован (главная под картой больше не живёт);
- *  - `setTilesScaledToDpi` убран — меньше пересчётов тайлов;
- *  - маркер — точка-булавка (GradientDrawable), а не системная иконка «рука».
+ * Маркер создаётся и добавляется ПРЯМО В `AndroidView.factory` (а не в `LaunchedEffect`),
+ * иконка — `BitmapDrawable` из Canvas: `GradientDrawable` без `setSize()` имеет
+ * intrinsicWidth = -1, и osmdroid не может его нарисовать (это и была причина, почему пин
+ * не появлялся ни с погодой, ни без неё).
+ *
+ * `Configuration.load` вынесен в IO, `setTilesScaledToDpi` не используется.
  */
 @Composable
 fun WeatherMapScreen(
@@ -77,10 +82,10 @@ fun WeatherMapScreen(
     val colors = LocalKochColors.current
     val context = LocalContext.current
     var mapReady by remember { mutableStateOf(false) }
-    var mapView by remember { mutableStateOf<MapView?>(null) }
+    // Обычный холдер без snapshot-state: пишем в него из factory, читаем из колбэков.
+    val mapState = remember { MapStateHolder() }
     val pinColor = colors.accent
 
-    // Дисковый load конфигурации osmdroid — только в IO, не на главном потоке.
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             Configuration.getInstance().apply {
@@ -94,43 +99,37 @@ fun WeatherMapScreen(
         mapReady = true
     }
 
-    // Центр и маркер обновляются при смене города и ПОСЛЕ создания MapView (ключ mapView):
-    // иначе первый проход видит null и маркер не ставится — даже когда погоды нет.
-    LaunchedEffect(mapReady, mapView, latitude, longitude, cityName, currentTemp) {
-        val view = mapView ?: return@LaunchedEffect
-        view.controller.setZoom(12.0)
-        view.controller.setCenter(GeoPoint(latitude, longitude))
-        view.overlays.removeAll { it is Marker }
-        view.overlays.add(
-            Marker(view).apply {
-                position = GeoPoint(latitude, longitude)
-                title = cityName
-                snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
-                icon = pinDrawable(pinColor)
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            }
-        )
+    // Смена города/погоды: двигаем уже созданный маркер и центрируем карту.
+    LaunchedEffect(latitude, longitude, cityName, currentTemp, mapReady) {
+        val view = mapState.view ?: return@LaunchedEffect
+        val point = GeoPoint(latitude, longitude)
+        view.controller.setCenter(point)
+        val marker = mapState.marker
+        if (marker != null) {
+            marker.position = point
+            marker.title = cityName
+            marker.snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
+        } else {
+            view.overlays.removeAll { it is Marker }
+            view.overlays.add(buildMarker(view, point, cityName, currentTemp, pinColor))
+        }
         view.invalidate()
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, mapView) {
-        val view = mapView
-        if (view == null) {
-            onDispose { }
-        } else {
-            val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_RESUME -> view.onResume()
-                    Lifecycle.Event.ON_PAUSE -> view.onPause()
-                    else -> Unit
-                }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            val view = mapState.view ?: return@LifecycleEventObserver
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> view.onResume()
+                Lifecycle.Event.ON_PAUSE -> view.onPause()
+                else -> Unit
             }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose {
-                lifecycleOwner.lifecycle.removeObserver(observer)
-                view.onDetach()
-            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapState.view?.onDetach()
         }
     }
 
@@ -142,7 +141,7 @@ fun WeatherMapScreen(
         if (mapReady) {
             AndroidView(
                 factory = { ctx ->
-                    MapView(ctx).apply {
+                    val view = MapView(ctx).apply {
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
@@ -152,22 +151,25 @@ fun WeatherMapScreen(
                         setUseDataConnection(true)
                         controller.setZoom(12.0)
                         controller.setCenter(GeoPoint(latitude, longitude))
-                        mapView = this
                     }
+                    // Маркер — здесь же: не зависим от порядка «состояние → эффект».
+                    val marker = buildMarker(view, GeoPoint(latitude, longitude), cityName, currentTemp, pinColor)
+                    view.overlays.add(marker)
+                    view.invalidate()
+                    mapState.view = view
+                    mapState.marker = marker
+                    view
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
 
-        // Верхний скрим: хром читается на любой карте.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(168.dp)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0x73000000), Color(0x00000000))
-                    )
+                    Brush.verticalGradient(listOf(Color(0x73000000), Color(0x00000000)))
                 )
         )
 
@@ -207,7 +209,6 @@ fun WeatherMapScreen(
                         text = buildString {
                             append("Карта · OpenStreetMap")
                             append(" · ")
-                            // Нет погоды — не пропускаем, а честно пишем «Нет данных».
                             append(currentTemp?.let { "$it°" } ?: "Нет данных")
                         },
                         style = KochType.caption,
@@ -222,7 +223,7 @@ fun WeatherMapScreen(
             icon = Icons.Default.MyLocation,
             contentDescription = "Центр карты — выбранный город",
             onClick = {
-                mapView?.let { view ->
+                mapState.view?.let { view ->
                     view.controller.animateTo(GeoPoint(latitude, longitude))
                     view.controller.setZoom(12.0)
                     view.invalidate()
@@ -286,17 +287,46 @@ fun WeatherMapScreen(
     }
 }
 
-/** Точка-булавка вместо системной иконки: простое кольцо в цвете акцента. */
-private fun pinDrawable(color: Color): GradientDrawable = GradientDrawable().apply {
-    shape = GradientDrawable.OVAL
-    setColor(color.toArgb())
-    setStroke(6, android.graphics.Color.WHITE)
-    setBounds(0, 0, 42, 42)
+private class MapStateHolder {
+    var view: MapView? = null
+    var marker: Marker? = null
 }
 
-private fun Color.toArgb(): Int = android.graphics.Color.argb(
-    (alpha * 255).toInt(),
-    (red * 255).toInt(),
-    (green * 255).toInt(),
-    (blue * 255).toInt()
-)
+private fun buildMarker(
+    mapView: MapView,
+    point: GeoPoint,
+    cityName: String,
+    currentTemp: Int?,
+    color: Color
+): Marker = Marker(mapView).apply {
+    position = point
+    title = cityName
+    snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
+    icon = pinDrawable(mapView.context, color)
+    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+}
+
+/**
+ * Маркер-булавка: `BitmapDrawable` (intrinsic size = размеру битмапа) с белым кольцом и
+ * точкой цвета акцента. Размер в px считается от density, чтобы пин не был 1 px.
+ */
+private fun pinDrawable(context: Context, color: Color): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val sizePx = (24f * density).toInt().coerceAtLeast(24)
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = sizePx / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    // Белое кольцо-подложка.
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(radius, radius, radius, paint)
+
+    // Точка в цвете акцента.
+    paint.color = color.toArgb()
+    canvas.drawCircle(radius, radius, radius * 0.62f, paint)
+
+    return BitmapDrawable(context.resources, bitmap).apply {
+        setBounds(0, 0, sizePx, sizePx)
+    }
+}

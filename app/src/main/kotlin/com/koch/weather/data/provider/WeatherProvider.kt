@@ -57,20 +57,59 @@ sealed interface WeatherProviderChainResult {
 }
 
 /**
- * Параллельная гонка провайдеров: MetNo и OpenMeteo стартуют одновременно,
- * первый успешный ответ побеждает, проигравший отменяется. Так первый запуск
- * после pm clear не ждёт последовательно два таймаута.
+ * Параллельная гонка основных провайдеров (MetNo + OpenMeteo), затем
+ * последовательный резерв (7timer). Резерв запускается только если оба
+ * основных вернули Failure, поэтому не тормозит нормальный сценарий.
  */
-class WeatherProviderChain(private val providers: List<WeatherProvider>) {
+class WeatherProviderChain(
+    private val providers: List<WeatherProvider>,
+    private val fallbackProviders: List<WeatherProvider> = emptyList()
+) {
 
     /**
-     * Общий бюджет на гонку — 30 секунд (UI показывает прогресс/скелетон).
+     * Общий бюджет на гонку + резерв — 30 секунд (UI показывает прогресс).
      * Если ни один провайдер не ответил, отдаём честный TIMEOUT.
      */
     suspend fun fetch(latitude: Double, longitude: Double): WeatherProviderChainResult =
         withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
-            race(latitude, longitude)
+            fetchWithFallback(latitude, longitude)
         } ?: timeoutFailure()
+
+    private suspend fun fetchWithFallback(
+        latitude: Double,
+        longitude: Double
+    ): WeatherProviderChainResult {
+        val primary = race(latitude, longitude)
+        if (primary is WeatherProviderChainResult.Success) return primary
+
+        val failures = (primary as WeatherProviderChainResult.AllFailed)
+            .failedAttempts
+            .toMutableList()
+
+        for (provider in fallbackProviders) {
+            val result = try {
+                provider.fetchForecast(latitude, longitude)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ProviderFetchResult.Failure(WeatherErrors.from(e))
+            }
+            when (result) {
+                is ProviderFetchResult.Success -> return WeatherProviderChainResult.Success(
+                    response = result.response,
+                    source = provider.source,
+                    fetchedAt = result.fetchedAt,
+                    fromProviderCache = result.fromProviderCache,
+                    failedAttempts = failures.toList()
+                )
+
+                is ProviderFetchResult.Failure -> failures.add(
+                    ProviderAttemptFailure(provider.source, result.failure)
+                )
+            }
+        }
+        return WeatherProviderChainResult.AllFailed(failures)
+    }
 
     private suspend fun race(
         latitude: Double,

@@ -4,6 +4,7 @@ import com.koch.weather.data.provider.GeocodingChain
 import com.koch.weather.data.provider.MetNoProvider
 import com.koch.weather.data.provider.NominatimGeocodingProvider
 import com.koch.weather.data.provider.PhotonGeocodingProvider
+import com.koch.weather.data.provider.SevenTimerProvider
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -16,6 +17,14 @@ class WeatherTimeoutConfigTest {
         assertEquals(25_000, client.readTimeoutMillis)
         assertEquals(25_000, client.writeTimeoutMillis)
         assertEquals(35_000, client.callTimeoutMillis)
+    }
+
+    @Test
+    fun sevenTimerFallback_budgetIsEightSeconds() {
+        val client = SevenTimerProvider.defaultClient()
+        assertEquals(4_000, client.connectTimeoutMillis)
+        assertEquals(6_000, client.readTimeoutMillis)
+        assertEquals(8_000, client.callTimeoutMillis)
     }
 
     @Test

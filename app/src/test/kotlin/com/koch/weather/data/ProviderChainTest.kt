@@ -39,6 +39,19 @@ class ProviderChainTest {
             throw IllegalStateException("boom")
     }
 
+    private class CountingProvider(
+        override val source: WeatherSource,
+        private val result: ProviderFetchResult
+    ) : WeatherProvider {
+        var calls = 0
+            private set
+
+        override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult {
+            calls++
+            return result
+        }
+    }
+
     private class HangingProvider(override val source: WeatherSource) : WeatherProvider {
         override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult {
             delay(60_000)
@@ -116,6 +129,70 @@ class ProviderChainTest {
                 FakeProvider(
                     WeatherSource.OPEN_METEO,
                     ProviderFetchResult.Failure(WeatherFailure(WeatherErrorReason.TIMEOUT, "open-meteo down"))
+                )
+            )
+        )
+        val result = chain.fetch(59.9, 30.3)
+        assertTrue(result is WeatherProviderChainResult.AllFailed)
+        assertEquals(2, (result as WeatherProviderChainResult.AllFailed).failedAttempts.size)
+    }
+
+    @Test
+    fun fallbackProvider_runsOnlyAfterPrimaryRaceFails() = runTest {
+        val fallback = CountingProvider(
+            WeatherSource.SEVEN_TIMER,
+            ProviderFetchResult.Success(response, 777L)
+        )
+        val chain = WeatherProviderChain(
+            providers = listOf(
+                FakeProvider(
+                    WeatherSource.MET_NO,
+                    ProviderFetchResult.Failure(WeatherFailure(WeatherErrorReason.CONNECT_TIMEOUT, "met"))
+                ),
+                FakeProvider(
+                    WeatherSource.OPEN_METEO,
+                    ProviderFetchResult.Failure(WeatherFailure(WeatherErrorReason.CONNECT_TIMEOUT, "open"))
+                )
+            ),
+            fallbackProviders = listOf(fallback)
+        )
+        val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
+        assertEquals(WeatherSource.SEVEN_TIMER, result.source)
+        assertEquals(777L, result.fetchedAt)
+        assertEquals(2, result.failedAttempts.size)
+        assertEquals(WeatherSource.SEVEN_TIMER, fallback.source)
+    }
+
+    @Test
+    fun fallbackProvider_isNotCalledWhenPrimaryRaceSucceeds() = runTest {
+        val fallback = CountingProvider(
+            WeatherSource.SEVEN_TIMER,
+            ProviderFetchResult.Success(response, 777L)
+        )
+        val chain = WeatherProviderChain(
+            providers = listOf(
+                FakeProvider(WeatherSource.MET_NO, ProviderFetchResult.Success(response, 111L))
+            ),
+            fallbackProviders = listOf(fallback)
+        )
+        val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
+        assertEquals(WeatherSource.MET_NO, result.source)
+        assertEquals(0, fallback.calls)
+    }
+
+    @Test
+    fun allFallbackProvidersFail_returnsAllAttempts() = runTest {
+        val chain = WeatherProviderChain(
+            providers = listOf(
+                FakeProvider(
+                    WeatherSource.MET_NO,
+                    ProviderFetchResult.Failure(WeatherFailure(WeatherErrorReason.CONNECT_TIMEOUT, "met"))
+                )
+            ),
+            fallbackProviders = listOf(
+                FakeProvider(
+                    WeatherSource.SEVEN_TIMER,
+                    ProviderFetchResult.Failure(WeatherFailure(WeatherErrorReason.TIMEOUT, "7timer"))
                 )
             )
         )

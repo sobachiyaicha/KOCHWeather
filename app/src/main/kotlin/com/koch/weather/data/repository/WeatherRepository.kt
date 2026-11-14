@@ -23,6 +23,7 @@ import com.koch.weather.data.provider.NominatimGeocodingProvider
 import com.koch.weather.data.provider.OpenMeteoGeocodingProvider
 import com.koch.weather.data.provider.OpenMeteoProvider
 import com.koch.weather.data.provider.PhotonGeocodingProvider
+import com.koch.weather.data.provider.SevenTimerProvider
 import com.koch.weather.data.provider.ProviderAttemptFailure
 import com.koch.weather.data.provider.WeatherProviderChain
 import com.koch.weather.data.provider.WeatherProviderChainResult
@@ -38,11 +39,13 @@ class WeatherRepository @JvmOverloads constructor(
 ) {
     private val openMeteoClient = OpenMeteoClient()
     private val metNoProvider = MetNoProvider()
+    private val sevenTimerProvider = SevenTimerProvider()
     private val weatherProviderChain = WeatherProviderChain(
-        listOf(
+        providers = listOf(
             metNoProvider,
             OpenMeteoProvider(openMeteoClient)
-        )
+        ),
+        fallbackProviders = listOf(sevenTimerProvider)
     )
     private val geocodingChain = GeocodingChain(
         listOf(

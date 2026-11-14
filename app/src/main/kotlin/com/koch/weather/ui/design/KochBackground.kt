@@ -5,30 +5,81 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import com.koch.weather.ui.components.wikimediaImageLoader
 import com.koch.weather.ui.theme.LocalKochColors
 
 /**
- * Фон приложения: градиент темы + процедурные облака (план §2.7).
+ * Фон приложения.
  *
- * Облака рисуются один раз на кадр через мягкие радиальные градиенты — без blur и без
- * анимации, поэтому не стоят лишних миллисекунд в p50 (R18).
+ * 1) База — градиент темы (всегда видим, в том числе пока фото грузится и когда сети нет).
+ * 2) Если тема даёт фото неба ([imageUrl] из `uiState.sky*ImageUrl`) — оно рисуется поверх
+ *    градиента через `AsyncImage` с `Crop`; при загрузке/ошибке плейсхолдера нет, поэтому
+ *    остаётся градиент (никаких серых боксов офлайн).
+ * 3) Над фото — скрим 20–35 %, чтобы белый текст и стекло читались.
+ * 4) Без фото — процедурные облака (дешёвые овалы, без blur).
  */
 @Composable
 fun KochSkyBackground(
     modifier: Modifier = Modifier,
+    imageUrl: String? = null,
     showClouds: Boolean = true
 ) {
     val colors = LocalKochColors.current
+    val context = LocalContext.current
+    val loader = remember(context) { wikimediaImageLoader(context) }
+    var photoLoaded by remember(imageUrl) { mutableStateOf(false) }
+
     Box(modifier = modifier.fillMaxSize().background(colors.gradient)) {
-        if (showClouds) {
+        // Облака — фолбэк: рисуем их, пока фото не загрузилось (в том числе офлайн).
+        if (!photoLoaded && showClouds) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCloudLayer(colors.bgTop, colors.bgBottom)
+            }
+        }
+
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                imageLoader = loader,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                // Плейсхолдеров у AsyncImage нет намеренно: пока фото нет (или офлайн) —
+                // сквозь него виден градиент, а не серый бокс.
+                onState = { state ->
+                    photoLoaded = state is AsyncImagePainter.State.Success
+                }
+            )
+
+            if (photoLoaded) {
+                // Скрим поверх фото: 30 % сверху, 20 % в середине, 35 % снизу.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0x4D000000),
+                                    Color(0x33000000),
+                                    Color(0x59000000)
+                                )
+                            )
+                        )
+                )
             }
         }
     }
@@ -54,18 +105,17 @@ private fun DrawScope.drawCloudLayer(top: Color, bottom: Color) {
         )
     }
 
-    // Тёплый «солнечный» блик сверху: даёт фото-подобный перепад вместо плоской заливки
-    // (на медной теме Δ яркости был ~40, нужно ~160).
+    // Тёплый «солнечный» блик сверху: фото-подобный перепад вместо плоской заливки.
     drawOval(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color(0xFFFFFFF0).copy(alpha = if (topLum > 0.6f) 0.10f else 0.22f),
+                Color(0xFFFFF4E0).copy(alpha = if (topLum > 0.6f) 0.10f else 0.22f),
                 Color.Transparent
             ),
             center = Offset(w * 0.72f, h * 0.06f),
             radius = w * 0.75f
         ),
-        topLeft = Offset(w * 0.0f, -h * 0.20f),
+        topLeft = Offset(0f, -h * 0.20f),
         size = Size(w * 1.5f, h * 0.55f)
     )
 
@@ -75,7 +125,6 @@ private fun DrawScope.drawCloudLayer(top: Color, bottom: Color) {
     puff(w * 0.12f, h * 0.42f, w * 0.50f, h * 0.12f, softMid)
     puff(w * 0.66f, h * 0.55f, w * 0.60f, h * 0.10f, shade)
 
-    // Виньетка снизу: контент читается, фон перестаёт быть плоским.
     drawRect(
         brush = Brush.verticalGradient(
             0.62f to Color.Transparent,

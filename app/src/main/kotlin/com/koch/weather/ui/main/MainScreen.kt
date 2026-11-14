@@ -423,9 +423,18 @@ internal fun MainScreenContent(
                     )
                 }
         ) {
-            // Фон темы: градиент + процедурные облака (refs/clean_main.png — небо с облаками),
-            // без blur и без сетевых фото; рисуется один раз на кадр.
-            KochSkyBackground(modifier = Modifier.matchParentSize())
+            // Фон темы: фото неба из state (data-coder) с фолбэком на градиент+облака.
+            // Голубая — кучевые облака, медная — закат, «Северное сияние» — полярное небо.
+            val skyPhotoUrl = when (uiState.currentTheme) {
+                AppThemeMode.BLUE_SKY -> uiState.skyBlueImageUrl
+                AppThemeMode.COPPER_SUNSET -> uiState.skySunsetImageUrl
+                AppThemeMode.AURORA_BOREALIS -> uiState.skyNorthernImageUrl
+                else -> null
+            }
+            KochSkyBackground(
+                modifier = Modifier.matchParentSize(),
+                imageUrl = skyPhotoUrl
+            )
 
             // Нижний бар — часть Scaffold, а не оверлей: контент физически не может уехать
             // под него (блокер №1 из аудита r2_02).

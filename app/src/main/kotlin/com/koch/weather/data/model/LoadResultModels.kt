@@ -55,6 +55,7 @@ enum class WeatherSource(
 ) {
     MET_NO("met_no", "MET Norway", "Данные: MET Norway (api.met.no)"),
     OPEN_METEO("open_meteo", "Open-Meteo", "Данные: Open-Meteo"),
+    SEVEN_TIMER("seven_timer", "7timer", "Данные: 7timer"),
     CACHE("cache", "Сохранённый прогноз", "Данные: сохранённый прогноз"),
     NONE("none", "Нет данных", "Данные: нет данных");
 

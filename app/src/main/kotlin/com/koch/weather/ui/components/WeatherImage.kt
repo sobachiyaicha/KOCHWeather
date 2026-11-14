@@ -61,6 +61,12 @@ private object WikimediaImageLoader {
 }
 
 /**
+ * Единый загрузчик Wikimedia (UA-заголовок обязателен) — нужен и карточкам, и фону-небу.
+ */
+internal fun wikimediaImageLoader(context: Context): ImageLoader =
+    WikimediaImageLoader.get(context)
+
+/**
  * Сетевое фото.
  *
  * Быстрый путь (по умолчанию) — `AsyncImage` без сабкомпозиции: только заливка-плейсхолдер.
