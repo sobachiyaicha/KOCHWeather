@@ -1,8 +1,7 @@
 package com.koch.weather.ui.components
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,42 +21,42 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.koch.weather.data.model.CityLocation
-import java.util.Locale
+import com.koch.weather.ui.design.KochCard
+import com.koch.weather.ui.design.KochEmptyState
+import com.koch.weather.ui.design.KochListRow
+import com.koch.weather.ui.design.KochPageHeader
+import com.koch.weather.ui.theme.KochSpace
+import com.koch.weather.ui.design.KochTextButton
+import com.koch.weather.ui.theme.KochRadius
+import com.koch.weather.ui.theme.KochType
+import com.koch.weather.ui.theme.LocalKochColors
 
 /**
- * R14: полноэкранный «Поиск» города.
- *
- * Живой geocoding через MainScreenViewModel.searchCities; ошибка из uiState.searchError
- * показывается явно, без выдуманных результатов.
+ * R14: полноэкранный поиск города. Поле без рамки в покое, результаты — одна группа строк,
+ * координаты (отладочная информация) убраны.
  */
 @Composable
 fun CitySearchScreen(
@@ -69,253 +69,199 @@ fun CitySearchScreen(
     onSelectCity: (CityLocation) -> Unit,
     onBack: () -> Unit
 ) {
-    FullScreenScaffold(
-        title = "Поиск города",
-        subtitle = "Название, регион или страна",
-        background = background,
-        onBack = onBack
+    val colors = LocalKochColors.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(background)
     ) {
-        val keyboard = LocalSoftwareKeyboardController.current
-        val focusRequester = remember { FocusRequester() }
+        Column(modifier = Modifier.fillMaxSize()) {
+            KochPageHeader(
+                title = "Поиск города",
+                subtitle = "Название, регион или страна",
+                onBack = onBack
+            )
 
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
-        }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .focusRequester(focusRequester),
-            placeholder = {
-                Text(
-                    text = "Введите название города",
-                    color = Color.White.copy(alpha = 0.5f)
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.7f)
-                )
-            },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = KochSpace.xl, vertical = KochSpace.s)
+                    .heightIn(min = 48.dp)
+                    .focusRequester(focusRequester),
+                placeholder = {
+                    Text(
+                        text = "Введите название города",
+                        style = KochType.body,
+                        color = colors.textPrimary.copy(alpha = 0.5f)
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = colors.textPrimary.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Очистить",
-                            tint = Color.White.copy(alpha = 0.7f)
+                            tint = colors.textPrimary.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable { onQueryChange("") }
                         )
                     }
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFF64B5F6),
-                unfocusedBorderColor = Color(0x66FFFFFF),
-                cursorColor = Color.White
-            ),
-            shape = RoundedCornerShape(14.dp),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() })
-        )
+                },
+                textStyle = KochType.body,
+                singleLine = true,
+                shape = RoundedCornerShape(KochRadius.input),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    focusedContainerColor = colors.textPrimary.copy(alpha = 0.14f),
+                    unfocusedContainerColor = colors.textPrimary.copy(alpha = 0.12f),
+                    focusedBorderColor = colors.accent.copy(alpha = 0.6f),
+                    unfocusedBorderColor = Color.Transparent,
+                    cursorColor = colors.accent
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() })
+            )
 
-        when {
-            isSearching -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.height(KochSpace.s))
+
+            when {
+                isSearching -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = KochSpace.x2l),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         CircularProgressIndicator(
-                            color = Color.White,
+                            color = colors.textPrimary.copy(alpha = 0.8f),
                             strokeWidth = 2.dp,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(Modifier.width(KochSpace.s))
                         Text(
                             text = "Ищем города...",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 13.sp
+                            style = KochType.sub,
+                            color = colors.textPrimary.copy(alpha = 0.8f)
                         )
                     }
                 }
-            }
 
-            errorMessage != null -> {
-                SearchErrorCard(
-                    message = errorMessage,
-                    onRetry = { onQueryChange(query) }
-                )
-            }
-
-            query.isBlank() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    FullScreenEmptyState(
-                        icon = Icons.Default.Search,
-                        title = "Начните вводить название",
-                        subtitle = "Поиск идёт по всему миру и не требует ключей."
-                    )
+                errorMessage != null -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = KochSpace.xl)
+                            .clip(RoundedCornerShape(KochRadius.panel))
+                            .background(colors.accentDanger.copy(alpha = 0.16f))
+                            .padding(KochSpace.l)
+                    ) {
+                        Column {
+                            Text(
+                                text = "Не удалось выполнить поиск",
+                                style = KochType.bodyStrong,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = errorMessage,
+                                style = KochType.sub,
+                                color = colors.textPrimary.copy(alpha = 0.85f)
+                            )
+                            KochTextButton(
+                                text = "Повторить",
+                                onClick = { onQueryChange(query) },
+                                modifier = Modifier.align(Alignment.End)
+                            )
+                        }
+                    }
                 }
-            }
 
-            results.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    FullScreenEmptyState(
-                        icon = Icons.Default.LocationOn,
-                        title = "Города не найдены",
-                        subtitle = "Проверьте написание или попробуйте другой запрос."
-                    )
-                }
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .navigationBarsPadding(),
-                    contentPadding = PaddingValues(
-                        start = 14.dp,
-                        top = 4.dp,
-                        end = 14.dp,
-                        bottom = 28.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        items = results,
-                        key = { "${it.name}_${it.latitude}_${it.longitude}" }
-                    ) { city ->
-                        SearchResultRow(
-                            city = city,
-                            onClick = { onSelectCity(city) }
+                query.isBlank() -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        KochEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "Начните вводить название",
+                            subtitle = "Поиск идёт по всему миру и не требует ключей."
                         )
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-private fun SearchResultRow(
-    city: CityLocation,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0x26FFFFFF),
-        border = BorderStroke(0.8.dp, Color(0x30FFFFFF)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = Color(0xFF64B5F6),
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = city.name,
-                    color = Color.White,
-                    fontSize = 15.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = city.locationLine(),
-                    color = Color.White.copy(alpha = 0.65f),
-                    fontSize = 11.5.sp,
-                    maxLines = 1
-                )
-                Text(
-                    text = String.format(
-                        Locale.US,
-                        "%.2f, %.2f",
-                        city.latitude,
-                        city.longitude
-                    ),
-                    color = Color.White.copy(alpha = 0.45f),
-                    fontSize = 10.sp,
-                    maxLines = 1
-                )
-            }
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Добавить город",
-                tint = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
+                results.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        KochEmptyState(
+                            icon = Icons.Default.LocationOn,
+                            title = "Города не найдены",
+                            subtitle = "Проверьте написание или попробуйте другой запрос."
+                        )
+                    }
+                }
 
-@Composable
-private fun SearchErrorCard(
-    message: String,
-    onRetry: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0x33EF5350),
-        border = BorderStroke(1.dp, Color(0x88EF5350)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.ErrorOutline,
-                    contentDescription = null,
-                    tint = Color(0xFFFFCDD2),
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Не удалось выполнить поиск",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = message,
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                textAlign = TextAlign.Start
-            )
-            TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.End)) {
-                Text("Повторить", color = Color(0xFF90CAF9), fontWeight = FontWeight.SemiBold)
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .navigationBarsPadding(),
+                        contentPadding = PaddingValues(
+                            start = KochSpace.xl,
+                            end = KochSpace.xl,
+                            bottom = KochSpace.x2l
+                        )
+                    ) {
+                        item(key = "results_group") {
+                            KochCard(padding = PaddingValues(vertical = KochSpace.xs)) {
+                                results.forEachIndexed { index, city ->
+                                    KochListRow(
+                                        title = city.name,
+                                        subtitle = city.locationLine(),
+                                        showDivider = index != results.lastIndex,
+                                        onClick = { onSelectCity(city) },
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Default.LocationOn,
+                                                contentDescription = null,
+                                                tint = colors.accent,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        },
+                                        trailing = {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                contentDescription = "Выбрать город",
+                                                tint = colors.textTertiary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

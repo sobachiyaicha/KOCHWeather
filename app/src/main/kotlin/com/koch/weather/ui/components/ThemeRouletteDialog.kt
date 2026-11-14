@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -60,6 +61,7 @@ import kotlin.random.Random
 fun ThemeRouletteDialog(
     currentTheme: AppThemeMode,
     availableThemes: Set<AppThemeMode>,
+    iphoneImageUrl: String? = null,
     onSelectTheme: (AppThemeMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -118,6 +120,7 @@ fun ThemeRouletteDialog(
 
                 PhonePreview(
                     theme = previewTheme,
+                    photoUrl = iphoneImageUrl,
                     modifier = Modifier.weight(1f).padding(horizontal = KochSpace.s)
                 )
 
@@ -267,82 +270,101 @@ private fun ThemeTicket(
 }
 
 /**
- * Телефон в центре — фронтальный мокап из Compose (не задняя крышка из Wikimedia):
- * экран показывает саму тему — небо, «21°» и две карточки.
+ * Телефон в центре: реальное фронтальное фото (ImageCategory.IPHONE_FRONT) с обязательным
+ * фолбэком на мокап из Compose — если фото не загрузилось, остаётся фронтальный экран,
+ * а не серая заглушка. Заднюю крышку не используем.
  */
 @Composable
 private fun PhonePreview(
     theme: AppThemeMode,
+    photoUrl: String?,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(24.dp)
     Box(
         modifier = modifier
-            .heightIn(max = 210.dp)
+            .width(132.dp)
+            .height(190.dp)
             .clip(shape)
             .background(Color(0xFF101418))
             .padding(5.dp),
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.Center
     ) {
-        Column(
+        if (photoUrl != null) {
+            RemotePhoto(
+                url = photoUrl,
+                contentDescription = "iPhone с оформлением ${theme.titleRu}",
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(20.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                fallback = { PhoneMock(theme) }
+            )
+        } else {
+            PhoneMock(theme)
+        }
+    }
+}
+
+@Composable
+private fun PhoneMock(theme: AppThemeMode) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(20.dp))
+            .background(themePreviewBrush(theme))
+            .padding(KochSpace.s),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color.Black.copy(alpha = 0.75f))
+        )
+        Spacer(Modifier.height(KochSpace.m))
+        Text(
+            text = theme.titleRu,
+            style = KochType.microCaps,
+            color = Color.White.copy(alpha = 0.8f),
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(
+            text = "21°",
+            style = KochType.displayTemp.copy(fontSize = 34.sp, lineHeight = 36.sp),
+            color = Color.White.copy(alpha = 0.92f)
+        )
+        Spacer(Modifier.height(KochSpace.s))
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(themePreviewBrush(theme))
-                .padding(KochSpace.s),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .height(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.16f))
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(28.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.12f))
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(9.dp))
+                .background(Color.White.copy(alpha = 0.75f))
+                .padding(vertical = 5.dp),
+            horizontalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .width(34.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color.Black.copy(alpha = 0.75f))
-            )
-            Spacer(Modifier.height(KochSpace.m))
             Text(
-                text = theme.titleRu,
-                style = KochType.microCaps,
-                color = Color.White.copy(alpha = 0.8f),
-                maxLines = 1,
-                softWrap = false
+                text = "Главная",
+                style = KochType.tab,
+                color = Color(0xFF20313D)
             )
-            Text(
-                text = "21°",
-                style = KochType.displayTemp.copy(fontSize = 34.sp, lineHeight = 36.sp),
-                color = Color.White.copy(alpha = 0.92f)
-            )
-            Spacer(Modifier.height(KochSpace.s))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.16f))
-            )
-            Spacer(Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(Color.White.copy(alpha = 0.75f))
-                    .padding(vertical = 5.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Главная",
-                    style = KochType.tab,
-                    color = Color(0xFF20313D)
-                )
-            }
         }
     }
 }

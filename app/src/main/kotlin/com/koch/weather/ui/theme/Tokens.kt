@@ -4,10 +4,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.koch.weather.R
+
+/**
+ * Inter (SIL OFL 1.1, лицензия — `assets/fonts/Inter-OFL.txt`), 4 статических начертания.
+ * Полное покрытие кириллицы (проверено по cmap: А, Ё, №, °, ★, →, ›, −, —).
+ */
+val KochFontFamily: FontFamily = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold),
+    Font(R.font.inter_bold, FontWeight.ExtraBold)
+)
 
 /**
  * Дизайн-токены KOCHWeather (этап 1 редизайна, `_history/reports/phase-4/ui-design-plan.md`).
@@ -21,10 +35,10 @@ import androidx.compose.ui.unit.sp
 object KochType {
 
     /**
-     * Семейство шрифта. Inter подключается здесь на шаге P5 (файлы res/font);
-     * до этого — системный, но с правильными весами и трекингом.
+     * Семейство шрифта: Inter (OFL). Подключено статическими файлами `res/font/inter_*`,
+     * поэтому одинаково работает на minSdk 24 без вариативных настроек.
      */
-    private val Family: FontFamily = FontFamily.Default
+    private val Family: FontFamily = KochFontFamily
 
     /** 60 sp — температура-герой в шапке (`rotate`/`offset` не трогаем). */
     val displayTemp = TextStyle(

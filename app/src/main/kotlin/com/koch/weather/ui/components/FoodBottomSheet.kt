@@ -68,7 +68,7 @@ import com.koch.weather.ui.theme.LocalKochColors
 @Composable
 fun FoodBottomSheet(
     foodState: FoodState,
-    foodImageUrls: List<String> = emptyList(),
+    photoUrls: Map<com.koch.weather.data.model.ImageCategory, List<String>> = emptyMap(),
     onSelectRestaurant: (Restaurant) -> Unit,
     onAddToCart: (FoodItem) -> Unit,
     onRemoveFromCart: (FoodItem) -> Unit,
@@ -136,7 +136,7 @@ fun FoodBottomSheet(
                         MenuRow(
                             item = item,
                             count = foodState.cart[item] ?: 0,
-                            imageUrl = foodPhotoUrl(item.id, foodImageUrls),
+                            imageUrl = foodPhotoUrl(item.id, photoUrls),
                             onAdd = { onAddToCart(item) },
                             onRemove = { onRemoveFromCart(item) }
                         )
@@ -343,18 +343,32 @@ private fun ActiveOrderCard(
 }
 
 /**
- * Явная таблица «позиция → слот фото». Только те id, для которых фото действительно
- * существует в ImageCatalog.FOOD (0 — бургер, 1 — пицца, 2 — капучино, 3 — круассан).
- * Всё остальное получает плейсхолдер, а не чужую фотографию.
+ * Явная таблица «позиция → категория фото». Чужое фото не подставляется никогда:
+ * у каждой позиции либо свой проверенный URL, либо плейсхолдер (иконка на нейтральном фоне).
  */
-private fun foodPhotoUrl(itemId: String, urls: List<String>): String? {
-    if (urls.isEmpty()) return null
-    val slot = when (itemId) {
-        "f_big_hit" -> 0
+private fun foodPhotoUrl(
+    itemId: String,
+    urls: Map<com.koch.weather.data.model.ImageCategory, List<String>>
+): String? {
+    val category = when (itemId) {
+        "f_big_hit" -> com.koch.weather.data.model.ImageCategory.FOOD
+        "f_fries" -> com.koch.weather.data.model.ImageCategory.FOOD_FRIES
+        "f_nuggets" -> com.koch.weather.data.model.ImageCategory.FOOD_NUGGETS
+        "f_cherry_pie" -> com.koch.weather.data.model.ImageCategory.FOOD_PIROSHKI
+        "f_dodster" -> com.koch.weather.data.model.ImageCategory.FOOD_HOTDOG
+        "f_flat_white", "f_bumble" -> com.koch.weather.data.model.ImageCategory.FOOD_COFFEE
+        "f_pepperoni", "f_cheese_chicken" -> com.koch.weather.data.model.ImageCategory.FOOD
+        "f_croissant" -> com.koch.weather.data.model.ImageCategory.FOOD
+        else -> return null
+    }
+    val list = urls[category].orEmpty()
+    if (list.isEmpty()) return null
+    // В общей категории FOOD берём слот, соответствующий блюду; в остальных — первое фото.
+    val index = when (itemId) {
         "f_pepperoni", "f_cheese_chicken" -> 1
         "f_flat_white" -> 2
         "f_croissant" -> 3
-        else -> null
-    } ?: return null
-    return urls.getOrNull(slot)
+        else -> 0
+    }
+    return list.getOrNull(index) ?: list.first()
 }

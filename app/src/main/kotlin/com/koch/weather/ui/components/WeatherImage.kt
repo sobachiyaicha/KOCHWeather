@@ -71,7 +71,8 @@ fun RemotePhoto(
     contentScale: ContentScale = ContentScale.Crop,
     shape: Shape = RoundedCornerShape(12.dp),
     placeholderIcon: ImageVector = Icons.Default.Image,
-    placeholderTint: Color = Color.White.copy(alpha = 0.6f)
+    placeholderTint: Color = Color.White.copy(alpha = 0.6f),
+    fallback: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
     val imageLoader = remember(context) { WikimediaImageLoader.get(context) }
@@ -82,8 +83,8 @@ fun RemotePhoto(
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier.clip(shape),
-        loading = { PhotoPlaceholder(placeholderIcon, placeholderTint) },
-        error = { PhotoPlaceholder(placeholderIcon, placeholderTint) }
+        loading = { fallback?.invoke() ?: PhotoPlaceholder(placeholderIcon, placeholderTint) },
+        error = { fallback?.invoke() ?: PhotoPlaceholder(placeholderIcon, placeholderTint) }
     )
 }
 
