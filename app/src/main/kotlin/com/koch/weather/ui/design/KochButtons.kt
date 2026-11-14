@@ -6,13 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -94,48 +91,6 @@ fun KochPrimaryButton(
     }
 }
 
-/** Вторичное действие: капсула 44 dp на белом 12 %. */
-@Composable
-fun KochSecondaryButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    val colors = LocalKochColors.current
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val background = when {
-        !enabled -> colors.textPrimary.copy(alpha = 0.06f)
-        pressed -> colors.textPrimary.copy(alpha = 0.18f)
-        else -> colors.textPrimary.copy(alpha = 0.12f)
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = KochSize.buttonSecondary)
-            .clip(KochShape.pill)
-            .background(background)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                enabled = enabled,
-                role = Role.Button,
-                onClick = onClick
-            )
-            .padding(horizontal = KochSpace.l, vertical = KochSpace.m),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = KochType.bodyStrong,
-            color = colors.textPrimary.copy(alpha = if (enabled) 0.92f else 0.35f),
-            maxLines = 1
-        )
-    }
-}
-
 /** Текстовое действие: без заливки, 14/500, 55 %. Это «Отмена» и вторичные ссылки. */
 @Composable
 fun KochTextButton(
@@ -205,32 +160,6 @@ fun KochIconButton(
             contentDescription = contentDescription,
             tint = tint ?: colors.textSecondary,
             modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-/** Действие-шеврон внутри строки (не самостоятельная кнопка). */
-@Composable
-fun KochChevron(
-    icon: ImageVector,
-    onClick: () -> Unit,
-    contentDescription: String,
-    modifier: Modifier = Modifier
-) {
-    val colors = LocalKochColors.current
-    Box(
-        modifier = modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(colors.textPrimary.copy(alpha = 0.12f))
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = colors.textPrimary.copy(alpha = 0.9f),
-            modifier = Modifier.size(16.dp)
         )
     }
 }

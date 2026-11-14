@@ -1,59 +1,26 @@
 package com.koch.weather.ui.main
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Air
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BeachAccess
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.Flight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.LaptopMac
-import androidx.compose.material.icons.filled.LocalTaxi
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.Traffic
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,15 +30,11 @@ import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.BottomTab
 import com.koch.weather.data.model.ConditionSegment
 import com.koch.weather.data.model.DailyItem
-import com.koch.weather.data.model.HourlyItem
 import com.koch.weather.data.model.ImageCategory
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.WeatherDataState
-import com.koch.weather.data.model.WeatherDomainData
-import com.koch.weather.data.model.WeatherIconType
 import com.koch.weather.ui.components.AdPromoDialog
 import com.koch.weather.ui.components.CityListScreen
-import com.koch.weather.ui.components.CityPickerDialog
 import com.koch.weather.ui.components.CitySearchScreen
 import com.koch.weather.ui.components.CloudVeilOverlay
 import com.koch.weather.ui.components.DailyDetailDialog
@@ -82,28 +45,20 @@ import com.koch.weather.ui.components.FpsOverlay
 import com.koch.weather.ui.components.GrassLockDialog
 import com.koch.weather.ui.components.LootboxDialog
 import com.koch.weather.ui.components.PaywallDialog
-import com.koch.weather.ui.components.TShirtIcon
 import com.koch.weather.ui.components.TaxiBottomSheet
-import com.koch.weather.ui.components.TemperatureRangeBar
 import com.koch.weather.ui.components.ThemeGalleryScreen
 import com.koch.weather.ui.components.ThemeRouletteDialog
 import com.koch.weather.ui.components.UmbrellaShopDialog
-import com.koch.weather.ui.components.WeatherIcon
 import com.koch.weather.ui.components.WeatherMapScreen
-import com.koch.weather.ui.components.RemotePhoto
 import com.koch.weather.ui.design.KochNavBar
+import com.koch.weather.ui.design.KochSkyBackground
 import com.koch.weather.ui.theme.KochSpace
-import com.koch.weather.ui.theme.KochType
-import com.koch.weather.ui.design.topHighlightBrush
-import com.koch.weather.ui.theme.KochBorderWidth
-import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.LocalKochColors
 import com.koch.weather.ui.theme.ProvideKochColors
 import com.koch.weather.ui.theme.getThemePalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.roundToInt
 
 /** Soft shadow that keeps white RU labels readable on the light glassmorphism cards (R5). */
 private val CardTextShadow = TextStyle(
@@ -415,7 +370,6 @@ internal fun MainScreenContent(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(brush = koch.gradient)
                 .pointerInput(uiState.cities.size, uiState.selectedCityIndex) {
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, dragAmount ->
@@ -435,6 +389,10 @@ internal fun MainScreenContent(
                     )
                 }
         ) {
+            // Фон темы: градиент + процедурные облака (refs/clean_main.png — небо с облаками),
+            // без blur и без сетевых фото; рисуется один раз на кадр.
+            KochSkyBackground(modifier = Modifier.matchParentSize())
+
             // Нижний бар — часть Scaffold, а не оверлей: контент физически не может уехать
             // под него (блокер №1 из аудита r2_02).
             Scaffold(

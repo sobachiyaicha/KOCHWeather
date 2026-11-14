@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -30,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.koch.weather.ui.theme.KochBorderWidth
-import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.KochScrim
 import com.koch.weather.ui.theme.KochShape
 import com.koch.weather.ui.theme.KochSpace
@@ -238,9 +236,6 @@ fun KochConfirmSheet(
         }
     )
 }
-
-/** Мягкое стеклянное скругление для вложенных панелей (цена, зона фото). */
-internal val KochPanelShape = RoundedCornerShape(KochRadius.panel)
 
 /** Общий градиент верхней подсветки карточек: единственный разрешённый «блик». */
 internal fun topHighlightBrush(): Brush = Brush.verticalGradient(

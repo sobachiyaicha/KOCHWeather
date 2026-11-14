@@ -1,7 +1,6 @@
 package com.koch.weather.ui.main
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
@@ -53,7 +51,6 @@ import com.koch.weather.ui.components.TemperatureRangeBar
 import com.koch.weather.ui.components.WeatherIcon
 import com.koch.weather.ui.design.KochCard
 import com.koch.weather.ui.design.KochPanel
-import com.koch.weather.ui.theme.KochBorderWidth
 import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.KochShape
 import com.koch.weather.ui.theme.KochSpace

@@ -51,8 +51,6 @@ import com.koch.weather.ui.design.formatByn
 import com.koch.weather.ui.design.formatRuAmount
 import com.koch.weather.ui.theme.KochBorderWidth
 import com.koch.weather.ui.theme.KochRadius
-import com.koch.weather.ui.theme.KochShape
-import com.koch.weather.ui.theme.KochSize
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
 import com.koch.weather.ui.theme.LocalKochColors
