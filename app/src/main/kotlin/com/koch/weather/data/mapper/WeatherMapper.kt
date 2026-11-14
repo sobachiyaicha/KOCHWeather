@@ -72,8 +72,8 @@ object WeatherMapper {
                 conditionDescription = description,
                 minTemp = todayMin,
                 maxTemp = todayMax,
-                humidity = current.relativeHumidity2m ?: 0,
-                windSpeed = current.windSpeed10m ?: 0.0,
+                humidity = current.relativeHumidity2m,
+                windSpeed = current.windSpeed10m,
                 weatherCode = weatherCode,
                 iconType = currentIcon,
                 clothingAdvice = WmoHelper.getClothingAdvice(currentTemp, weatherCode),
@@ -118,7 +118,7 @@ object WeatherMapper {
                 weatherCode = currentCode,
                 iconType = currentIcon,
                 pop = hourlyPops.getOrNull(currentIndex) ?: 0,
-                wind = currentWind ?: 0.0,
+                wind = currentWind,
                 popKnown = hourlyPops.getOrNull(currentIndex) != null
             )
         )
@@ -137,7 +137,7 @@ object WeatherMapper {
                     weatherCode = code,
                     iconType = WmoHelper.getIconType(code, isHourDay(hour)),
                     pop = hourlyPops.getOrNull(i) ?: 0,
-                    wind = hourlyWinds.getOrNull(i) ?: 0.0,
+                    wind = hourlyWinds.getOrNull(i),
                     popKnown = hourlyPops.getOrNull(i) != null
                 )
             )

@@ -177,14 +177,15 @@ class WeatherRepository @JvmOverloads constructor(
 
         when (val chain = weatherProviderChain.fetch(city.latitude, city.longitude)) {
             is WeatherProviderChainResult.Success -> {
-                val traffic = trafficRepository.getTraffic(city)
+                // Пробки НЕ в критическом пути прогноза: их подтягивает ViewModel
+                // отдельной корутиной уже после отображения погоды.
                 val mapped = WeatherMapper.map(
                     city = city,
                     dto = chain.response,
                     isOffline = false,
                     lastUpdated = chain.fetchedAt,
-                    trafficScore = traffic.score,
-                    trafficAdvice = traffic.description,
+                    trafficScore = null,
+                    trafficAdvice = "Нет данных о пробках",
                     dataSourceLabel = if (chain.fromProviderCache) {
                         null
                     } else {
@@ -245,6 +246,10 @@ class WeatherRepository @JvmOverloads constructor(
         // дефолтным городам при ошибке больше нет.
         geocodingChain.search(query)
     }
+
+    /** Пробки грузятся отдельно и не задерживают показ погоды. */
+    suspend fun getTraffic(city: CityLocation): RealTrafficInfo =
+        trafficRepository.getTraffic(city)
 
     /**
      * При сетевой ошибке отдаём последний РЕАЛЬНЫЙ прогноз для этого же города
@@ -326,7 +331,11 @@ class WeatherRepository @JvmOverloads constructor(
             null
         } else {
             attempts.joinToString("; ") {
-                "${it.source.displayNameRu} недоступен: ${it.failure.messageRu}"
+                if (it.source == WeatherSource.NONE) {
+                    it.failure.messageRu
+                } else {
+                    "${it.source.displayNameRu} недоступен: ${it.failure.messageRu}"
+                }
             }
         }
 

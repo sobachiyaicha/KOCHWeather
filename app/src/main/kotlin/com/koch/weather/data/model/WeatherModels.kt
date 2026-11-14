@@ -31,7 +31,8 @@ data class HourlyWeatherDto(
     @SerialName("temperature_2m") val temperature2m: List<Double> = emptyList(),
     @SerialName("precipitation_probability") val precipitationProbability: List<Int>? = null,
     @SerialName("weather_code") val weatherCode: List<Int> = emptyList(),
-    @SerialName("wind_speed_10m") val windSpeed10m: List<Double>? = null
+    // null-элемент = у источника нет ветра на этот час; не подменяем нулём.
+    @SerialName("wind_speed_10m") val windSpeed10m: List<Double?>? = null
 )
 
 @Serializable
@@ -90,7 +91,8 @@ data class HourlyItem(
     val weatherCode: Int,
     val iconType: WeatherIconType = WeatherIconType.PARTLY_CLOUDY_DAY,
     val pop: Int = 0,
-    val wind: Double = 3.0,
+    /** null = у источника нет скорости ветра; UI показывает «нет данных», не 0. */
+    val wind: Double? = null,
     /** false = вероятность осадков недоступна у источника; UI должен показать «нет данных». */
     val popKnown: Boolean = true
 )
@@ -114,8 +116,10 @@ data class WeatherDomainData(
     val conditionDescription: String,
     val minTemp: Int,
     val maxTemp: Int,
-    val humidity: Int,
-    val windSpeed: Double,
+    /** null = данных о влажности нет; UI показывает «нет данных». */
+    val humidity: Int?,
+    /** null = данных о ветре нет; UI показывает «нет данных». */
+    val windSpeed: Double?,
     val weatherCode: Int,
     val iconType: WeatherIconType,
     val clothingAdvice: String,
@@ -277,8 +281,10 @@ data class MainScreenUiState(
     val isCloudLocked: Boolean = false,
     val isCloudsCleared: Boolean = false,
 
-    // Premium & Ads
+    // Premium & Ads. Покупка становится активной только после явного
+    // подтверждения: requestPremiumPurchase() -> UI-диалог -> confirmPremiumPurchase().
     val isPremiumPurchased: Boolean = false,
+    val isPremiumPurchasePending: Boolean = false,
     val showAds: Boolean = true,
 
     // AI Facts

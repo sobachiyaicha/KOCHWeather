@@ -1577,17 +1577,20 @@ private fun HourlyWeatherCard(
                                             fontSize = 11.5.sp
                                         )
                                         Text(
-                                            text = "${weather.windSpeed} м/с",
+                                            text = weather.windSpeed?.let { "$it м/с" }
+                                                ?: "Нет данных",
                                             color = Color.White,
                                             fontSize = 16.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
+                                    val windSpeed = weather.windSpeed
                                     Text(
                                         text = when {
-                                            weather.windSpeed < 5 -> "Слабый ветерок"
-                                            weather.windSpeed < 10 -> "Умеренный ветер"
-                                            weather.windSpeed < 15 -> "Сильный порывистый"
+                                            windSpeed == null -> "Нет данных о ветре"
+                                            windSpeed < 5 -> "Слабый ветерок"
+                                            windSpeed < 10 -> "Умеренный ветер"
+                                            windSpeed < 15 -> "Сильный порывистый"
                                             else -> "Штормовое предупреждение"
                                         },
                                         color = Color(0xFF81D4FA),
@@ -1862,7 +1865,7 @@ private fun HourlyItemColumn(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${item.wind.roundToInt()}",
+                    text = item.wind?.let { "${it.roundToInt()}" } ?: "—",
                     color = Color.White,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold

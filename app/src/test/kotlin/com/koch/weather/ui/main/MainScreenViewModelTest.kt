@@ -1,5 +1,6 @@
 package com.koch.weather.ui.main
 
+import android.app.Application
 import com.koch.weather.data.model.*
 import com.koch.weather.data.repository.AiFactsRepository
 import com.koch.weather.data.repository.FlightRepository
@@ -35,6 +36,7 @@ class MainScreenViewModelTest {
         assertFalse(state.isHourlyExpanded)
         assertFalse(state.isCloudLocked)
         assertFalse(state.isPremiumPurchased)
+        assertFalse(state.isPremiumPurchasePending)
         assertTrue(state.showAds)
         assertEquals(4, state.availableThemes.size)
         assertTrue(state.aiFact.isNotEmpty())
@@ -61,6 +63,50 @@ class MainScreenViewModelTest {
         assertEquals(7, state.themeCatalog.size)
         assertNull(state.searchError)
         assertTrue(state.imageUrls.isEmpty())
+    }
+
+    @Test
+    fun viewModelConstructor_hasNoHeavyDependencies() {
+        // ANR Run 2: конструктор VM не должен принимать 11 репозиториев/DataStore/OkHttp.
+        val constructors = MainScreenViewModel::class.java.constructors
+        assertTrue(constructors.isNotEmpty())
+        assertTrue(
+            "Ожидался только (Application), получено: " +
+                constructors.joinToString { it.parameterTypes.joinToString() },
+            constructors.all { it.parameterTypes.size == 1 }
+        )
+        assertTrue(
+            constructors.any { it.parameterTypes.singleOrNull() == Application::class.java }
+        )
+        // Начальное состояние не требует сети: погоды ещё нет, экран в LOADING.
+        val initial = MainScreenUiState(
+            isLoading = true,
+            weather = null,
+            weatherState = WeatherDataState.LOADING
+        )
+        assertNull(initial.weather)
+        assertEquals(WeatherDataState.LOADING, initial.weatherState)
+    }
+
+    @Test
+    fun premiumPurchaseRequiresExplicitPendingConfirmation() {
+        val initial = MainScreenUiState()
+        assertFalse(initial.isPremiumPurchased)
+        assertFalse(initial.isPremiumPurchasePending)
+        assertTrue(initial.showAds)
+
+        val awaitingConfirmation = initial.copy(isPremiumPurchasePending = true)
+        assertTrue(awaitingConfirmation.isPremiumPurchasePending)
+        assertFalse(awaitingConfirmation.isPremiumPurchased)
+
+        val confirmed = awaitingConfirmation.copy(
+            isPremiumPurchasePending = false,
+            isPremiumPurchased = true,
+            showAds = false
+        )
+        assertTrue(confirmed.isPremiumPurchased)
+        assertFalse(confirmed.isPremiumPurchasePending)
+        assertFalse(confirmed.showAds)
     }
 
     @Test

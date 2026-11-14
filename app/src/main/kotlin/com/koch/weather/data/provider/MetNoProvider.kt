@@ -1,5 +1,7 @@
 package com.koch.weather.data.provider
 
+import com.koch.weather.data.api.executeAsync
+import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.model.WeatherApiResponse
 import com.koch.weather.data.model.WeatherErrorReason
 import com.koch.weather.data.model.WeatherFailure
@@ -17,9 +19,13 @@ import java.util.concurrent.TimeUnit
  * Основной источник: MET Norway locationforecast/2.0/compact.
  * api.met.no отвечает 403 на дефолтные User-Agent (okhttp/Dalvik/Java),
  * поэтому заголовок WEATHER_HTTP_USER_AGENT ставится явно на каждый запрос.
+ *
+ * При timeout выполняется ровно один повтор с увеличенным read-таймаутом
+ * (connect 10s / read 25s): первый запрос после pm clear иногда не успевает.
  */
 class MetNoProvider(
     private val client: OkHttpClient = defaultClient(),
+    private val retryClient: OkHttpClient = retryClient(),
     private val policy: MetNoCachePolicy = MetNoCachePolicy(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val timeZone: () -> TimeZone = { TimeZone.getDefault() }
@@ -61,6 +67,22 @@ class MetNoProvider(
             )
         }
 
+        val first = executeRequest(latitude, longitude, now, client, key)
+        if (first is ProviderFetchResult.Success) return@withContext first
+        val failure = (first as ProviderFetchResult.Failure).failure
+        if (shouldRetry(failure)) {
+            return@withContext executeRequest(latitude, longitude, clock(), retryClient, key)
+        }
+        first
+    }
+
+    private suspend fun executeRequest(
+        latitude: Double,
+        longitude: Double,
+        now: Long,
+        httpClient: OkHttpClient,
+        key: String
+    ): ProviderFetchResult {
         val url = "https://api.met.no/weatherapi/locationforecast/2.0/compact" +
             "?lat=${formatCoordinate(latitude)}&lon=${formatCoordinate(longitude)}"
         val request = Request.Builder()
@@ -69,10 +91,10 @@ class MetNoProvider(
             .header("Accept", "application/json")
             .build()
 
-        try {
-            client.newCall(request).execute().use { response ->
+        return try {
+            httpClient.executeAsync(request).use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext ProviderFetchResult.Failure(
+                    return ProviderFetchResult.Failure(
                         WeatherFailure(
                             WeatherErrorReason.HTTP_ERROR,
                             "MET Norway вернул ошибку (HTTP ${response.code})."
@@ -80,7 +102,7 @@ class MetNoProvider(
                     )
                 }
                 val body = response.body?.string()
-                    ?: return@withContext ProviderFetchResult.Failure(
+                    ?: return ProviderFetchResult.Failure(
                         WeatherFailure(
                             WeatherErrorReason.PARSE_ERROR,
                             "MET Norway вернул пустой ответ."
@@ -95,8 +117,11 @@ class MetNoProvider(
                         timeZone = timeZone()
                     )
                 } catch (e: MetNoParseException) {
-                    return@withContext ProviderFetchResult.Failure(
-                        WeatherFailure(WeatherErrorReason.PARSE_ERROR, e.message ?: "MET Norway: ошибка разбора.")
+                    return ProviderFetchResult.Failure(
+                        WeatherFailure(
+                            WeatherErrorReason.PARSE_ERROR,
+                            e.message ?: "MET Norway: ошибка разбора."
+                        )
                     )
                 }
                 putCache(key, CacheEntry(parsed, now))
@@ -105,14 +130,18 @@ class MetNoProvider(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            val mapped = WeatherErrors.from(e)
             ProviderFetchResult.Failure(
                 WeatherFailure(
-                    WeatherErrorReason.NO_NETWORK,
-                    "MET Norway недоступен: ${e.message ?: "ошибка сети"}."
+                    reason = mapped.reason,
+                    messageRu = "MET Norway недоступен: ${e.message ?: mapped.messageRu}."
                 )
             )
         }
     }
+
+    private fun shouldRetry(failure: WeatherFailure): Boolean =
+        failure.reason == WeatherErrorReason.TIMEOUT
 
     private fun putCache(key: String, entry: CacheEntry) {
         if (memoryCache.size >= 100) {
@@ -129,10 +158,21 @@ class MetNoProvider(
 
     companion object {
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .callTimeout(20, TimeUnit.SECONDS)
+            // Первая попытка короче, чтобы при cold-start timeout осталось время
+            // на повтор в рамках общего 20-секундного предохранителя.
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+
+        /** Повтор после timeout: увеличенный read timeout и уменьшенный connect. */
+        fun retryClient(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(25, TimeUnit.SECONDS)
+            .callTimeout(35, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }

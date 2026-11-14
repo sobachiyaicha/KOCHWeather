@@ -2,9 +2,11 @@ package com.koch.weather.data.provider
 
 import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.model.WeatherApiResponse
+import com.koch.weather.data.model.WeatherErrorReason
 import com.koch.weather.data.model.WeatherFailure
 import com.koch.weather.data.model.WeatherSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Единый User-Agent для OSM/MET Norway: без него MET отвечает 403. */
 const val WEATHER_HTTP_USER_AGENT =
@@ -57,7 +59,29 @@ sealed interface WeatherProviderChainResult {
  */
 class WeatherProviderChain(private val providers: List<WeatherProvider>) {
 
-    suspend fun fetch(latitude: Double, longitude: Double): WeatherProviderChainResult {
+    /**
+     * Общий предохранитель: даже если MET и Open-Meteo по очереди висят на
+     * таймаутах, UI получает «нет данных» не позже чем через 20 секунд.
+     */
+    suspend fun fetch(latitude: Double, longitude: Double): WeatherProviderChainResult =
+        withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
+            fetchInternal(latitude, longitude)
+        } ?: WeatherProviderChainResult.AllFailed(
+            listOf(
+                ProviderAttemptFailure(
+                    source = WeatherSource.NONE,
+                    failure = WeatherFailure(
+                        WeatherErrorReason.TIMEOUT,
+                        "Провайдеры погоды не ответили за ${TOTAL_TIMEOUT_MS / 1000} секунд."
+                    )
+                )
+            )
+        )
+
+    private suspend fun fetchInternal(
+        latitude: Double,
+        longitude: Double
+    ): WeatherProviderChainResult {
         val failedAttempts = mutableListOf<ProviderAttemptFailure>()
         for (provider in providers) {
             val result = try {
@@ -82,5 +106,9 @@ class WeatherProviderChain(private val providers: List<WeatherProvider>) {
             }
         }
         return WeatherProviderChainResult.AllFailed(failedAttempts)
+    }
+
+    companion object {
+        const val TOTAL_TIMEOUT_MS = 20_000L
     }
 }

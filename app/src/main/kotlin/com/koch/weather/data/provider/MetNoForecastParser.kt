@@ -114,7 +114,7 @@ object MetNoForecastParser {
             weatherCode = hourlyPoints.map { point ->
                 MetNoSymbolMapper.toWmo(point.symbolCode) ?: currentWmo
             },
-            windSpeed10m = hourlyPoints.map { it.windSpeed ?: 0.0 }
+            windSpeed10m = hourlyPoints.map { it.windSpeed }
         )
 
         val pointsByDate = points.groupBy { it.localDate }

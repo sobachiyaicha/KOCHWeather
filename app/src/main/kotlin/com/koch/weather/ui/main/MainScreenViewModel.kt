@@ -17,40 +17,47 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class MainScreenViewModel @JvmOverloads constructor(
-    application: Application,
-    private val repository: WeatherRepository = WeatherRepository(application),
-    private val networkMonitor: NetworkMonitor = NetworkMonitor(application),
-    private val cache: WeatherCache = WeatherCache(application),
-    private val subscriptionRepository: SubscriptionRepository = SubscriptionRepository(cache),
-    private val lootboxRepository: LootboxRepository = LootboxRepository(cache),
-    private val taxiRepository: TaxiRepository = TaxiRepository(),
-    private val foodRepository: FoodRepository = FoodRepository(),
-    private val flightRepository: FlightRepository = FlightRepository(),
-    private val aiFactsRepository: AiFactsRepository = AiFactsRepository(),
-    private val imageRepository: ImageRepository = ImageRepository()
-) : AndroidViewModel(application) {
+/**
+ * Тяжёлые зависимости создаются лениво и инициализируются в IO-корутине.
+ * Конструктор ViewModel вызывается на main-потоке, поэтому он не должен
+ * трогать DataStore, ConnectivityManager, OkHttp и репозитории.
+ */
+class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val repository: WeatherRepository by lazy {
+        WeatherRepository(getApplication<Application>())
+    }
+    private val networkMonitor: NetworkMonitor by lazy {
+        NetworkMonitor(getApplication<Application>())
+    }
+    private val cache: WeatherCache by lazy {
+        WeatherCache(getApplication<Application>())
+    }
+    private val subscriptionRepository: SubscriptionRepository by lazy {
+        SubscriptionRepository(cache)
+    }
+    private val lootboxRepository: LootboxRepository by lazy {
+        LootboxRepository(cache)
+    }
+    private val taxiRepository: TaxiRepository by lazy { TaxiRepository() }
+    private val foodRepository: FoodRepository by lazy { FoodRepository() }
+    private val flightRepository: FlightRepository by lazy { FlightRepository() }
+    private val aiFactsRepository: AiFactsRepository by lazy { AiFactsRepository() }
+    private val imageRepository: ImageRepository by lazy { ImageRepository() }
+
+    // Первый кадр не ждёт ни DataStore, ни сети: только лёгкое начальное состояние.
     private val _uiState = MutableStateFlow(
         MainScreenUiState(
             isLoading = true,
-            cities = repository.defaultCities,
-            selectedCity = repository.defaultCities.first(),
-            selectedCityIndex = 0,
-            currentCityIndex = 0,
-            // Никаких синтетических 5°/7° до первого реального ответа/кэша.
             weather = null,
             weatherState = WeatherDataState.LOADING,
-            isWeatherUnavailable = false,
-            aiFact = aiFactsRepository.getDefaultFact(),
-            foodState = FoodState(restaurants = foodRepository.getRestaurants()),
-            flightState = FlightState(offers = flightRepository.getFlightOffers()),
-            imageUrls = imageRepository.getUrlsByCategory()
+            isWeatherUnavailable = false
         )
     )
     val uiState: StateFlow<MainScreenUiState> = _uiState.asStateFlow()
 
     private var loadJob: Job? = null
+    private var trafficJob: Job? = null
     private var searchJob: Job? = null
     private var taxiJob: Job? = null
     private var foodJob: Job? = null
@@ -93,9 +100,14 @@ class MainScreenViewModel @JvmOverloads constructor(
         // Observe premium status from DataStore
         viewModelScope.launch(Dispatchers.IO) {
             subscriptionRepository.isPremiumFlow.collect { isPremium ->
-                _uiState.update {
-                    it.copy(
+                _uiState.update { state ->
+                    state.copy(
                         isPremiumPurchased = isPremium,
+                        isPremiumPurchasePending = if (isPremium) {
+                            false
+                        } else {
+                            state.isPremiumPurchasePending
+                        },
                         showAds = !isPremium
                     )
                 }
@@ -113,7 +125,7 @@ class MainScreenViewModel @JvmOverloads constructor(
             }
         }
 
-        // Initialize cities and weather on IO thread
+        // Initialize cities, cache, static content and only then network — всё на IO.
         viewModelScope.launch(Dispatchers.IO) {
             val initialCities = repository.getInitialCities()
             val lastSavedCity = repository.getLastCity()
@@ -125,6 +137,11 @@ class MainScreenViewModel @JvmOverloads constructor(
             val cachedWeather = repository.getCachedWeather(targetCity)
             val cachedDomain = cachedWeather?.data
             val savedCities = repository.getSavedCitiesWeather(initialCities)
+
+            val restaurants = foodRepository.getRestaurants()
+            val flightOffers = flightRepository.getFlightOffers()
+            val fact = aiFactsRepository.getDefaultFact()
+            val imageUrls = imageRepository.getUrlsByCategory()
 
             _uiState.update {
                 it.copy(
@@ -148,11 +165,16 @@ class MainScreenViewModel @JvmOverloads constructor(
                     } else {
                         WeatherSource.NONE.attributionRu
                     },
-                    savedCities = savedCities
+                    savedCities = savedCities,
+                    isLoadingSavedCities = false,
+                    foodState = it.foodState.copy(restaurants = restaurants),
+                    flightState = it.flightState.copy(offers = flightOffers),
+                    aiFact = fact,
+                    imageUrls = imageUrls
                 )
             }
 
-            // Quietly fetch fresh data for initial city
+            // Сетевой запрос стартует только после первого обновления состояния.
             fetchWeatherQuietly(targetCity)
         }
 
@@ -182,38 +204,28 @@ class MainScreenViewModel @JvmOverloads constructor(
         val cities = _uiState.value.cities
         if (index !in cities.indices) return
         val targetCity = cities[index]
-        val cachedWeather = repository.getCachedWeatherFast(targetCity)
-            ?.copy(isOffline = true, dataSourceLabel = null)
 
+        // Мгновенно меняем только выбранный город и честный LOADING.
+        // Память/DataStore читаются в IO внутри preloadCachedWeather.
         _uiState.update {
             it.copy(
                 selectedCity = targetCity,
                 selectedCityIndex = index,
                 currentCityIndex = index,
-                weather = cachedWeather,
-                weatherState = if (cachedWeather != null) {
-                    WeatherDataState.CACHED
-                } else {
-                    WeatherDataState.LOADING
-                },
+                weather = null,
+                weatherState = WeatherDataState.LOADING,
                 isWeatherUnavailable = false,
                 weatherErrorMessage = null,
-                weatherLastUpdated = cachedWeather?.lastUpdated,
-                weatherSource = if (cachedWeather != null) WeatherSource.CACHE else WeatherSource.NONE,
-                weatherAttributionRu = if (cachedWeather != null) {
-                    "Данные: сохранённый прогноз"
-                } else {
-                    WeatherSource.NONE.attributionRu
-                },
+                weatherLastUpdated = null,
+                weatherSource = WeatherSource.NONE,
+                weatherAttributionRu = WeatherSource.NONE.attributionRu,
                 weatherSourceNote = null,
                 isLoading = true,
                 isRefreshing = true
             )
         }
 
-        if (cachedWeather == null) {
-            preloadCachedWeather(targetCity)
-        }
+        preloadCachedWeather(targetCity)
         fetchWeatherQuietly(targetCity)
     }
 
@@ -235,34 +247,22 @@ class MainScreenViewModel @JvmOverloads constructor(
         if (index >= 0) {
             selectCity(index)
         } else {
-            val cachedWeather = repository.getCachedWeatherFast(city)
-                ?.copy(isOffline = true, dataSourceLabel = null)
             _uiState.update {
                 it.copy(
                     selectedCity = city,
-                    weather = cachedWeather,
-                    weatherState = if (cachedWeather != null) {
-                        WeatherDataState.CACHED
-                    } else {
-                        WeatherDataState.LOADING
-                    },
+                    weather = null,
+                    weatherState = WeatherDataState.LOADING,
                     isWeatherUnavailable = false,
                     weatherErrorMessage = null,
-                    weatherLastUpdated = cachedWeather?.lastUpdated,
-                    weatherSource = if (cachedWeather != null) WeatherSource.CACHE else WeatherSource.NONE,
-                    weatherAttributionRu = if (cachedWeather != null) {
-                        "Данные: сохранённый прогноз"
-                    } else {
-                        WeatherSource.NONE.attributionRu
-                    },
+                    weatherLastUpdated = null,
+                    weatherSource = WeatherSource.NONE,
+                    weatherAttributionRu = WeatherSource.NONE.attributionRu,
                     weatherSourceNote = null,
                     isLoading = true,
                     isRefreshing = true
                 )
             }
-            if (cachedWeather == null) {
-                preloadCachedWeather(city)
-            }
+            preloadCachedWeather(city)
             fetchWeatherQuietly(city)
         }
     }
@@ -303,6 +303,7 @@ class MainScreenViewModel @JvmOverloads constructor(
 
     private fun fetchWeatherQuietly(city: CityLocation) {
         loadJob?.cancel()
+        trafficJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             val isConnected = networkMonitor.isCurrentlyConnected()
             _uiState.update { state ->
@@ -393,6 +394,25 @@ class MainScreenViewModel @JvmOverloads constructor(
 
             val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
             _uiState.update { it.copy(savedCities = savedCities) }
+
+            // Пробки — отдельная корутина: прогноз уже на экране, цифры придут позже.
+            if (result is WeatherLoadResult.Live) {
+                trafficJob = viewModelScope.launch(Dispatchers.IO) {
+                    val traffic = repository.getTraffic(city)
+                    _uiState.update { state ->
+                        if (state.selectedCity?.name == city.name && state.weather != null) {
+                            state.copy(
+                                weather = state.weather.copy(
+                                    trafficScore = traffic.score,
+                                    trafficAdvice = traffic.description
+                                )
+                            )
+                        } else {
+                            state
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -514,16 +534,38 @@ class MainScreenViewModel @JvmOverloads constructor(
     // ------------------------------------------------------------------------
     // Premium Subscription & Ads
     // ------------------------------------------------------------------------
-    fun purchasePremium() {
+    /** Шаг 1: пользователь нажал «Купить» — показываем подтверждение в UI. */
+    fun requestPremiumPurchase() {
+        _uiState.update { it.copy(isPremiumPurchasePending = true) }
+    }
+
+    fun cancelPremiumPurchase() {
+        _uiState.update { it.copy(isPremiumPurchasePending = false) }
+    }
+
+    /**
+     * Шаг 2: запись в DataStore выполняется только после подтверждения.
+     * Без предварительного requestPremiumPurchase() метод ничего не делает,
+     * чтобы клик/открытие пейволла не активировали подписку.
+     */
+    fun confirmPremiumPurchase() {
+        if (!_uiState.value.isPremiumPurchasePending) return
         viewModelScope.launch(Dispatchers.IO) {
             subscriptionRepository.purchasePremium()
             _uiState.update {
                 it.copy(
                     isPremiumPurchased = true,
+                    isPremiumPurchasePending = false,
                     showAds = false
                 )
             }
         }
+    }
+
+    /** @deprecated используйте requestPremiumPurchase + confirmPremiumPurchase. */
+    @Deprecated("Use requestPremiumPurchase() + confirmPremiumPurchase()")
+    fun purchasePremium() {
+        confirmPremiumPurchase()
     }
 
     fun resetPremium() {
@@ -532,6 +574,7 @@ class MainScreenViewModel @JvmOverloads constructor(
             _uiState.update {
                 it.copy(
                     isPremiumPurchased = false,
+                    isPremiumPurchasePending = false,
                     showAds = true
                 )
             }
@@ -542,7 +585,10 @@ class MainScreenViewModel @JvmOverloads constructor(
     // AI Facts
     // ------------------------------------------------------------------------
     fun refreshAiFact() {
-        _uiState.update { it.copy(aiFact = aiFactsRepository.getRandomFact()) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val fact = aiFactsRepository.getRandomFact()
+            _uiState.update { it.copy(aiFact = fact) }
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -637,18 +683,21 @@ class MainScreenViewModel @JvmOverloads constructor(
     // Food Delivery Service (2x2 Grid)
     // ------------------------------------------------------------------------
     fun openFoodSheet() {
-        val restaurants = foodRepository.getRestaurants()
-        val defaultRest = _uiState.value.foodState.selectedRestaurant ?: restaurants.firstOrNull()
-        val menu = defaultRest?.let { foodRepository.getMenuItems(it.id) } ?: emptyList()
-        _uiState.update {
-            it.copy(
-                foodState = it.foodState.copy(
-                    isSheetOpen = true,
-                    restaurants = restaurants,
-                    selectedRestaurant = defaultRest,
-                    menuItems = menu
+        // Открываем шторку сразу, каталог читаем в IO (без блокировки main).
+        _uiState.update { it.copy(foodState = it.foodState.copy(isSheetOpen = true)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val restaurants = foodRepository.getRestaurants()
+            val defaultRest = _uiState.value.foodState.selectedRestaurant ?: restaurants.firstOrNull()
+            val menu = defaultRest?.let { foodRepository.getMenuItems(it.id) } ?: emptyList()
+            _uiState.update {
+                it.copy(
+                    foodState = it.foodState.copy(
+                        restaurants = restaurants,
+                        selectedRestaurant = defaultRest,
+                        menuItems = menu
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -657,15 +706,24 @@ class MainScreenViewModel @JvmOverloads constructor(
     }
 
     fun selectRestaurant(restaurant: Restaurant) {
-        val menu = foodRepository.getMenuItems(restaurant.id)
         _uiState.update {
             it.copy(
                 foodState = it.foodState.copy(
                     selectedRestaurant = restaurant,
-                    menuItems = menu,
+                    menuItems = emptyList(),
                     cart = emptyMap() // Clear cart when switching restaurant
                 )
             )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val menu = foodRepository.getMenuItems(restaurant.id)
+            _uiState.update { state ->
+                if (state.foodState.selectedRestaurant?.id == restaurant.id) {
+                    state.copy(foodState = state.foodState.copy(menuItems = menu))
+                } else {
+                    state
+                }
+            }
         }
     }
 
@@ -723,15 +781,25 @@ class MainScreenViewModel @JvmOverloads constructor(
     // Flight Service (2x2 Grid)
     // ------------------------------------------------------------------------
     fun openFlightSheet() {
-        val offers = flightRepository.getFlightOffers()
-        _uiState.update {
-            it.copy(
-                flightState = it.flightState.copy(
+        _uiState.update { state ->
+            state.copy(
+                flightState = state.flightState.copy(
                     isSheetOpen = true,
-                    offers = offers,
-                    selectedOffer = it.flightState.selectedOffer ?: offers.firstOrNull()
+                    selectedOffer = state.flightState.selectedOffer
+                        ?: state.flightState.offers.firstOrNull()
                 )
             )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val offers = flightRepository.getFlightOffers()
+            _uiState.update { state ->
+                state.copy(
+                    flightState = state.flightState.copy(
+                        offers = offers,
+                        selectedOffer = state.flightState.selectedOffer ?: offers.firstOrNull()
+                    )
+                )
+            }
         }
     }
 

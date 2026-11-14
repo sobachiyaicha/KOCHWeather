@@ -8,6 +8,7 @@ import com.koch.weather.data.provider.ProviderFetchResult
 import com.koch.weather.data.provider.WeatherProvider
 import com.koch.weather.data.provider.WeatherProviderChain
 import com.koch.weather.data.provider.WeatherProviderChainResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,6 +26,15 @@ class ProviderChainTest {
     private class ThrowingProvider(override val source: WeatherSource) : WeatherProvider {
         override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult =
             throw IllegalStateException("boom")
+    }
+
+    private class HangingProvider(override val source: WeatherSource) : WeatherProvider {
+        override suspend fun fetchForecast(latitude: Double, longitude: Double): ProviderFetchResult {
+            delay(60_000)
+            return ProviderFetchResult.Failure(
+                WeatherFailure(WeatherErrorReason.UNKNOWN, "never")
+            )
+        }
     }
 
     private val response = WeatherApiResponse()
@@ -76,6 +86,21 @@ class ProviderChainTest {
         val result = chain.fetch(59.9, 30.3)
         assertTrue(result is WeatherProviderChainResult.AllFailed)
         assertEquals(2, (result as WeatherProviderChainResult.AllFailed).failedAttempts.size)
+    }
+
+    @Test
+    fun overallTimeout_returnsAllFailedWithinTwentySeconds() = runTest {
+        val chain = WeatherProviderChain(
+            listOf(
+                HangingProvider(WeatherSource.MET_NO),
+                HangingProvider(WeatherSource.OPEN_METEO)
+            )
+        )
+        val result = chain.fetch(59.9, 30.3)
+        assertTrue(result is WeatherProviderChainResult.AllFailed)
+        val attempt = (result as WeatherProviderChainResult.AllFailed).failedAttempts.first()
+        assertEquals(WeatherErrorReason.TIMEOUT, attempt.failure.reason)
+        assertTrue(attempt.failure.messageRu.contains("20"))
     }
 
     @Test

@@ -174,6 +174,21 @@ class WeatherMapperTest {
     }
 
     @Test
+    fun missingHumidityAndWind_stayNull_notZero() {
+        val dto = sampleDto().copy(
+            current = sampleDto().current?.copy(
+                relativeHumidity2m = null,
+                windSpeed10m = null
+            ),
+            hourly = sampleDto().hourly?.copy(windSpeed10m = null)
+        )
+        val data = map(dto)
+        assertNull(data.humidity)
+        assertNull(data.windSpeed)
+        assertNull(data.hourly.first().wind)
+    }
+
+    @Test
     fun dataSourceLabel_isPassedForLiveForecast() {
         val result = WeatherMapper.map(
             city = city,

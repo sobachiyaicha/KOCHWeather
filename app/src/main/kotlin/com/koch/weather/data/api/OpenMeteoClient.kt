@@ -12,12 +12,16 @@ import okhttp3.Request
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
-class OpenMeteoClient {
+class OpenMeteoClient(
+    connectTimeoutSeconds: Long = 10,
+    readTimeoutSeconds: Long = 10,
+    callTimeoutSeconds: Long = 12
+) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
+        .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+        .writeTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+        .callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -42,7 +46,7 @@ class OpenMeteoClient {
                 .header("User-Agent", "KOCHWeather/1.0 (Android)")
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            client.executeAsync(request).use { response ->
                 Log.d("WeatherApp", "OpenMeteo response code: " + response.code)
                 if (!response.isSuccessful) {
                     val err = "HTTP " + response.code
@@ -75,7 +79,7 @@ class OpenMeteoClient {
                 .header("User-Agent", "KOCHWeather/1.0 (Android)")
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            client.executeAsync(request).use { response ->
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(OpenMeteoHttpException(response.code))
                 }
