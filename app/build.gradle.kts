@@ -37,6 +37,19 @@ android {
     debug {
       isMinifyEnabled = false
     }
+    // Release-like build type for honest performance measurements (ACCEPTANCE R18).
+    // - not debuggable, so ART/JIT behaves like production;
+    // - signed with the debug key and WITHOUT applicationIdSuffix => same package
+    //   ``com.koch.weather``, so ``adb install -r`` swaps it with the debug build.
+    create("benchmark") {
+      initWith(getByName("release"))
+      isDebuggable = false
+      isMinifyEnabled = false
+      isProfileable = true
+      signingConfig = signingConfigs.getByName("debug")
+      matchingFallbacks += listOf("release")
+      versionNameSuffix = "-benchmark"
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
