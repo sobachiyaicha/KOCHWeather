@@ -79,7 +79,20 @@ class WeatherProviderChain(
         latitude: Double,
         longitude: Double
     ): WeatherProviderChainResult {
-        val primary = race(latitude, longitude)
+        // Резерв получает отдельное окно: гонка основных не должна съесть весь бюджет.
+        val primary = withTimeoutOrNull(PRIMARY_TIMEOUT_MS) {
+            race(latitude, longitude)
+        } ?: WeatherProviderChainResult.AllFailed(
+            listOf(
+                ProviderAttemptFailure(
+                    source = WeatherSource.NONE,
+                    failure = WeatherFailure(
+                        WeatherErrorReason.TIMEOUT,
+                        "Основные провайдеры не ответили за ${PRIMARY_TIMEOUT_MS / 1000} секунд."
+                    )
+                )
+            )
+        )
         if (primary is WeatherProviderChainResult.Success) return primary
 
         val failures = (primary as WeatherProviderChainResult.AllFailed)
@@ -87,13 +100,21 @@ class WeatherProviderChain(
             .toMutableList()
 
         for (provider in fallbackProviders) {
-            val result = try {
-                provider.fetchForecast(latitude, longitude)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                ProviderFetchResult.Failure(WeatherErrors.from(e))
-            }
+            val result = withTimeoutOrNull(FALLBACK_TIMEOUT_MS) {
+                try {
+                    provider.fetchForecast(latitude, longitude)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    ProviderFetchResult.Failure(WeatherErrors.from(e))
+                }
+            } ?: ProviderFetchResult.Failure(
+                WeatherFailure(
+                    WeatherErrorReason.TIMEOUT,
+                    "Резервный источник ${provider.source.displayNameRu} не ответил за " +
+                        "${FALLBACK_TIMEOUT_MS / 1000} секунд."
+                )
+            )
             when (result) {
                 is ProviderFetchResult.Success -> return WeatherProviderChainResult.Success(
                     response = result.response,
@@ -176,6 +197,8 @@ class WeatherProviderChain(
         )
 
     companion object {
+        const val PRIMARY_TIMEOUT_MS = 20_000L
+        const val FALLBACK_TIMEOUT_MS = 8_000L
         const val TOTAL_TIMEOUT_MS = 30_000L
     }
 }

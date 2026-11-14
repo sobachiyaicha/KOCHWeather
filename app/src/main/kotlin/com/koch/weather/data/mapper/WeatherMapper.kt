@@ -58,8 +58,16 @@ object WeatherMapper {
         val isDay = (current.isDay ?: 1) == 1
         val description = WmoHelper.getDescriptionRu(weatherCode)
         val currentIcon = WmoHelper.getIconType(weatherCode, isDay)
+        val currentWindMps = current.windSpeed10m
+            ?.times(windToMetersPerSecond(dto.currentUnits?.windSpeed10m))
 
-        val hourlyList = buildHourlyList(dto, currentTemp, weatherCode, currentIcon, current.windSpeed10m)
+        val hourlyList = buildHourlyList(
+            dto = dto,
+            currentTemp = currentTemp,
+            currentCode = weatherCode,
+            currentIcon = currentIcon,
+            currentWind = currentWindMps
+        )
         val dailyList = buildDailyList(daily, weatherCode)
         if (dailyList.isEmpty()) {
             return failure("В ответе сервера нет ни одного полного дня прогноза.")
@@ -73,7 +81,7 @@ object WeatherMapper {
                 minTemp = todayMin,
                 maxTemp = todayMax,
                 humidity = current.relativeHumidity2m,
-                windSpeed = current.windSpeed10m,
+                windSpeed = currentWindMps,
                 weatherCode = weatherCode,
                 iconType = currentIcon,
                 clothingAdvice = WmoHelper.getClothingAdvice(currentTemp, weatherCode),
@@ -101,6 +109,7 @@ object WeatherMapper {
         val hourlyCodes = hourly?.weatherCode.orEmpty()
         val hourlyPops = hourly?.precipitationProbability.orEmpty()
         val hourlyWinds = hourly?.windSpeed10m.orEmpty()
+        val hourlyWindFactor = windToMetersPerSecond(dto.hourlyUnits?.windSpeed10m)
 
         val current = dto.current
         val currentHourPrefix = current?.time.orEmpty().take(13)
@@ -137,7 +146,7 @@ object WeatherMapper {
                     weatherCode = code,
                     iconType = WmoHelper.getIconType(code, isHourDay(hour)),
                     pop = hourlyPops.getOrNull(i) ?: 0,
-                    wind = hourlyWinds.getOrNull(i),
+                    wind = hourlyWinds.getOrNull(i)?.times(hourlyWindFactor),
                     popKnown = hourlyPops.getOrNull(i) != null
                 )
             )
@@ -195,6 +204,20 @@ object WeatherMapper {
     }
 
     private fun isHourDay(hour: Int): Boolean = hour in 6..21
+
+    /**
+     * Open-Meteo может вернуть km/h (исторический дефолт), несмотря на запрос
+     * `wind_speed_unit=ms`. Домен всегда хранит м/с.
+     */
+    private fun windToMetersPerSecond(unit: String?): Double {
+        val normalized = unit?.trim()?.lowercase() ?: return 1.0
+        return when {
+            normalized.contains("km/h") || normalized.contains("kmh") -> 1.0 / 3.6
+            normalized.contains("mph") -> 0.44704
+            normalized.contains("kn") || normalized.contains("knot") -> 0.514444
+            else -> 1.0 // m/s или неизвестно — значение уже в м/с
+        }
+    }
 
     private fun failure(message: String): WeatherMapResult.Failure =
         WeatherMapResult.Failure(WeatherFailure(WeatherErrorReason.INVALID_DATA, message))

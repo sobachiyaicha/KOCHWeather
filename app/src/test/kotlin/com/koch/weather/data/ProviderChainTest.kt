@@ -10,7 +10,9 @@ import com.koch.weather.data.provider.WeatherProviderChain
 import com.koch.weather.data.provider.WeatherProviderChainResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -227,19 +229,52 @@ class ProviderChainTest {
     }
 
     @Test
-    fun overallTimeout_returnsAllFailedWithinThirtySeconds() = runTest {
+    fun hangingPrimary_stillAllowsSevenTimerFallback() = runTest {
+        val fallback = CountingProvider(
+            WeatherSource.SEVEN_TIMER,
+            ProviderFetchResult.Success(response, 777L)
+        )
         val chain = WeatherProviderChain(
-            listOf(
+            providers = listOf(
                 HangingProvider(WeatherSource.MET_NO),
                 HangingProvider(WeatherSource.OPEN_METEO)
-            )
+            ),
+            fallbackProviders = listOf(fallback)
         )
-        val result = chain.fetch(59.9, 30.3)
-        assertTrue(result is WeatherProviderChainResult.AllFailed)
-        val attempt = (result as WeatherProviderChainResult.AllFailed).failedAttempts.first()
-        assertEquals(WeatherErrorReason.TIMEOUT, attempt.failure.reason)
-        assertTrue(attempt.failure.messageRu.contains("30"))
+        val result = chain.fetch(59.9, 30.3) as WeatherProviderChainResult.Success
+        assertEquals(WeatherSource.SEVEN_TIMER, result.source)
+        assertEquals(1, result.failedAttempts.size)
+        assertEquals(WeatherErrorReason.TIMEOUT, result.failedAttempts.first().failure.reason)
+        assertEquals(1, fallback.calls)
+    }
+
+    @Test
+    fun totalBudget_reservesTimeForFallback() {
+        assertEquals(20_000L, WeatherProviderChain.PRIMARY_TIMEOUT_MS)
+        assertEquals(8_000L, WeatherProviderChain.FALLBACK_TIMEOUT_MS)
         assertEquals(30_000L, WeatherProviderChain.TOTAL_TIMEOUT_MS)
+        assertTrue(
+            WeatherProviderChain.PRIMARY_TIMEOUT_MS +
+                WeatherProviderChain.FALLBACK_TIMEOUT_MS <=
+                WeatherProviderChain.TOTAL_TIMEOUT_MS
+        )
+    }
+
+    @Test
+    fun allHangingIncludingFallback_returnsWithinTotalBudget() = runTest {
+        val chain = WeatherProviderChain(
+            providers = listOf(
+                HangingProvider(WeatherSource.MET_NO),
+                HangingProvider(WeatherSource.OPEN_METEO)
+            ),
+            fallbackProviders = listOf(HangingProvider(WeatherSource.SEVEN_TIMER))
+        )
+        val result = withTimeoutOrNull(WeatherProviderChain.TOTAL_TIMEOUT_MS) {
+            chain.fetch(59.9, 30.3)
+        }
+        assertNotNull("Цепочка превысила общий бюджет 30 с", result)
+        assertTrue(result is WeatherProviderChainResult.AllFailed)
+        assertEquals(2, (result as WeatherProviderChainResult.AllFailed).failedAttempts.size)
     }
 
     @Test

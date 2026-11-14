@@ -76,7 +76,7 @@ private fun formatWeatherTime(epochMillis: Long): String =
 
 /** Порядок блоков ленты: стабильные списки, не пересоздаются на каждую рекомпозицию. */
 private val CleanFeedOrder: List<String> = listOf(
-    "hourly_card", "daily_card", "services_grid", "ai_fact_block", "premium_banner", "ad_banner"
+    "services_grid", "hourly_card", "daily_card", "ai_fact_block", "premium_banner", "ad_banner"
 )
 private val PromoFeedOrder: List<String> = listOf(
     "ai_fact_block", "premium_banner", "ad_banner", "services_grid", "hourly_card", "daily_card"
@@ -383,10 +383,15 @@ internal fun MainScreenContent(
     ProvideKochColors(uiState.currentTheme) {
         val koch = LocalKochColors.current
 
-        // Статус-бар: тёмные иконки на светлом небе/закате, светлые — на тёмных темах.
-        // Иначе получается «белым по белому», как в облачном состоянии (замечание критика).
+        // Вуаль показываем только когда есть что скрывать (weather != null) и один раз за сессию.
+        val veilVisible = uiState.isCloudVeilVisible &&
+            !cloudVeilDismissed &&
+            uiState.weather != null
+
+        // Статус-бар: тёмные иконки на светлом небе/закате и под облаками (там всегда светлый
+        // фон), светлые — на тёмных темах. Иначе «белым по белому».
         val view = androidx.compose.ui.platform.LocalView.current
-        val useDarkStatusIcons = koch.bgTop.luminance() > 0.35f
+        val useDarkStatusIcons = koch.bgTop.luminance() > 0.35f || veilVisible
         LaunchedEffect(useDarkStatusIcons) {
             val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
             androidx.core.view.WindowCompat.getInsetsController(window, view)
@@ -672,8 +677,6 @@ internal fun MainScreenContent(
             }
 
             // Облачная вуаль (refs/cloud_swipe.png, 2:40) — ровно один раз за сессию.
-            // Контракт VM: isCloudVeilVisible = isCloudLocked && !isCloudsCleared (персист).
-            val veilVisible = uiState.isCloudVeilVisible && !cloudVeilDismissed
             if (veilVisible) {
                 // Вуаль НЕ должна накрывать нижний бар: считаем высоту бара + системный инсет
                 // и оставляем эту полосу вне оверлея. Иначе в состоянии «нет данных» табы

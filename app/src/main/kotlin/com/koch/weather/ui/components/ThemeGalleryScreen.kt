@@ -254,18 +254,26 @@ private fun ThemeCard(
                     maxLines = 2
                 )
                 Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Бейдж статуса: светлая пилюля + тёмный текст (#2E7D32 / #8A5A00) — контраст ≥4.5:1
+                // на любом превью, в отличие от светло-зелёного текста прямо на карточке.
+                Row(
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(percent = 50))
+                        .background(Color(0xE6FFFFFF))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         imageVector = if (item.isUnlocked) Icons.Default.Check else Icons.Default.Lock,
                         contentDescription = null,
-                        tint = if (item.isUnlocked) colors.accentSuccess else colors.accentPromo,
-                        modifier = Modifier.size(12.dp)
+                        tint = if (item.isUnlocked) Color(0xFF2E7D32) else Color(0xFF8A5A00),
+                        modifier = Modifier.size(11.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(3.dp))
                     Text(
                         text = if (item.isUnlocked) "Доступно" else "В лутбоксах",
                         style = KochType.caption,
-                        color = if (item.isUnlocked) colors.accentSuccess else colors.accentPromo,
+                        color = if (item.isUnlocked) Color(0xFF2E7D32) else Color(0xFF8A5A00),
                         maxLines = 1,
                         softWrap = false
                     )

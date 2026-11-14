@@ -168,7 +168,7 @@ internal fun AdBannerCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(104.dp)
+            .height(120.dp)
             .clip(RoundedCornerShape(KochRadius.card))
             .background(
                 Brush.verticalGradient(
@@ -193,7 +193,7 @@ internal fun AdBannerCard(
                 text = "Дизайнеры больше не нужны!",
                 style = KochType.bodyStrong,
                 color = Color.White,
-                maxLines = 1
+                maxLines = 2
             )
             Text(
                 text = "Научим делать сайты с помощью нейросетей за 15 минут",

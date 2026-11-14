@@ -81,8 +81,10 @@ fun CloudVeilOverlay(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                // Только шапка (~24 % высоты): карточки и «Повторить» под вуалью не прячутся.
-                .fillMaxHeight(0.24f)
+                // Только шапка: контейнер вуали уже укорочен на высоту нижнего бара, поэтому
+                // 0.35 ≈ 197 dp — накрывает капсулу (117…186 dp) целиком, но не пустое
+                // состояние и не «Повторить».
+                .fillMaxHeight(0.35f)
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                 .pointerInput(Unit) {
                     var travelled = 0f

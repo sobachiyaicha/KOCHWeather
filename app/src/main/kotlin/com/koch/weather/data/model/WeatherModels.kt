@@ -8,9 +8,21 @@ import kotlinx.serialization.Serializable
 data class WeatherApiResponse(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    @SerialName("current_units") val currentUnits: CurrentUnitsDto? = null,
+    @SerialName("hourly_units") val hourlyUnits: HourlyUnitsDto? = null,
     val current: CurrentWeatherDto? = null,
     val hourly: HourlyWeatherDto? = null,
     val daily: DailyWeatherDto? = null
+)
+
+@Serializable
+data class CurrentUnitsDto(
+    @SerialName("wind_speed_10m") val windSpeed10m: String? = null
+)
+
+@Serializable
+data class HourlyUnitsDto(
+    @SerialName("wind_speed_10m") val windSpeed10m: String? = null
 )
 
 @Serializable

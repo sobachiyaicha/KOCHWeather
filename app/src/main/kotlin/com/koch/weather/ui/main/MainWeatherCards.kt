@@ -216,7 +216,8 @@ internal fun HourlyWeatherCard(
                     else -> "В среднем сегодня: 3.5 ★"
                 },
                 style = KochType.caption,
-                color = if (showRatingThankYou) colors.accentPromo else colors.textTertiary,
+                // Было 3.56:1 (textTertiary) — подняли до ~5:1.
+                color = if (showRatingThankYou) colors.accentPromo else colors.textPrimary.copy(alpha = 0.9f),
                 maxLines = 2
             )
         }

@@ -3,7 +3,9 @@ package com.koch.weather.data
 import com.koch.weather.data.mapper.WeatherMapResult
 import com.koch.weather.data.mapper.WeatherMapper
 import com.koch.weather.data.model.CityLocation
+import com.koch.weather.data.model.CurrentUnitsDto
 import com.koch.weather.data.model.CurrentWeatherDto
+import com.koch.weather.data.model.HourlyUnitsDto
 import com.koch.weather.data.model.DailyWeatherDto
 import com.koch.weather.data.model.HourlyWeatherDto
 import com.koch.weather.data.model.WeatherApiResponse
@@ -79,6 +81,32 @@ class WeatherMapperTest {
         assertEquals("Сейчас", data.hourly.first().hourLabel)
         assertEquals(2, data.daily.size)
         assertEquals("Сегодня", data.daily.first().dayLabel)
+    }
+
+    @Test
+    fun openMeteoWindKmh_isConvertedToMetersPerSecond() {
+        val dto = sampleDto().copy(
+            currentUnits = CurrentUnitsDto(windSpeed10m = "km/h"),
+            hourlyUnits = HourlyUnitsDto(windSpeed10m = "km/h")
+        )
+        val data = map(dto)
+
+        assertEquals(22.0 / 3.6, data.windSpeed ?: 0.0, 0.001)
+        assertEquals(22.0 / 3.6, data.hourly.first().wind ?: 0.0, 0.001)
+        assertEquals(20.0 / 3.6, data.hourly[1].wind ?: 0.0, 0.001)
+    }
+
+    @Test
+    fun openMeteoWindMs_staysMetersPerSecond() {
+        val dto = sampleDto().copy(
+            currentUnits = CurrentUnitsDto(windSpeed10m = "m/s"),
+            hourlyUnits = HourlyUnitsDto(windSpeed10m = "m/s")
+        )
+        val data = map(dto)
+
+        assertEquals(22.0, data.windSpeed ?: 0.0, 0.001)
+        assertEquals(22.0, data.hourly.first().wind ?: 0.0, 0.001)
+        assertEquals(20.0, data.hourly[1].wind ?: 0.0, 0.001)
     }
 
     @Test

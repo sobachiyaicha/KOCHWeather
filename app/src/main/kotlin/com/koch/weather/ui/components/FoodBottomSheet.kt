@@ -265,7 +265,7 @@ private fun MenuRow(
                 text = item.description,
                 style = KochType.sub,
                 color = colors.textTertiary,
-                maxLines = 2
+                maxLines = 3
             )
             Spacer(Modifier.height(2.dp))
             Text(

@@ -129,7 +129,8 @@ fun ThemeRouletteDialog(
                 PhonePreview(
                     theme = previewTheme,
                     photoUrl = iphoneImageUrl,
-                    modifier = Modifier.weight(1f).padding(horizontal = KochSpace.s)
+                    // Без weight: иначе контейнер 118×160 растягивался в ландшафт.
+                    modifier = Modifier.padding(horizontal = KochSpace.s)
                 )
 
                 YellowArrow(pointsRight = true) {
@@ -144,26 +145,9 @@ fun ThemeRouletteDialog(
                 onClick = { previewTheme = below }
             )
 
-            Spacer(Modifier.height(KochSpace.xs))
-
-            // Чипы тем: перенос по строкам (FlowRow), поэтому ни один не режется краем экрана.
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-                verticalArrangement = Arrangement.spacedBy(KochSpace.s)
-            ) {
-                allThemes.forEach { theme ->
-                    KochChip(
-                        text = theme.titleRu,
-                        selected = theme == previewTheme,
-                        locked = theme !in availableThemes,
-                        onClick = { previewTheme = theme }
-                    )
-                }
-            }
-
             Spacer(Modifier.height(KochSpace.s))
 
+            // Статус темы — НАД чипами: раньше «Доступно ✓» уезжало под фолд.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPreviewUnlocked) {
                     Icon(
@@ -190,6 +174,24 @@ fun ThemeRouletteDialog(
                         text = "Открывается в лутбоксах",
                         style = KochType.caption,
                         color = Color.White.copy(alpha = 0.75f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(KochSpace.xs))
+
+            // Чипы тем: перенос по строкам (FlowRow), поэтому ни один не режется краем экрана.
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
+                verticalArrangement = Arrangement.spacedBy(KochSpace.s)
+            ) {
+                allThemes.forEach { theme ->
+                    KochChip(
+                        text = theme.titleRu,
+                        selected = theme == previewTheme,
+                        locked = theme !in availableThemes,
+                        onClick = { previewTheme = theme }
                     )
                 }
             }
@@ -331,7 +333,7 @@ private fun PhonePreview(
                 shape = RoundedCornerShape(20.dp),
                 // Fit, а не Crop: фронтальное фото должно попадать в рамку целиком,
                 // иначе от телефона остаётся кусок обоев.
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 fallback = { PhoneMock(theme) }
             )
         } else {
