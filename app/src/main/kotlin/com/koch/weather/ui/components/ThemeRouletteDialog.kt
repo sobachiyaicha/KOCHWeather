@@ -147,33 +147,41 @@ fun ThemeRouletteDialog(
 
             Spacer(Modifier.height(KochSpace.s))
 
-            // Статус темы — НАД чипами: раньше «Доступно ✓» уезжало под фолд.
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Статус темы — НАД чипами. Светлая пилюля + тёмный текст: на стекле
+            // светло-зелёный давал 1.27:1, теперь ≈5:1 на любой теме.
+            val statusText = if (isPreviewUnlocked) Color(0xFF2E7D32) else Color(0xFF8A5A00)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Color(0xE6FFFFFF))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (isPreviewUnlocked) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = null,
-                        tint = colors.accentSuccess,
+                        tint = statusText,
                         modifier = Modifier.size(12.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Доступно",
                         style = KochType.caption,
-                        color = colors.accentSuccess
+                        color = statusText
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.75f),
+                        tint = statusText,
                         modifier = Modifier.size(12.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Открывается в лутбоксах",
                         style = KochType.caption,
-                        color = Color.White.copy(alpha = 0.75f)
+                        color = statusText
                     )
                 }
             }

@@ -131,14 +131,10 @@ fun CloudVeilOverlay(
                                 onCleared()
                             }
                         },
-                        onDragEnd = {
-                            lastPoint = null
-                            if (!isCleared) hintVisible = true
-                        },
-                        onDragCancel = {
-                            lastPoint = null
-                            if (!isCleared) hintVisible = true
-                        }
+                        // Подсказку НЕ возвращаем: гашение одностороннее, иначе она снова
+                        // ложится поверх открытой капсулы (три вспышки за жест, r9_clouds.mp4).
+                        onDragEnd = { lastPoint = null },
+                        onDragCancel = { lastPoint = null }
                     )
                 }
         ) {
