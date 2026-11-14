@@ -118,8 +118,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch(Dispatchers.IO) {
             val unlocked = lootboxRepository.getUnlockedThemes()
             val prefs = cache.getUiPreferences()
-            val restoredTheme = ThemePreferenceCodec.decode(prefs.themeId)
-                ?.takeIf { it in unlocked }
+            val restoredTheme = ThemeRestorePolicy.resolve(prefs.themeId, unlocked)
             _uiState.update { state ->
                 // Не откатываем очистку облаков, если пользователь успел стереть
                 // вуаль раньше, чем DataStore вернул сохранённый флаг.
@@ -171,7 +170,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     weatherErrorMessage = null,
                     weatherSource = cachedWeather?.source ?: WeatherSource.NONE,
                     weatherAttributionRu = if (cachedWeather != null) {
-                        cachedAttribution(cachedWeather.source)
+                        WeatherUiReducer.cachedAttribution(cachedWeather.source)
                     } else {
                         WeatherSource.NONE.attributionRu
                     },
@@ -277,7 +276,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun refresh() {
         val city = _uiState.value.selectedCity ?: return
-        fetchWeatherQuietly(city)
+        // Явный refresh всегда делает реальную сетевую попытку, даже если
+        // DataStore-кэш моложе политики 30 мин / 3 ч.
+        fetchWeatherQuietly(city, forceRefresh = true)
     }
 
     /** Явная кнопка «Повторить» на экране ошибки/офлайна. */
@@ -299,7 +300,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                         weatherErrorMessage = null,
                         weatherLastUpdated = cached.data.lastUpdated,
                         weatherSource = cached.source,
-                        weatherAttributionRu = cachedAttribution(cached.source),
+                        weatherAttributionRu = WeatherUiReducer.cachedAttribution(cached.source),
                         weatherSourceNote = null
                     )
                 } else {
@@ -309,7 +310,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun fetchWeatherQuietly(city: CityLocation) {
+    private fun fetchWeatherQuietly(city: CityLocation, forceRefresh: Boolean = false) {
         loadJob?.cancel()
         trafficJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
@@ -323,7 +324,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             val result = try {
-                repository.getWeatherData(city, isOnline = isConnected)
+                repository.getWeatherData(
+                    city = city,
+                    isOnline = isConnected,
+                    forceRefresh = forceRefresh
+                )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -334,70 +339,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 if (state.selectedCity?.name != city.name) {
                     return@update state
                 }
-                when (result) {
-                    is WeatherLoadResult.Live -> state.copy(
-                        weather = result.data,
-                        weatherState = WeatherDataState.LIVE,
-                        isOffline = false,
-                        isWeatherUnavailable = false,
-                        weatherErrorMessage = null,
-                        weatherLastUpdated = result.data.lastUpdated,
-                        weatherSource = result.source,
-                        weatherAttributionRu = result.source.attributionRu,
-                        weatherSourceNote = result.fallbackNote,
-                        isLoading = false,
-                        isRefreshing = false
-                    )
-
-                    is WeatherLoadResult.Cached -> state.copy(
-                        weather = result.data,
-                        weatherState = WeatherDataState.CACHED,
-                        isOffline = true,
-                        isWeatherUnavailable = false,
-                        weatherErrorMessage = result.reason?.messageRu
-                            ?: "Нет связи. Показан сохранённый прогноз.",
-                        weatherLastUpdated = result.data.lastUpdated,
-                        weatherSource = result.source,
-                        weatherAttributionRu = cachedAttribution(result.source),
-                        weatherSourceNote = result.reason?.messageRu,
-                        isLoading = false,
-                        isRefreshing = false
-                    )
-
-                    is WeatherLoadResult.Unavailable -> {
-                        val failure = if (!isConnected) WeatherErrors.noNetwork() else result.failure
-                        // Уже показанный реальный прогноз не удаляем: помечаем офлайновым.
-                        val keptWeather = state.weather?.copy(
-                            isOffline = true,
-                            dataSourceLabel = null
-                        )
-                        state.copy(
-                            weather = keptWeather,
-                            weatherState = if (keptWeather != null) {
-                                WeatherDataState.CACHED
-                            } else {
-                                WeatherDataState.UNAVAILABLE
-                            },
-                            isOffline = true,
-                            isWeatherUnavailable = keptWeather == null,
-                            weatherErrorMessage = failure.messageRu,
-                            weatherLastUpdated = keptWeather?.lastUpdated,
-                            weatherSource = if (keptWeather != null) {
-                                state.weatherSource
-                            } else {
-                                WeatherSource.NONE
-                            },
-                            weatherAttributionRu = if (keptWeather != null) {
-                                cachedAttribution(state.weatherSource)
-                            } else {
-                                WeatherSource.NONE.attributionRu
-                            },
-                            weatherSourceNote = failure.messageRu,
-                            isLoading = false,
-                            isRefreshing = false
-                        )
-                    }
-                }
+                WeatherUiReducer.apply(state, result, isConnected)
             }
 
             val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
@@ -430,11 +372,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
             _uiState.update { it.copy(savedCities = savedCities) }
         }
-    }
-
-    private fun cachedAttribution(source: WeatherSource): String = when (source) {
-        WeatherSource.CACHE, WeatherSource.NONE -> "Данные: сохранённый прогноз"
-        else -> "Данные: ${source.displayNameRu} (сохранённый прогноз)"
     }
 
     // ------------------------------------------------------------------------

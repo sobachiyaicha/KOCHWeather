@@ -21,6 +21,7 @@ enum class WeatherErrorReason {
     HTTP_ERROR,
     PARSE_ERROR,
     INVALID_DATA,
+    CACHE_POLICY,
     UNKNOWN
 }
 

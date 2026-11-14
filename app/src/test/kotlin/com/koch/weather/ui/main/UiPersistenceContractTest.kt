@@ -3,7 +3,9 @@ package com.koch.weather.ui.main
 import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.PremiumOffer
+import com.koch.weather.data.model.ThemeCatalog
 import com.koch.weather.data.model.ThemePreferenceCodec
+import com.koch.weather.data.model.ThemeRestorePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -21,6 +23,18 @@ class UiPersistenceContractTest {
         )
         assertNull(ThemePreferenceCodec.decode(null))
         assertNull(ThemePreferenceCodec.decode("NOT_A_THEME"))
+    }
+
+    @Test
+    fun themeRestorePolicy_keepsSavedThemeAfterRestart() {
+        val unlocked = ThemeCatalog.DEFAULT_UNLOCKED
+        assertEquals(
+            AppThemeMode.COPPER_SUNSET,
+            ThemeRestorePolicy.resolve("COPPER_SUNSET", unlocked)
+        )
+        assertNull(ThemeRestorePolicy.resolve("CYBERPUNK", unlocked))
+        assertNull(ThemeRestorePolicy.resolve("NOT_A_THEME", unlocked))
+        assertNull(ThemeRestorePolicy.resolve(null, unlocked))
     }
 
     @Test

@@ -43,15 +43,6 @@ class MetNoProvider(
     override fun minRefreshIntervalMs(latitude: Double, longitude: Double): Long =
         policy.minRefreshIntervalMs(latitude, longitude)
 
-    /** Решение «отдать DataStore-кэш без запроса» по политике MET Norway. */
-    fun shouldUseCachedForecast(
-        sourceId: String?,
-        savedAt: Long,
-        now: Long,
-        latitude: Double,
-        longitude: Double
-    ): Boolean = policy.shouldUseCache(sourceId, savedAt, now, latitude, longitude)
-
     override suspend fun fetchForecast(
         latitude: Double,
         longitude: Double

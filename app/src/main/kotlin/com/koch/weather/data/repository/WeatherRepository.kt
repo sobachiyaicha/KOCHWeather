@@ -132,45 +132,50 @@ class WeatherRepository @JvmOverloads constructor(
 
     suspend fun getWeatherData(
         city: CityLocation,
-        isOnline: Boolean = true
+        isOnline: Boolean = true,
+        forceRefresh: Boolean = false
     ): WeatherLoadResult = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val snapshot = cache.getCachedForecast(city.name)
+        val action = WeatherLoadPolicy.decide(
+            isOnline = isOnline,
+            forceRefresh = forceRefresh,
+            sourceId = snapshot?.sourceId,
+            savedAt = snapshot?.savedAt ?: 0L,
+            now = now,
+            latitude = city.latitude,
+            longitude = city.longitude
+        )
+
         // Без сети не ждём таймаутов: сразу честный кэш/«нет данных».
-        if (!isOnline) {
+        if (action == WeatherLoadAction.OFFLINE_FALLBACK) {
             return@withContext cachedOrUnavailable(
                 city = city,
                 failure = WeatherErrors.noNetwork(),
                 attempts = emptyList()
             )
         }
-        val now = System.currentTimeMillis()
 
-        // Политика MET Norway: при наличии свежего кэша не дёргаем сеть чаще
-        // разрешённого интервала (30 мин Скандинавия / 3 ч остальной мир).
-        val snapshot = cache.getCachedForecast(city.name)
-        if (snapshot != null && metNoProvider.shouldUseCachedForecast(
-                sourceId = snapshot.sourceId,
-                savedAt = snapshot.savedAt,
-                now = now,
-                latitude = city.latitude,
-                longitude = city.longitude
-            )
-        ) {
+        // Политика MET Norway: свежий кэш (<30 мин/<3 ч) показываем как CACHED,
+        // но НЕ как Live. Live возможен только после реального ответа провайдера.
+        if (action == WeatherLoadAction.SERVE_CACHE && snapshot != null) {
             val interval = metNoProvider.minRefreshIntervalMs(city.latitude, city.longitude)
             val domain = decodeCachedDomain(city, snapshot)
             if (domain != null) {
-                val freshEnough = domain.copy(
-                    isOffline = false,
-                    // Это DataStore-кэш, поэтому подпись источника в домене null;
-                    // источник для UI идёт отдельно в weatherAttributionRu.
+                val cached = domain.copy(
+                    isOffline = true,
                     dataSourceLabel = null
                 )
-                memoryCache[city.name] = freshEnough
+                memoryCache[city.name] = cached
                 memorySource[city.name] = WeatherSource.MET_NO
-                return@withContext WeatherLoadResult.Live(
-                    data = freshEnough,
+                return@withContext WeatherLoadResult.Cached(
+                    data = cached,
                     source = WeatherSource.MET_NO,
-                    fallbackNote = "MET Norway: данные из кэша (обновление не чаще " +
-                        "${interval / 60_000} мин)."
+                    reason = WeatherFailure(
+                        reason = WeatherErrorReason.CACHE_POLICY,
+                        messageRu = "MET Norway: данные из кэша (обновление не чаще " +
+                            "${interval / 60_000} мин)."
+                    )
                 )
             }
         }

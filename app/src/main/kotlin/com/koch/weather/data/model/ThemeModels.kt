@@ -31,6 +31,12 @@ object ThemePreferenceCodec {
     fun encode(theme: AppThemeMode): String = theme.name
 }
 
+/** Восстановление темы после рестарта: только сохранённая и открытая тема. */
+object ThemeRestorePolicy {
+    fun resolve(savedThemeId: String?, unlocked: Set<AppThemeMode>): AppThemeMode? =
+        ThemePreferenceCodec.decode(savedThemeId)?.takeIf { it in unlocked }
+}
+
 object ThemeCatalog {
 
     /** Темы, доступные без лутбоксов. Это единственный источник правды для дефолтов. */
