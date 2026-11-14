@@ -250,7 +250,7 @@ private fun SearchResultRow(
                     softWrap = false
                 )
                 Text(
-                    text = city.country,
+                    text = city.locationLine(),
                     color = Color.White.copy(alpha = 0.65f),
                     fontSize = 11.5.sp,
                     maxLines = 1

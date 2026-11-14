@@ -137,20 +137,35 @@ fun FullScreenEmptyState(
     }
 }
 
-/** Ненавязчивая строка об источнике данных («Данные: MET Norway (api.met.no)» и т.п.). */
+/** Ненавязчивая строка об источнике данных и причине failover/кэша. */
 @Composable
 fun DataSourceFooter(
     text: String,
+    note: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Text(
-        text = text,
-        color = Color.White.copy(alpha = 0.55f),
-        fontSize = 10.sp,
-        lineHeight = 13.sp,
-        textAlign = TextAlign.Center,
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-    )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            textAlign = TextAlign.Center
+        )
+        if (!note.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = note,
+                color = Color.White.copy(alpha = 0.42f),
+                fontSize = 9.5.sp,
+                lineHeight = 12.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
 }

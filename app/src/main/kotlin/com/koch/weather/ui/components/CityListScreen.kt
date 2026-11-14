@@ -54,6 +54,7 @@ fun CityListScreen(
     isLoading: Boolean,
     background: Brush,
     attribution: String?,
+    attributionNote: String? = null,
     onRefresh: () -> Unit,
     onSelectCity: (SavedCityWeather) -> Unit,
     onBack: () -> Unit
@@ -124,7 +125,7 @@ fun CityListScreen(
 
                     attribution?.takeIf { it.isNotBlank() }?.let { text ->
                         item(key = "attribution") {
-                            DataSourceFooter(text)
+                            DataSourceFooter(text, note = attributionNote)
                         }
                     }
                 }
@@ -193,7 +194,7 @@ private fun CityListRow(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = item.city.country,
+                    text = item.city.locationLine(),
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 11.5.sp,
                     maxLines = 1

@@ -68,6 +68,7 @@ import com.koch.weather.data.model.DailyItem
 import com.koch.weather.data.model.HourlyItem
 import com.koch.weather.data.model.ImageCategory
 import com.koch.weather.data.model.MainScreenUiState
+import com.koch.weather.data.model.WeatherDataState
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.data.model.WeatherIconType
 import com.koch.weather.ui.components.AdPromoDialog
@@ -93,6 +94,9 @@ import com.koch.weather.ui.components.WeatherIcon
 import com.koch.weather.ui.components.WeatherMapScreen
 import com.koch.weather.ui.components.RemotePhoto
 import com.koch.weather.ui.theme.getThemePalette
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** Soft shadow that keeps white RU labels readable on the light glassmorphism cards (R5). */
@@ -103,6 +107,9 @@ private val CardTextShadow = TextStyle(
         blurRadius = 3f
     )
 )
+
+private fun formatWeatherTime(epochMillis: Long): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(epochMillis))
 
 @Composable
 fun MainScreen(
@@ -127,6 +134,7 @@ fun MainScreen(
     MainScreenContent(
         uiState = uiState,
         onRefresh = { viewModel.refresh() },
+        onRetryWeather = { viewModel.retryWeather() },
         onSelectCityIndex = { viewModel.selectCityByIndex(it) },
         onSegmentSelected = { viewModel.setSegment(it) },
         onTabSelected = { tab ->
@@ -232,6 +240,7 @@ fun MainScreen(
                 isLoading = uiState.isLoadingSavedCities,
                 background = themeColors.gradientBrush,
                 attribution = uiState.weatherAttributionRu,
+                attributionNote = uiState.weatherSourceNote,
                 onRefresh = { viewModel.refreshSavedCities() },
                 onSelectCity = { savedCity -> viewModel.addCity(savedCity.city) },
                 onBack = { viewModel.setTab(BottomTab.HOME) }
@@ -260,6 +269,7 @@ fun MainScreen(
                 currentTheme = uiState.currentTheme,
                 background = themeColors.gradientBrush,
                 attribution = uiState.weatherAttributionRu,
+                attributionNote = uiState.weatherSourceNote,
                 onSelectTheme = { theme -> viewModel.setTheme(theme) },
                 onOpenRoulette = { isThemeRouletteOpen = true },
                 onBack = { viewModel.setTab(BottomTab.HOME) }
@@ -376,6 +386,7 @@ fun MainScreen(
 internal fun MainScreenContent(
     uiState: MainScreenUiState,
     onRefresh: () -> Unit,
+    onRetryWeather: () -> Unit,
     onSelectCityIndex: (Int) -> Unit,
     onSegmentSelected: (ConditionSegment) -> Unit,
     onTabSelected: (BottomTab) -> Unit,
@@ -435,11 +446,29 @@ internal fun MainScreenContent(
             contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Offline warning banner
-            if (uiState.isOffline) {
+            // Offline/cache banner is driven by the weather state, not by a bare flag:
+            // CACHED -> saved forecast with its timestamp, UNAVAILABLE -> no data, LIVE -> none.
+            val offlineBannerText: String? = when (uiState.weatherState) {
+                WeatherDataState.CACHED -> buildString {
+                    append("Сохранённый прогноз")
+                    uiState.weatherLastUpdated?.let { timestamp ->
+                        append(", ")
+                        append(formatWeatherTime(timestamp))
+                    }
+                }
+
+                WeatherDataState.UNAVAILABLE -> "Нет данных о погоде"
+                else -> null
+            }
+            if (offlineBannerText != null) {
+                val bannerColor = if (uiState.weatherState == WeatherDataState.UNAVAILABLE) {
+                    Color(0xD9E53935)
+                } else {
+                    Color(0xD9EF6C00)
+                }
                 item(key = "offline_banner") {
                     Surface(
-                        color = Color(0xD9E53935),
+                        color = bannerColor,
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(0.8.dp, Color(0x60FFFFFF)),
                         modifier = Modifier
@@ -459,12 +488,19 @@ internal fun MainScreenContent(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Нет подключения к сети. Показан сохраненный прогноз.",
+                                text = offlineBannerText,
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f)
                             )
+                            if (uiState.isRefreshing) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 1.5.dp,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -557,11 +593,14 @@ internal fun MainScreenContent(
                     )
                 }
 
-                // Attribution: the label comes from the contract (MET Norway / Open-Meteo / cache),
-                // never hardcoded in the UI.
+                // Attribution: the label and the failover/cache note come from the contract
+                // (MET Norway / Open-Meteo / cache), never hardcoded in the UI.
                 if (uiState.weatherAttributionRu.isNotBlank()) {
                     item(key = "data_source_footer") {
-                        DataSourceFooter(uiState.weatherAttributionRu)
+                        DataSourceFooter(
+                            text = uiState.weatherAttributionRu,
+                            note = uiState.weatherSourceNote
+                        )
                     }
                 }
             } else if (uiState.isLoading) {
@@ -575,6 +614,23 @@ internal fun MainScreenContent(
                         CircularProgressIndicator(
                             color = Color.White,
                             modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+            } else {
+                // Honest empty state: no synthetic numbers, explicit retry.
+                item(key = "weather_unavailable") {
+                    WeatherUnavailableCard(
+                        errorMessage = uiState.weatherErrorMessage,
+                        isRefreshing = uiState.isRefreshing,
+                        onRetry = onRetryWeather
+                    )
+                }
+                if (uiState.weatherAttributionRu.isNotBlank()) {
+                    item(key = "data_source_footer_empty") {
+                        DataSourceFooter(
+                            text = uiState.weatherAttributionRu,
+                            note = uiState.weatherSourceNote
                         )
                     }
                 }
@@ -608,6 +664,91 @@ internal fun MainScreenContent(
         // them away with a finger (refs/cloud_swipe.png).
         if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
             CloudVeilOverlay(onCleared = onCloudsCleared)
+        }
+    }
+}
+
+/**
+ * Честный плейсхолдер, когда прогноза нет вообще (ни сети, ни кэша):
+ * «Нет данных о погоде» + причина (если пришла из контракта) + «Повторить».
+ */
+@Composable
+private fun WeatherUnavailableCard(
+    errorMessage: String?,
+    isRefreshing: Boolean,
+    onRetry: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0x33000000),
+        border = BorderStroke(0.8.dp, Color(0x30FFFFFF)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.CloudOff,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(44.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Нет данных о погоде",
+                color = Color.White,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Не удалось загрузить прогноз. Проверьте подключение к сети и повторите попытку.",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.5.sp,
+                lineHeight = 17.sp,
+                textAlign = TextAlign.Center
+            )
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = errorMessage,
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+            Button(
+                onClick = onRetry,
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF1976D2),
+                    contentColor = Color.White
+                )
+            ) {
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Обновляем...", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Text("Повторить", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
@@ -1390,9 +1531,13 @@ private fun HourlyWeatherCard(
                                         color = Color.White.copy(alpha = 0.9f),
                                         fontSize = 13.sp
                                     )
-                                    val currentPop = weather.hourly.firstOrNull()?.pop ?: 0
+                                    val firstHourly = weather.hourly.firstOrNull()
                                     Text(
-                                        text = "$currentPop%",
+                                        text = if (firstHourly != null && firstHourly.popKnown) {
+                                            "${firstHourly.pop}%"
+                                        } else {
+                                            "—"
+                                        },
                                         color = Color.White,
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold
@@ -1702,7 +1847,7 @@ private fun HourlyItemColumn(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${item.pop}%",
+                    text = if (item.popKnown) "${item.pop}%" else "—",
                     color = Color.White,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold

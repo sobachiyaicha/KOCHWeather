@@ -53,6 +53,7 @@ fun ThemeGalleryScreen(
     currentTheme: AppThemeMode,
     background: Brush,
     attribution: String?,
+    attributionNote: String? = null,
     onSelectTheme: (AppThemeMode) -> Unit,
     onOpenRoulette: () -> Unit,
     onBack: () -> Unit
@@ -117,7 +118,7 @@ fun ThemeGalleryScreen(
                     key = "attribution",
                     span = { GridItemSpan(maxLineSpan) }
                 ) {
-                    DataSourceFooter(text)
+                    DataSourceFooter(text, note = attributionNote)
                 }
             }
         }
