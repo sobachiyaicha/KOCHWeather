@@ -257,6 +257,12 @@ data class MainScreenUiState(
     val weatherLastUpdated: Long? = null,
     val isRefreshing: Boolean = false,
 
+    // Авто-повтор при UNAVAILABLE/сетевом CACHED. nextRetryAt — epoch millis.
+    val isRetrying: Boolean = false,
+    val nextRetryAt: Long? = null,
+    val retryAttempt: Int = 0,
+    val isAppForeground: Boolean = true,
+
     // Источник данных и причина failover-а: «Данные: MET Norway (api.met.no)»,
     // «MET Norway недоступен: ... Использован Open-Meteo» и т.п.
     val weatherSource: WeatherSource = WeatherSource.NONE,

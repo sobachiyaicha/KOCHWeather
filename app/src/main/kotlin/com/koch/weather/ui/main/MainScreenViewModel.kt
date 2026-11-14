@@ -2,6 +2,10 @@ package com.koch.weather.ui.main
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import com.koch.weather.data.cache.WeatherCache
 import com.koch.weather.data.mapper.WeatherErrors
@@ -58,17 +62,36 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private var loadJob: Job? = null
     private var trafficJob: Job? = null
+    private var retryJob: Job? = null
     private var searchJob: Job? = null
     private var taxiJob: Job? = null
     private var foodJob: Job? = null
     private var cloudTimerJob: Job? = null
 
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStart(owner: LifecycleOwner) {
+            onAppForeground()
+        }
+
+        override fun onStop(owner: LifecycleOwner) {
+            onAppBackground()
+        }
+    }
+
     init {
+        // Авто-триггеры retry без ручной проводки из UI: ON_START/ON_STOP процесса.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+        if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            onAppForeground()
+        }
         // Monitor network connection changes
         viewModelScope.launch(Dispatchers.IO) {
             var isFirstEmission = true
             networkMonitor.isOnline.collect { isOnline ->
                 val wasOffline = _uiState.value.isOffline
+                if (!isOnline) {
+                    retryJob?.cancel()
+                }
                 _uiState.update { state ->
                     if (!isOnline) {
                         // Уже показанный реальный прогноз перестаёт быть «живым».
@@ -83,15 +106,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                                 WeatherDataState.CACHED
                             } else {
                                 state.weatherState
-                            }
+                            },
+                            isRetrying = false,
+                            nextRetryAt = null
                         )
                     } else {
                         state.copy(isOffline = false)
                     }
                 }
 
-                if (!isFirstEmission && wasOffline && isOnline) {
-                    refresh()
+                if (!isFirstEmission && wasOffline && isOnline &&
+                    _uiState.value.isAppForeground
+                ) {
+                    // Возврат сети = немедленный реальный forceRefresh.
+                    retryNow()
                 }
                 isFirstEmission = false
             }
@@ -211,6 +239,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val cities = _uiState.value.cities
         if (index !in cities.indices) return
         val targetCity = cities[index]
+        retryJob?.cancel()
 
         // Мгновенно меняем только выбранный город и честный LOADING.
         // Память/DataStore читаются в IO внутри preloadCachedWeather.
@@ -227,6 +256,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 weatherSource = WeatherSource.NONE,
                 weatherAttributionRu = WeatherSource.NONE.attributionRu,
                 weatherSourceNote = null,
+                isRetrying = false,
+                nextRetryAt = null,
+                retryAttempt = 0,
                 isLoading = true,
                 isRefreshing = true
             )
@@ -254,6 +286,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (index >= 0) {
             selectCity(index)
         } else {
+            retryJob?.cancel()
             _uiState.update {
                 it.copy(
                     selectedCity = city,
@@ -265,6 +298,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     weatherSource = WeatherSource.NONE,
                     weatherAttributionRu = WeatherSource.NONE.attributionRu,
                     weatherSourceNote = null,
+                    isRetrying = false,
+                    nextRetryAt = null,
+                    retryAttempt = 0,
                     isLoading = true,
                     isRefreshing = true
                 )
@@ -274,16 +310,80 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun refresh() {
-        val city = _uiState.value.selectedCity ?: return
-        // Явный refresh всегда делает реальную сетевую попытку, даже если
-        // DataStore-кэш моложе политики 30 мин / 3 ч.
+    /** Явный/автоматический retry: сбрасывает backoff и сразу идёт в сеть. */
+    private fun retryNow() {
+        val state = _uiState.value
+        if (!state.isAppForeground) return
+        val city = state.selectedCity ?: return
+        retryJob?.cancel()
+        val retry = WeatherRetryPolicy.onManualRetry()
+        _uiState.update {
+            it.copy(
+                isRetrying = retry.isRetrying,
+                nextRetryAt = retry.nextRetryAt,
+                retryAttempt = retry.attempt
+            )
+        }
         fetchWeatherQuietly(city, forceRefresh = true)
     }
 
-    /** Явная кнопка «Повторить» на экране ошибки/офлайна. */
+    fun refresh() {
+        retryNow()
+    }
+
+    /** Явная кнопка «Повторить»: немедленный forceRefresh, backoff сброшен. */
     fun retryWeather() {
-        refresh()
+        retryNow()
+    }
+
+    /** UI должен звать на ON_START/ON_RESUME: экран снова активен. */
+    fun onAppForeground() {
+        val wasForeground = _uiState.value.isAppForeground
+        _uiState.update { it.copy(isAppForeground = true) }
+        if (wasForeground) return
+        val state = _uiState.value
+        val needsRetry = state.weather == null ||
+            state.weatherState == WeatherDataState.UNAVAILABLE ||
+            state.retryAttempt > 0
+        if (needsRetry) {
+            retryNow()
+        } else if (state.nextRetryAt != null) {
+            scheduleRetryJob(state.nextRetryAt)
+        }
+    }
+
+    /** UI должен звать на ON_STOP/ON_PAUSE: фон не долбит сеть. */
+    fun onAppBackground() {
+        if (!_uiState.value.isAppForeground) return
+        retryJob?.cancel()
+        loadJob?.cancel()
+        trafficJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isAppForeground = false,
+                isRetrying = false,
+                nextRetryAt = null,
+                isRefreshing = false
+            )
+        }
+    }
+
+    /** Планирует единственный backoff-retry; при смене города/фоне отменяется. */
+    private fun scheduleRetryJob(nextRetryAt: Long) {
+        retryJob?.cancel()
+        val delayMs = (nextRetryAt - System.currentTimeMillis()).coerceAtLeast(0L)
+        retryJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(delayMs)
+            val state = _uiState.value
+            if (!state.isAppForeground || !state.isRetrying ||
+                state.nextRetryAt != nextRetryAt
+            ) {
+                return@launch
+            }
+            val city = state.selectedCity ?: return@launch
+            _uiState.update { it.copy(nextRetryAt = null) }
+            fetchWeatherQuietly(city, forceRefresh = true)
+        }
     }
 
     /** Подгружает последний реальный прогноз из DataStore, пока идёт сеть. */
@@ -317,7 +417,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val isConnected = networkMonitor.isCurrentlyConnected()
             _uiState.update { state ->
                 if (state.selectedCity?.name == city.name) {
-                    state.copy(isRefreshing = true, isLoading = state.weather == null)
+                    state.copy(
+                        isRefreshing = true,
+                        isLoading = state.weather == null,
+                        nextRetryAt = null
+                    )
                 } else {
                     state
                 }
@@ -341,7 +445,54 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 // isRefreshing снимаем здесь же: иначе флаг «залипал» и кнопка «Повторить»
                 // навсегда оставалась в состоянии «Обновляем…» и была disabled (run 4).
-                WeatherUiReducer.apply(state, result, isConnected).copy(isRefreshing = false)
+                val applied = WeatherUiReducer.apply(state, result, isConnected)
+                    .copy(isRefreshing = false)
+                val previousRetry = WeatherRetryState(
+                    attempt = state.retryAttempt,
+                    isRetrying = state.isRetrying,
+                    nextRetryAt = state.nextRetryAt
+                )
+                val now = System.currentTimeMillis()
+                val retry = when (result) {
+                    is WeatherLoadResult.Live -> WeatherRetryPolicy.onSuccess()
+
+                    is WeatherLoadResult.Unavailable -> if (!isConnected) {
+                        WeatherRetryPolicy.onBackground(previousRetry)
+                    } else {
+                        WeatherRetryPolicy.onFailure(
+                            state = previousRetry,
+                            now = now,
+                            hasCache = applied.weather != null,
+                            foreground = state.isAppForeground
+                        )
+                    }
+
+                    is WeatherLoadResult.Cached -> when {
+                        !isConnected -> WeatherRetryPolicy.onBackground(previousRetry)
+                        result.reason?.reason == WeatherErrorReason.CACHE_POLICY ||
+                            result.reason == null -> WeatherRetryPolicy.onSuccess()
+                        else -> WeatherRetryPolicy.onFailure(
+                            state = previousRetry,
+                            now = now,
+                            hasCache = true,
+                            foreground = state.isAppForeground
+                        )
+                    }
+                }
+                applied.copy(
+                    isRetrying = retry.isRetrying,
+                    nextRetryAt = retry.nextRetryAt,
+                    retryAttempt = retry.attempt
+                )
+            }
+
+            val afterResult = _uiState.value
+            val nextRetryAt = afterResult.nextRetryAt
+            if (afterResult.selectedCity?.name == city.name &&
+                afterResult.isAppForeground &&
+                nextRetryAt != null
+            ) {
+                scheduleRetryJob(nextRetryAt)
             }
 
             val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
@@ -366,6 +517,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
         }
+    }
+
+    override fun onCleared() {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        super.onCleared()
     }
 
     /** Перечитать температуры сохранённых городов из памяти/DataStore (R13). */
