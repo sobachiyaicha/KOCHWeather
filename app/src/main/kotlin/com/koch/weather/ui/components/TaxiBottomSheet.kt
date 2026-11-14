@@ -151,11 +151,14 @@ fun TaxiBottomSheet(
                 }
 
                 KochSection(title = "Тариф поездки")
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-                    contentPadding = PaddingValues(vertical = KochSpace.xs)
+                // Три тарифа помещаются в строку (3×112 + 2×8 = 352 dp при доступных 353):
+                // прокрутка не нужна, а LazyRow добавлял контейнер скролла и ленивый measure
+                // в первом кадре листа (hotspot perf-qa).
+                Row(
+                    modifier = Modifier.padding(vertical = KochSpace.xs),
+                    horizontalArrangement = Arrangement.spacedBy(KochSpace.s)
                 ) {
-                    items(TaxiTariffType.values().toList(), key = { it.name }) { tariff ->
+                    TaxiTariffType.values().forEach { tariff ->
                         TariffCard(
                             tariff = tariff,
                             selected = tariff == taxiState.selectedTariff,
