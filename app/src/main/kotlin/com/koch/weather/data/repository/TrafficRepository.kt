@@ -44,9 +44,6 @@ class TrafficRepository(
         "москва" to 213,
         "moscow" to 213,
 
-        "минск" to 157,
-        "minsk" to 157,
-
         "екатеринбург" to 54,
         "новосибирск" to 65,
         "казань" to 43,
@@ -86,10 +83,10 @@ class TrafficRepository(
             }
         }
 
-        // Coordinate fallback for SPb, Moscow, Minsk
+        // Coordinate fallback только для городов с реальным регионом Яндекса:
+        // СПб (2) и Москва (213). Остальные честно получают «нет данных».
         if (city.latitude in 59.6..60.2 && city.longitude in 29.7..30.8) return 2
         if (city.latitude in 55.4..56.1 && city.longitude in 37.1..38.0) return 213
-        if (city.latitude in 53.7..54.1 && city.longitude in 27.3..27.8) return 157
 
         return null
     }

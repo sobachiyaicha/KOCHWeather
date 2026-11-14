@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.koch.weather.ui.theme.KochSize
@@ -84,7 +85,10 @@ fun KochListRow(
                     text = title,
                     style = KochType.bodyStrong,
                     color = colors.textPrimary,
-                    maxLines = titleMaxLines
+                    maxLines = titleMaxLines,
+                    // Обрезка всегда с многоточием: «Краснодарский край, Россия · Сильный»
+                    // читалось как незаконченная фраза (M2a, visual-critic r14).
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (subtitle != null) {
                     Text(
@@ -92,6 +96,7 @@ fun KochListRow(
                         style = KochType.sub,
                         color = colors.textTertiary,
                         maxLines = subtitleMaxLines,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 1.dp)
                     )
                 }

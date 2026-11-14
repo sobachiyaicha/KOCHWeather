@@ -5,6 +5,7 @@ tools: [write, edit, read, read_image, grep, glob, pwsh]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: high
 ---
 # System Prompt
 Ты специализированный разработчик пользовательского интерфейса (UI/Compose).

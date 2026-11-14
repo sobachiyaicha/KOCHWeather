@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -22,9 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -38,17 +36,23 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.ThemeCatalogItem
-import com.koch.weather.ui.design.KochCard
-import com.koch.weather.ui.design.KochPageHeader
-import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochBorderWidth
 import com.koch.weather.ui.theme.KochRadius
+import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
 import com.koch.weather.ui.theme.LocalKochColors
 
 /**
  * R15: полноэкранный «Вид» — каталог тем (refs/congrats.png, 1:24).
- * Превью показывает собственный градиент темы, а не одинаковую светлую подложку.
+ *
+ * Отдельной «Рулетки тем» здесь больше НЕТ (item 4 фазы 5): рулетка живёт внутри
+ * `LootboxDialog`, поэтому у экрана нет ни карточки-перехода, ни колбэков
+ * `onOpenRoulette`/`onBack` — навигация только нижним баром.
+ *
+ * Превью карточки — локальный фон темы (`AppThemeMode.backgroundRes`), декодированный
+ * уменьшенной копией (`ThemePreviewImage`, `inSampleSize = 4`), а не полным кадром
+ * 1080×1920: «Вид» показывает то же фото, что и настоящий фон, но без пика памяти
+ * ~58 МБ на 7 карточек (M4 код-ревью Фазы 5).
  */
 @Composable
 fun ThemeGalleryScreen(
@@ -57,75 +61,26 @@ fun ThemeGalleryScreen(
     background: Brush,
     attribution: String?,
     attributionNote: String? = null,
-    onSelectTheme: (AppThemeMode) -> Unit,
-    onOpenRoulette: () -> Unit,
-    onBack: () -> Unit
+    onSelectTheme: (AppThemeMode) -> Unit
 ) {
-    val colors = LocalKochColors.current
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(background)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            KochPageHeader(
+            GalleryHeader(
                 title = "Оформление",
-                subtitle = "Темы из лутбоксов и рулетки",
-                onBack = onBack
+                subtitle = "Темы выпадают в лутбоксах"
             )
-
-            // Рулетка — карточка-переход, а не жёлтая outlined-кнопка.
-            KochCard(
-                modifier = Modifier.padding(horizontal = KochSpace.xl),
-                padding = PaddingValues(KochSpace.m),
-                onClick = onOpenRoulette
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(colors.accentPromo.copy(alpha = 0.20f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Casino,
-                            contentDescription = null,
-                            tint = colors.accentPromo,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(KochSpace.m))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Рулетка тем",
-                            style = KochType.bodyStrong,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = "Прокрутите и выберите оформление",
-                            style = KochType.caption,
-                            color = colors.textTertiary
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = colors.textTertiary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(KochSpace.m))
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
+                // Отступ снизу под навбар приходит из Scaffold (`bottomContentPadding`):
+                // собственный navigationBarsPadding здесь дал бы двойной инсет.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .navigationBarsPadding(),
+                    .weight(1f),
                 contentPadding = PaddingValues(
                     start = KochSpace.xl,
                     top = 2.dp,
@@ -153,6 +108,44 @@ fun ThemeGalleryScreen(
     }
 }
 
+/**
+ * Шапка страницы «Вид»: 28/700 + подпись 12. Кнопки «назад» нет — навигация идёт
+ * нижним баром (item 3), поэтому шапка живёт здесь, а не в общем `KochPageHeader`
+ * с обязательным `onBack`.
+ */
+@Composable
+private fun GalleryHeader(title: String, subtitle: String?) {
+    val colors = LocalKochColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(
+                start = KochSpace.xl,
+                end = KochSpace.xl,
+                top = KochSpace.m,
+                bottom = KochSpace.m
+            )
+    ) {
+        Text(
+            text = title,
+            style = KochType.titlePage,
+            color = colors.textPrimary,
+            maxLines = 1,
+            softWrap = false
+        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                style = KochType.sub,
+                color = colors.textTertiary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
 @Composable
 private fun ThemeCard(
     item: ThemeCatalogItem,
@@ -175,14 +168,23 @@ private fun ThemeCard(
             .clickable(enabled = item.isUnlocked, role = Role.Button, onClick = onSelect)
     ) {
         Column {
-            // Превью: собственный градиент темы + мини-карточка и «Aa».
+            // Превью: локальный (уже размытый) фон темы + мини-карточка и «Aa».
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(104.dp)
                     .clip(RoundedCornerShape(topStart = KochRadius.card, topEnd = KochRadius.card))
-                    .background(themePreviewBrush(item.theme))
             ) {
+                ThemePreviewImage(
+                    theme = item.theme,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Затемнение под белый текст поверх светлых фото.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Brush.verticalGradient(listOf(Color(0x33000000), Color(0x77000000))))
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -258,7 +260,7 @@ private fun ThemeCard(
                 // на любом превью, в отличие от светло-зелёного текста прямо на карточке.
                 Row(
                     modifier = Modifier
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(percent = 50))
+                        .clip(RoundedCornerShape(percent = 50))
                         .background(Color(0xE6FFFFFF))
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically

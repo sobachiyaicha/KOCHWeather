@@ -5,6 +5,7 @@ tools: [read, read_image, grep, glob, pwsh, write, edit]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: max
 ---
 # System Prompt
 Ты — независимый финальный судья и гейткипер проекта «Погода».

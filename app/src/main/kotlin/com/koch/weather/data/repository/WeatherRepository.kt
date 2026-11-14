@@ -8,8 +8,10 @@ import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.mapper.WeatherMapResult
 import com.koch.weather.data.mapper.WeatherMapper
 import com.koch.weather.data.model.CachedWeather
+import com.koch.weather.data.model.CityCatalog
 import com.koch.weather.data.model.CityLocation
 import com.koch.weather.data.model.CitySearchResult
+import com.koch.weather.data.model.DefaultCities
 import com.koch.weather.data.model.SavedCityWeather
 import com.koch.weather.data.model.WeatherApiResponse
 import com.koch.weather.data.model.WeatherDomainData
@@ -66,12 +68,7 @@ class WeatherRepository @JvmOverloads constructor(
     private val memoryCache = ConcurrentHashMap<String, WeatherDomainData>()
     private val memorySource = ConcurrentHashMap<String, WeatherSource>()
 
-    val defaultCities = listOf(
-        CityLocation("Санкт-Петербург", 59.9386, 30.3141, "Россия", "Санкт-Петербург"),
-        CityLocation("Москва", 55.7558, 37.6173, "Россия", "Москва"),
-        CityLocation("Минск", 53.9006, 27.5590, "Беларусь", "Минск"),
-        CityLocation("Дубай", 25.2048, 55.2708, "ОАЭ", "Дубай")
-    )
+    val defaultCities = DefaultCities.cities
 
     /** Мгновенный доступ к уже загруженному реальному прогнозу (без сети и DataStore). */
     fun getCachedWeatherFast(city: CityLocation): WeatherDomainData? =
@@ -103,30 +100,61 @@ class WeatherRepository @JvmOverloads constructor(
 
     suspend fun getInitialCities(): List<CityLocation> = withContext(Dispatchers.IO) {
         val saved = cache.getSavedCities()
-        if (!saved.isNullOrEmpty()) {
-            // If the saved list was an older default that didn't have Moscow at index 1, adjust it
-            if (saved.size >= 2 && saved[0].name == "Санкт-Петербург" && saved[1].name != "Москва") {
-                val updated = mutableListOf<CityLocation>()
-                updated.add(defaultCities[0]) // Санкт-Петербург
-                updated.add(defaultCities[1]) // Москва
-                for (c in saved) {
-                    if (c.name != "Санкт-Петербург" && c.name != "Москва") {
-                        updated.add(c)
-                    }
-                }
-                cache.saveCitiesList(updated)
-                updated
-            } else {
-                saved
-            }
-        } else {
-            cache.saveCitiesList(defaultCities)
-            defaultCities
+        val normalized = normalizeCities(saved)
+        // Дефолты мигрируют один раз: старый сохранённый список с городом,
+        // которого больше нет в каталоге, заменяется актуальным.
+        if (saved != normalized) {
+            cache.saveCitiesList(normalized)
         }
+        normalized
     }
+
+    /**
+     * Приводит сохранённый список к актуальному каталогу дефолтов:
+     * гео-город всегда первый и с флагом, остальные дефолты присутствуют,
+     * устаревшая точка старого дефолта удаляется, дубликаты схлопываются.
+     */
+    private fun normalizeCities(saved: List<CityLocation>?): List<CityLocation> {
+        val cleaned = saved.orEmpty()
+            .filterNot { it.isRetiredDefaultPoint() }
+            .toMutableList()
+
+        defaultCities.forEachIndexed { index, default ->
+            val existing = CityCatalog.indexOfPlace(cleaned, default)
+            if (existing >= 0) {
+                cleaned[existing] = default
+            } else {
+                cleaned.add(index.coerceIn(0, cleaned.size), default)
+            }
+        }
+
+        val geoIndex = cleaned.indexOfFirst { CityCatalog.isSamePlace(it, defaultCities.first()) }
+        val geoCity = if (geoIndex >= 0) cleaned.removeAt(geoIndex) else defaultCities.first()
+        cleaned.add(0, geoCity)
+
+        return CityCatalog.dedupe(cleaned)
+    }
+
+    /**
+     * Точка города из старого списка дефолтов, который больше не входит в приложение
+     * (53.9006, 27.5590). Идентифицируем по координатам, чтобы не тащить в код
+     * название и страну удалённого города.
+     */
+    private fun CityLocation.isRetiredDefaultPoint(): Boolean =
+        kotlin.math.abs(latitude - 53.9006) < 0.05 &&
+            kotlin.math.abs(longitude - 27.5590) < 0.05
 
     suspend fun getLastCity(): CityLocation? = withContext(Dispatchers.IO) {
         cache.getLastCity()
+    }
+
+    /** Выбранный пользователем город переживает перезапуск (D-2 feature-qa). */
+    suspend fun saveSelectedCity(city: CityLocation) = withContext(Dispatchers.IO) {
+        cache.saveSelectedCity(city)
+    }
+
+    suspend fun getSelectedCity(): CityLocation? = withContext(Dispatchers.IO) {
+        cache.getSelectedCity()
     }
 
     suspend fun saveCities(cities: List<CityLocation>) = withContext(Dispatchers.IO) {

@@ -52,13 +52,23 @@ fun KochNavBar(
 ) {
     val colors = LocalKochColors.current
 
+    // M1 (visual-critic r14): в голубой теме альфа navFill была 0.65 — сквозь пилюлю
+    // читались подписи карты («Дальняя Рогатка», «Транспо…») и наезжали на иконки табов.
+    // Держим итоговую непрозрачность ≥ 0.94 на всех семи темах: 4 % стекла оставляют,
+    // но текст под баром уже не читается.
+    val barFill = colors.navFill.copy(
+        alpha = maxOf(colors.navFill.alpha, 0.96f)
+    )
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(KochSize.nav),
         shape = KochShape.pill,
-        color = colors.navFill,
-        border = BorderStroke(KochBorderWidth.hairline, colors.borderStrong),
+        color = barFill,
+        // Кромка — токен border (10–20 %), а не borderStrong: на светлых темах белая
+        // линия 35 % давала резкий «шов» на плашке (m3).
+        border = BorderStroke(KochBorderWidth.hairline, colors.border),
         shadowElevation = 12.dp,
         tonalElevation = 0.dp
     ) {

@@ -48,7 +48,6 @@ class EmojiFreeTextTest {
             texts += it.name
             texts += it.description
             texts += it.priceRu
-            texts += it.priceByn
         }
         ThemeCatalog.build(ThemeCatalog.DEFAULT_UNLOCKED).forEach { texts += it.titleRu }
         ImageRepository().getAllImages().forEach {

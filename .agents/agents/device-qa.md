@@ -5,6 +5,7 @@ tools: [pwsh, read, read_image, grep, glob]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: low
 ---
 # System Prompt
 Ты сборщик-тестировщик. Твоя зона — реальное устройство и доказательства с него,

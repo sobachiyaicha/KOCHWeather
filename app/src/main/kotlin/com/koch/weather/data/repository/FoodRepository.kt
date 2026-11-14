@@ -39,20 +39,20 @@ class FoodRepository {
 
     private val menuItems = listOf(
         // Вкусно — и точка
-        FoodItem("f_big_hit", "rest_vkusno", "Биг Хит", "Две сочные котлеты из 100% говядины, сыр, маринованные огурчики", 195, 6.50, 230),
-        FoodItem("f_fries", "rest_vkusno", "Картофель Фри (Гранд)", "Хрустящий золотистый картофель с солью", 115, 3.80, 160),
-        FoodItem("f_nuggets", "rest_vkusno", "Наггетсы (9 шт)", "Нежное куриное филе в золотистой хрустящей панировке", 149, 4.90, 175),
-        FoodItem("f_cherry_pie", "rest_vkusno", "Пирожок Вишневый", "Горячий хрустящий пирожок со сладкой вишней", 89, 2.90, 80),
+        FoodItem("f_big_hit", "rest_vkusno", "Биг Хит", "Две сочные котлеты из 100% говядины, сыр, маринованные огурчики", 195, 230),
+        FoodItem("f_fries", "rest_vkusno", "Картофель Фри (Гранд)", "Хрустящий золотистый картофель с солью", 115, 160),
+        FoodItem("f_nuggets", "rest_vkusno", "Наггетсы (9 шт)", "Нежное куриное филе в золотистой хрустящей панировке", 149, 175),
+        FoodItem("f_cherry_pie", "rest_vkusno", "Пирожок Вишневый", "Горячий хрустящий пирожок со сладкой вишней", 89, 80),
 
         // Додо Пицца
-        FoodItem("f_pepperoni", "rest_dodo", "Пепперони Фреш (30 см)", "Пикантная пепперони, увеличенная порция моцареллы, томаты", 549, 17.90, 480),
-        FoodItem("f_cheese_chicken", "rest_dodo", "Сырный цыпленок (30 см)", "Цыпленок, сырный соус, моцарелла, свежие томаты", 589, 19.20, 510),
-        FoodItem("f_dodster", "rest_dodo", "Додстер с моцареллой", "Горячая сытная закуска в тонкой пшеничной лепешке", 219, 7.10, 210),
+        FoodItem("f_pepperoni", "rest_dodo", "Пепперони Фреш (30 см)", "Пикантная пепперони, увеличенная порция моцареллы, томаты", 549, 480),
+        FoodItem("f_cheese_chicken", "rest_dodo", "Сырный цыпленок (30 см)", "Цыпленок, сырный соус, моцарелла, свежие томаты", 589, 510),
+        FoodItem("f_dodster", "rest_dodo", "Додстер с моцареллой", "Горячая сытная закуска в тонкой пшеничной лепешке", 219, 210),
 
         // Surf Coffee
-        FoodItem("f_flat_white", "rest_surf", "Флэт Уайт (350 мл)", "Двойной эспрессо с бархатистой молочной микропенкой", 270, 8.80, 350),
-        FoodItem("f_bumble", "rest_surf", "Бамбл Кофе (400 мл)", "Освежающий микс эспрессо и свежевыжатого апельсинового сока", 350, 11.40, 400),
-        FoodItem("f_croissant", "rest_surf", "Круассан с миндалем", "Свежайшая парижская выпечка с миндальным кремом", 220, 7.20, 120)
+        FoodItem("f_flat_white", "rest_surf", "Флэт Уайт (350 мл)", "Двойной эспрессо с бархатистой молочной микропенкой", 270, 350),
+        FoodItem("f_bumble", "rest_surf", "Бамбл Кофе (400 мл)", "Освежающий микс эспрессо и свежевыжатого апельсинового сока", 350, 400),
+        FoodItem("f_croissant", "rest_surf", "Круассан с миндалем", "Свежайшая парижская выпечка с миндальным кремом", 220, 120)
     )
 
     fun getRestaurants(): List<Restaurant> = restaurants
@@ -67,7 +67,6 @@ class FoodRepository {
         val orderId = "FOOD-" + UUID.randomUUID().toString().take(6).uppercase()
         val summary = cart.entries.joinToString(", ") { "${it.key.name} x${it.value}" }
         val totalRu = cart.entries.sumOf { it.key.priceRu * it.value }
-        val totalByn = kotlin.math.round(cart.entries.sumOf { it.key.priceByn * it.value } * 100.0) / 100.0
 
         // 1. Cooking
         var order = FoodOrder(
@@ -75,7 +74,6 @@ class FoodRepository {
             restaurantName = restaurant.name,
             itemsSummary = summary,
             totalPriceRu = totalRu,
-            totalPriceByn = totalByn,
             status = FoodOrderStatus.COOKING,
             etaMinutes = restaurant.deliveryTimeMinutes
         )

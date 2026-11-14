@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Refresh
@@ -41,6 +41,9 @@ import com.koch.weather.ui.theme.LocalKochColors
 /**
  * R13: полноэкранный «Список» сохранённых городов (без референса — язык видео).
  * Одна группа строк с разделителями вместо четырёх карточек; температура тонкая крупная.
+ *
+ * Навигация — нижний бар, поэтому собственной стрелки «назад» у экрана нет.
+ * Добавление города — «+» в шапке и строка в конце списка.
  */
 @Composable
 fun CityListScreen(
@@ -52,7 +55,7 @@ fun CityListScreen(
     attributionNote: String? = null,
     onRefresh: () -> Unit,
     onSelectCity: (SavedCityWeather) -> Unit,
-    onBack: () -> Unit
+    onAddCity: () -> Unit
 ) {
     val colors = LocalKochColors.current
     Box(
@@ -64,8 +67,15 @@ fun CityListScreen(
             KochPageHeader(
                 title = "Список городов",
                 subtitle = "Сохранённые города и погода",
-                onBack = onBack,
+                onBack = null,
                 actions = {
+                    KochIconButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "Добавить город",
+                        onClick = onAddCity,
+                        tint = colors.accent,
+                        containerAlpha = 0f
+                    )
                     KochIconButton(
                         icon = Icons.Default.Refresh,
                         contentDescription = "Обновить список",
@@ -104,8 +114,7 @@ fun CityListScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .navigationBarsPadding(),
+                            .weight(1f),
                         contentPadding = PaddingValues(
                             start = KochSpace.xl,
                             end = KochSpace.xl,
@@ -131,6 +140,10 @@ fun CityListScreen(
                                         ),
                                         showDivider = index != cities.lastIndex,
                                         minHeight = 72.dp,
+                                        // M2a: условие («Сильный дождь») — часть смысла строки,
+                                        // третья строка важнее обрезки. У остальных строк в
+                                        // приложении подзаголовок остаётся двухстрочным.
+                                        subtitleMaxLines = 3,
                                         onClick = { onSelectCity(item) },
                                         trailing = {
                                             Column(horizontalAlignment = Alignment.End) {
@@ -174,6 +187,25 @@ fun CityListScreen(
                                         }
                                     )
                                 }
+                            }
+                        }
+
+                        item(key = "add_city") {
+                            Spacer(Modifier.height(KochSpace.m))
+                            KochCard(padding = PaddingValues(vertical = KochSpace.xs)) {
+                                KochListRow(
+                                    title = "Добавить город",
+                                    subtitle = "Поиск по названию",
+                                    onClick = onAddCity,
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = colors.accent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                )
                             }
                         }
 

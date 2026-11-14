@@ -28,6 +28,9 @@ object MetNoForecastParser {
         coerceInputValues = true
     }
 
+    private const val HOUR_MS = 3_600_000L
+    private const val DAY_MS = 24 * HOUR_MS
+
     private data class Point(
         val timeMs: Long,
         val localDate: String,
@@ -36,7 +39,16 @@ object MetNoForecastParser {
         val humidity: Double?,
         val windSpeed: Double?,
         val symbolCode: String?,
-        val precipitation: Double?
+        val precipitation: Double?,
+        val precipitation6h: Double?,
+        val precipitation12h: Double?
+    )
+
+    /** Кусок ряда осадков: значение за [durationHours] часов, начиная с [startMs]. */
+    private data class PrecipitationSpan(
+        val startMs: Long,
+        val durationHours: Int,
+        val amount: Double
     )
 
     fun parse(
@@ -80,7 +92,9 @@ object MetNoForecastParser {
                 humidity = details.relativeHumidity,
                 windSpeed = details.windSpeed,
                 symbolCode = symbol,
-                precipitation = item.data.next1Hours?.details?.precipitationAmount
+                precipitation = item.data.next1Hours?.details?.precipitationAmount,
+                precipitation6h = item.data.next6Hours?.details?.precipitationAmount,
+                precipitation12h = item.data.next12Hours?.details?.precipitationAmount
             )
         }.sortedBy { it.timeMs }
 
@@ -103,9 +117,12 @@ object MetNoForecastParser {
             windSpeed10m = currentPoint.windSpeed
         )
 
+        // Почасовой ряд — следующие 24 часа от текущей точки, а не «остаток суток»:
+        // вечером старый фильтр по localDate оставлял 1–3 часа и график осадков пустел.
+        val horizonEnd = currentPoint.timeMs + DAY_MS
         val hourlyPoints = points
-            .filter { it.localDate == currentPoint.localDate && it.timeMs >= currentPoint.timeMs }
-            .ifEmpty { listOf(currentPoint) }
+            .filter { it.timeMs >= currentPoint.timeMs && it.timeMs < horizonEnd }
+            .take(24)
 
         val hourly = HourlyWeatherDto(
             time = hourlyPoints.map { hourlyTimeFormat.format(Date(it.timeMs)) },
@@ -114,7 +131,9 @@ object MetNoForecastParser {
             weatherCode = hourlyPoints.map { point ->
                 MetNoSymbolMapper.toWmo(point.symbolCode) ?: currentWmo
             },
-            windSpeed10m = hourlyPoints.map { it.windSpeed }
+            windSpeed10m = hourlyPoints.map { it.windSpeed },
+            // Реальные мм/ч из next_1_hours; у точки без поля — null, не 0.
+            precipitation = hourlyPoints.map { it.precipitation }
         )
 
         val pointsByDate = points.groupBy { it.localDate }
@@ -123,6 +142,7 @@ object MetNoForecastParser {
         val dailyCodes = mutableListOf<Int>()
         val dailyMaxs = mutableListOf<Double>()
         val dailyMins = mutableListOf<Double>()
+        val dailyPrecipitation = mutableListOf<Double?>()
 
         for (date in dates) {
             val dayPoints = pointsByDate[date].orEmpty()
@@ -138,6 +158,8 @@ object MetNoForecastParser {
             dailyCodes.add(wmo)
             dailyMaxs.add(dayPoints.maxOf { it.temperature })
             dailyMins.add(dayPoints.minOf { it.temperature })
+            // Сумма за сутки: 1-часовые + 6-часовые + 12-часовые количества без дублей.
+            dailyPrecipitation.add(sumDailyPrecipitation(dayPoints))
         }
 
         if (dailyTimes.isEmpty()) {
@@ -154,9 +176,46 @@ object MetNoForecastParser {
                 weatherCode = dailyCodes,
                 temperature2mMax = dailyMaxs,
                 temperature2mMin = dailyMins,
-                precipitationProbabilityMax = null
+                precipitationProbabilityMax = null,
+                precipitationSum = dailyPrecipitation
             )
         )
+    }
+
+    /**
+     * Суточная сумма осадков, мм.
+     *
+     * В реальном compact-ответе MET (например `shots/fq3_metno_live.json`) ближние
+     * точки содержат одновременно `next_1_hours` и `next_6_hours`, причём 6-часовое
+     * значение — скользящее окно от этой же точки. Простое сложение всех найденных
+     * полей удвоило бы осадки, поэтому суммируем непересекающиеся интервалы:
+     * сначала часовые (по 1 ч), затем 6- и 12-часовые только там, где этих часов
+     * ещё нет. Значения за дальние дни (только 6-часовые точки) суммируются целиком.
+     *
+     * null — если за сутки не было ни одного значения (не подменяем нулём).
+     */
+    private fun sumDailyPrecipitation(dayPoints: List<Point>): Double? {
+        val spans = ArrayList<PrecipitationSpan>()
+        for (point in dayPoints) {
+            point.precipitation?.let { spans.add(PrecipitationSpan(point.timeMs, 1, it)) }
+            point.precipitation6h?.let { spans.add(PrecipitationSpan(point.timeMs, 6, it)) }
+            point.precipitation12h?.let { spans.add(PrecipitationSpan(point.timeMs, 12, it)) }
+        }
+        if (spans.isEmpty()) return null
+
+        // Короткие интервалы важнее: часовые данные точнее 6- и 12-часовых.
+        val ordered = spans.sortedWith(compareBy({ it.durationHours }, { it.startMs }))
+        val accepted = ArrayList<Pair<Long, Long>>()
+        var total = 0.0
+        for (span in ordered) {
+            val start = span.startMs
+            val end = start + span.durationHours * HOUR_MS
+            val overlaps = accepted.any { (takenStart, takenEnd) -> start < takenEnd && takenStart < end }
+            if (overlaps) continue
+            accepted.add(start to end)
+            total += span.amount
+        }
+        return total
     }
 
     private fun parseUtcMillis(raw: String): Long? {

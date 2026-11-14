@@ -2,6 +2,7 @@ package com.koch.weather.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalTaxi
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,15 +37,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.koch.weather.data.model.AdCreative
 import com.koch.weather.data.model.PremiumOffer
 import com.koch.weather.ui.components.RemotePhoto
+import com.koch.weather.ui.components.adIconFor
 import com.koch.weather.ui.design.KochCard
 import com.koch.weather.ui.design.KochMaterial
 import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.KochShape
+import com.koch.weather.ui.theme.KochSize
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
 import com.koch.weather.ui.theme.LocalKochColors
@@ -54,19 +61,35 @@ import com.koch.weather.ui.theme.LocalKochColors
  * остальные — как в refs/theme_copper.png / f_063.
  */
 
-/** «А знали ли вы…» — по референсу это строка без плашки (refs/premium_ads.png, 1:57). */
+/**
+ * «А знали ли вы…» — по референсу это строка без плашки (refs/premium_ads.png, 1:57).
+ *
+ * Тап по блоку и явная строка «Другой факт» (иконка `Refresh` + `KochType.caption`)
+ * листают факты: [onClick] ведёт в `MainScreenViewModel.refreshAiFact()`. До ревью
+ * Фазы 5 блок открывал модалку травы, а `onRefreshAiFact` был мёртвым параметром
+ * (item 12). Долгое нажатие — отдельный вход в сатирическую блокировку «Пора на
+ * улицу!» (R11): у VM пока нет таймера «слишком долго смотрели погоду», поэтому
+ * блокировка остаётся достижимой этим жестом, а обычный тап честно листает факты.
+ */
 @Composable
 internal fun AiFactCard(
     aiFact: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val colors = LocalKochColors.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(KochRadius.panel))
-            .clickable(onClick = onClick)
-            .padding(vertical = KochSpace.s),
+            // M5: блок лежал прямо на фото и на светлой полосе «Медного заката» давал
+            // 3.3 : 1 (тело) и 2.46 : 1 (заголовок). Тёмный скрим 48 % держит контраст
+            // ≥4.5 : 1 на самом светлом пикселе любого из семи фонов (замер по фонам
+            // res/drawable-nodpi + скрим KochBackground: min 4.8 : 1 для золота заголовка,
+            // 5.9 : 1 для тела) и не превращает блок в плотную карточку.
+            .background(Color.Black.copy(alpha = 0.48f))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = KochSpace.l, vertical = KochSpace.s),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -90,6 +113,28 @@ internal fun AiFactCard(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 2.dp)
         )
+        // Явная, видимая кнопка-строка: без неё «Другой факт» существовал только в VM.
+        Row(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .clip(KochShape.pill)
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(horizontal = KochSpace.s, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                tint = colors.accentPromo,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Другой факт",
+                style = KochType.caption,
+                color = colors.accentPromo
+            )
+        }
     }
 }
 
@@ -159,9 +204,17 @@ internal fun PremiumBanner(
     }
 }
 
-/** Реклама: зелёный градиент, фото справа во всю высоту (refs/premium_ads.png, 2:17). */
+/**
+ * Реклама (item 9 фазы 5): зелёный градиент, метка «РЕКЛАМА», бренд, заголовок и текст
+ * реального креатива из `uiState.adCreative`; фото справа во всю высоту.
+ *
+ * Раньше здесь были пришиты «Дизайнеры больше не нужны» и кнопка покупки премиума —
+ * теперь контент приходит из [AdCreative], а CTA-пилюля повторяет её `ctaLabel`
+ * и ведёт в функцию креатива (маршрутизацию делает вызывающий экран).
+ */
 @Composable
 internal fun AdBannerCard(
+    creative: AdCreative,
     imageUrl: String?,
     onClick: () -> Unit
 ) {
@@ -169,7 +222,10 @@ internal fun AdBannerCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            // D-3 (feature-qa, run 15): при 148 dp тело креатива «…Достав…» обрывалось
+            // на второй строке. +16 dp высоты и третья строка тела — фраза («Доставка
+            // курьером за 30 минут…», «…доставка бесплатно.») читается целиком.
+            .height(164.dp)
             .clip(RoundedCornerShape(KochRadius.card))
             .background(
                 Brush.verticalGradient(
@@ -183,36 +239,93 @@ internal fun AdBannerCard(
                 .weight(1f)
                 .fillMaxHeight()
                 .padding(KochSpace.m),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "РЕКЛАМА",
-                style = KochType.microCaps,
-                color = colors.accentAdLabel
-            )
-            Text(
-                text = "Дизайнеры больше не нужны!",
-                style = KochType.bodyStrong,
-                color = Color.White,
-                maxLines = 2
-            )
-            Text(
-                text = "Научим делать сайты с помощью нейросетей за 15 минут",
-                style = KochType.sub,
-                color = Color.White.copy(alpha = 0.85f),
-                maxLines = 2
-            )
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "РЕКЛАМА",
+                        style = KochType.microCaps,
+                        color = colors.accentAdLabel
+                    )
+                    Spacer(Modifier.width(KochSpace.s))
+                    Text(
+                        text = creative.brandRu,
+                        style = KochType.caption,
+                        color = Color.White.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = creative.headline,
+                    style = KochType.bodyStrong,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // M2c + D-3: тело креатива обрезалось «…зонты с» / «…Достав…». Три строки
+                // с Ellipsis: предложение целиком, честный «…» — только на заведомо
+                // длинных хвостах (кадр 16/16c с этим согласован).
+                Text(
+                    text = creative.body,
+                    style = KochType.sub,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            // CTA-пилюля: видно, куда ведёт баннер, без отдельной «кнопки покупки».
+            Row(
+                modifier = Modifier
+                    .clip(KochShape.pill)
+                    .background(Color.White.copy(alpha = 0.18f))
+                    .padding(start = KochSpace.s, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = creative.ctaLabel,
+                    style = KochType.chip,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
-        RemotePhoto(
-            url = imageUrl,
-            contentDescription = "Реклама: ноутбук",
-            modifier = Modifier
-                .width(104.dp)
-                .fillMaxHeight(),
-            shape = RectangleShape,
-            placeholderIcon = Icons.Default.AutoAwesome,
-            placeholderTint = Color.White.copy(alpha = 0.7f)
-        )
+        if (imageUrl != null) {
+            RemotePhoto(
+                url = imageUrl,
+                contentDescription = "Реклама: ${creative.brandRu}",
+                modifier = Modifier
+                    .width(104.dp)
+                    .fillMaxHeight(),
+                shape = RectangleShape,
+                placeholderIcon = adIconFor(creative.imageCategory),
+                placeholderTint = Color.White.copy(alpha = 0.7f)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .width(104.dp)
+                    .fillMaxHeight()
+                    .background(Color.White.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = adIconFor(creative.imageCategory),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(34.dp)
+                )
+            }
+        }
     }
 }
 
@@ -258,7 +371,9 @@ internal fun ServicesGrid(
                 iconTint = colors.accentPromo,
                 chip = "Куда едем?",
                 onClick = onOpenTaxi,
-                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
+                // m2: у «Такси»/«Еды» контента на ~40 %, низ карточки пустовал.
+                // Токен serviceCard (104 dp) прижат к содержимому.
+                modifier = Modifier.weight(1f).heightIn(min = KochSize.serviceCard)
             )
             ServiceCard(
                 label = "Еда",
@@ -266,7 +381,7 @@ internal fun ServicesGrid(
                 iconTint = Color(0xFFFF8A65),
                 chip = "Что желаете?",
                 onClick = onOpenFood,
-                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
+                modifier = Modifier.weight(1f).heightIn(min = KochSize.serviceCard)
             )
         }
     }
@@ -320,7 +435,8 @@ private fun ServiceCard(
                 text = title,
                 style = KochType.bodyStrong,
                 color = colors.textPrimary,
-                maxLines = 3
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
         }
         if (description != null) {
@@ -328,7 +444,8 @@ private fun ServiceCard(
                 text = description,
                 style = KochType.sub,
                 color = colors.textTertiary,
-                maxLines = 4
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
             )
         }
         if (chip != null) {
@@ -344,7 +461,8 @@ private fun ServiceCard(
                     text = chip,
                     style = KochType.chip,
                     color = colors.textPrimary.copy(alpha = 0.9f),
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.width(KochSpace.s))
                 Box(

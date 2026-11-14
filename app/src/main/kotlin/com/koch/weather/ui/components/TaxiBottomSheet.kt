@@ -47,7 +47,6 @@ import com.koch.weather.ui.design.KochPrimaryButton
 import com.koch.weather.ui.design.KochSection
 import com.koch.weather.ui.design.KochSheet
 import com.koch.weather.ui.design.KochTextButton
-import com.koch.weather.ui.design.formatByn
 import com.koch.weather.ui.design.formatRuAmount
 import com.koch.weather.ui.theme.KochBorderWidth
 import com.koch.weather.ui.theme.KochRadius
@@ -161,6 +160,10 @@ fun TaxiBottomSheet(
                     TaxiTariffType.values().forEach { tariff ->
                         TariffCard(
                             tariff = tariff,
+                            // Цена — для выбранного маршрута и реальных пробок,
+                            // а не фиксированная цифра «за поездку».
+                            priceRu = taxiState.priceByTariff[tariff] ?: tariff.minFareRu,
+                            durationMin = taxiState.durationMinByTariff[tariff],
                             selected = tariff == taxiState.selectedTariff,
                             onClick = { onSelectTariff(tariff) },
                             // Делят доступную ширину поровну: на 375.7 dp это ≈106 dp на карточку,
@@ -183,7 +186,7 @@ fun TaxiBottomSheet(
                 } else {
                     KochPrimaryButton(
                         text = "Вызвать ${taxiState.selectedTariff.titleRu} за " +
-                            "${formatRuAmount(taxiState.selectedTariff.basePriceRu)} ₽",
+                            "${formatRuAmount(taxiState.selectedPriceRu ?: taxiState.selectedTariff.minFareRu)} ₽",
                         onClick = {
                             launchError = null
                             showLaunchConfirm = true
@@ -235,6 +238,8 @@ fun TaxiBottomSheet(
 @Composable
 private fun TariffCard(
     tariff: TaxiTariffType,
+    priceRu: Int,
+    durationMin: Int?,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -268,23 +273,17 @@ private fun TariffCard(
             maxLines = 2
         )
         Text(
-            text = "~${tariff.etaMinutes} мин",
+            text = "~${durationMin ?: tariff.etaMinutes} мин",
             style = KochType.caption,
             color = colors.textTertiary,
             maxLines = 1
         )
         Spacer(Modifier.heightIn(min = KochSpace.s))
         Text(
-            text = "${formatRuAmount(tariff.basePriceRu)} ₽",
+            text = "${formatRuAmount(priceRu)} ₽",
             style = KochType.numberPrice,
             color = colors.textPrimary,
             // На узких экранах (320 dp) цена переносится, а не обрезается многоточием.
-            maxLines = 2
-        )
-        Text(
-            text = "${formatByn(tariff.basePriceByn)} BYN",
-            style = KochType.caption,
-            color = colors.textTertiary,
             maxLines = 2
         )
     }
@@ -345,7 +344,7 @@ private fun ActiveRideCard(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${formatRuAmount(ride.priceRu)} ₽ · ${formatByn(ride.priceByn)} BYN",
+                text = "${formatRuAmount(ride.priceRu)} ₽",
                 style = KochType.numberRow,
                 color = colors.textPrimary
             )

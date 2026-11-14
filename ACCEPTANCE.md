@@ -2,7 +2,12 @@
 
 > Ведёт `judge`. Обновляется после каждой фазы. PASS без пути к доказательству не ставится.
 > «Не проверено» и «вне фазы» — не PASS. Исторические PASS прошлых фаз не переносятся
-> на текущую: UI мог регрессировать.
+> на текущую: UI и данные могли регрессировать.
+>
+> **Текущий статус: Фаза 5 — PASS** (judge, 2026-11-15 00:25 MSK). 14/14 замечаний
+> пользователя закрыты на финальной debug-сборке 23:33:17; role-PASS: `feature-qa`,
+> `visual-critic`, `code-reviewer`, `perf-qa`. Подробный разбор — в конце файла и в
+> `_history/reports/phase-5/judge.md`.
 
 ## Как пользоваться
 
@@ -10,61 +15,145 @@
 - `Проверяет` — основная роль; `judge` делает выборочный spot-check, а не полный аудит.
 - `Доказательство` — путь к скриншоту, логу, отчёту или APK. Без пути статус не PASS.
 - Для R12–R15 в `refs/` нет кадров: критерий — состав и поведение, а не пиксель-в-пиксель.
+- `P1–P14` — 14 замечаний пользователя Фазы 5 (`USER_REQUIREMENTS.md` §8). `R1–R23`
+  сохраняют прежнюю нумерацию и обновлены по доказательствам Фазы 5.
 
-## Итог фазы 4 (judge, 2026-11-14 11:03 MSK)
+## Итог фазы 4 (историческая запись, снята Фазой 5)
 
-**Вердикт: REJECT.** Финальный benchmark `44bc6d6` собран 10:50:46 и установлен `-r` в 10:52:46,
-но после `adb reboot` телефон ушёл в secure-lock: кадров, logcat и замеров на этой сборке нет.
-Доказательства ниже сняты на `05ee399` (r10), `cbef2d1` (r9), `8be22d8` (r7/r8) и `b8c7290` (fqf);
-это старше последних правок `dc44ea0` (подсказка облаков + бейдж «Доступно») и `44bc6d6` (тарифы такси).
+**Вердикт фазы 4: REJECT.** Финальный benchmark `44bc6d6` был собран 10:50:46 и установлен
+10:52:46, но после `adb reboot` телефон ушёл в secure-lock: кадров, logcat и замеров на этой
+сборке не было. Доказательства были сняты на более старых сборках; блокерами были R18
+(чистый замер), R10/F-3 (видео облаков), R6 (кадр рулетки), R8 (тарифы такси), R22 (logcat
+финальной сборки) и ретест `feature-qa` на финальном APK.
 
-- PASS ролей: `code-reviewer` — PASS по дельте M1/M2 (144 теста, HEAD `05ee399`); `visual-critic` —
-  FAIL по дельте (F-3); `perf-qa` — FAIL по R18; `feature-qa` — PASS только на `b8c7290`.
-- Блокеры приёмки: R18 (чистый замер), R10/F-3 (видео), R6 (кадр рулетки после `dc44ea0`),
-  R8 (тарифы такси после `44bc6d6`), R22 (logcat финальной сборки), ретест `feature-qa` на финальном APK.
-- 7timer: сценарий закрыт кадром `shots/r7_22b_source_7timer.png` на `8be22d8` (футер «Данные: 7timer»);
-  пометка BLOCKED в `feature-qa-final.md` устарела, но role-PASS `feature-qa` всё равно нужен на финальной сборке.
+Все эти пункты закрыты в Фазе 5; см. «Закрытие открытых пунктов фазы 4» ниже. Запись
+оставлена как история решения и не является текущим статусом.
 
-## Матрица
+## Фаза 5 — матрица 14 замечаний пользователя (P1–P14)
 
-| ID | Требование | Критерий приёмки | Проверяет | Доказательство | Статус |
-|----|------------|------------------|-----------|----------------|--------|
-| R1 | Чистый главный экран | `refs/clean_main.png`: шапка (ТЕКУЩЕЕ МЕСТО, город, температура, состояние, макс/мин), почасовой ряд, 10 дней, порядок блоков | visual-critic | `shots/r9_01_main_blue_status.png`, `shots/r9_02_main_copper_status.png`, `shots/r7_02_scrolled_footer.png` | **BLOCKED**: шапка и порядок — r9_01/r9_02; почасовой ряд и 10 дней только r7_02 (до `cbef2d1`, `TenDayForecastCard`); нужен скролл-кадр на финальном APK |
-| R2 | Сегменты условий | `refs/segments.png`: 5 сегментов (Погод. усл., Осадки, Ветер, Одежда, Пробки), контент переключается | visual-critic, feature-qa | `shots/r7_19_segment_rain.png`, `shots/r7_20_segment_wind.png`, `shots/r9_01_main_blue_status.png` | **PASS**: 5 чипов, «Осадки»/«Ветер» переключаются, 4.9 м/с — runtime M1 на `8be22d8`; код сегментов после не менялся |
-| R3 | Оценка погоды и зонтики | `refs/rate_stars.png`: 3.5★, подсвечены 3 звезды, строка «Зонтики от 29.99 BYN / Смотреть ›» | visual-critic, feature-qa | `shots/r7_22b_source_7timer.png`, `shots/r7_19_segment_rain.png`, `shots/r7_20_segment_wind.png` | **PASS**: 3.5★, 3 звезды, «Зонтики от 29.99 BYN / Смотреть ›»; `RatingCard`/`UmbrellaRow` после `8be22d8` не менялись |
-| R4 | Таб-бар и темы | `refs/bottom_nav.png`, `refs/theme_copper.png`: состав табов, активное состояние, читаемость на голубой и медной теме | visual-critic | `shots/r9_01_main_blue_status.png`, `shots/r9_02_main_copper_status.png` | **PASS**: 5 табов, активная «Главная», читаемость на обеих темах |
-| R5 | Путешествия и лутбоксы | `refs/cards_travel.png`: сетка 2×2, тексты RU, белый контрастный текст лутбоксов, нет ухода под бар | visual-critic, feature-qa | `shots/r9_01_main_blue_status.png`, `shots/r9_02_main_copper_status.png` | **PASS**: сетка 2×2, RU-тексты, контраст, без ухода под бар; кадры после `cbef2d1` |
-| R6 | Рулетка тем / «Поздравляем!» | `refs/congrats.png`: iPhone, жёлтые стрелки ◀ ▶, чипы тем, «Доступно ✓» не обрезано, «Продолжить» | visual-critic, feature-qa | `shots/r9_03_roulette.png`, `_history/reports/phase-4/visual-critic-delta.md` | **BLOCKED**: раскладка PASS (телефон 338×460 px, стрелки, чипы, «Доступно» над чипами, «Продолжить»), но r9_03 старше `dc44ea0`: старый бейдж 1.27:1; нужен новый кадр |
-| R7 | Медная тема | `refs/theme_copper.png`: палитра, карточки, таб-бар, контраст текста | visual-critic | `shots/r9_02_main_copper_status.png`, `shots/r9_05_list_footer.png` | **PASS**: палитра, карточки, таб-бар, контраст; кадры после `653fc0f`/`cbef2d1` |
-| R8 | Такси и еда | `refs/cards_taxi_food.png`: карточки 2×2, чипы «Куда едем? / Что желаете?», открытие шторок | visual-critic, feature-qa | `shots/r10_02_taxi.png`, `shots/r10_03_food.png`, `shots/r10_04_flight.png`, `shots/r10_05_flight_from_travel.png` | **BLOCKED**: еда/лутбоксы/билеты — r10_03–r10_05; такси после `44bc6d6` (LazyRow→Row) не снято; риск выхода третьего тарифа за content-width 335.7 dp |
-| R9 | Премиум, реклама, AI-факт | `refs/premium_ads.png`: «Чтобы точно узнать погоду, нужно посмотреть в окно», 5.99 BYN, зелёный баннер «РЕКЛАМА» | visual-critic, feature-qa | `shots/r7_03_ad_banner.png`, `shots/r7_10_premium.png`, `shots/r7_11_premium_confirm.png`, `shots/r7_23_after_purchase.png` | **PASS**: реклама целиком, пейволл, премиум без баннера; ad/paywall после `8be22d8` не менялись |
-| R10 | Облака пальцем | `refs/cloud_swipe.png`: облака закрывают шапку, жест открывает погоду, подсказка «Прогоните облака пальцем» | visual-critic | `shots/r9_07_veil.png`, `shots/r9_08_after_swipes.png`, `shots/dynamics/r9_clouds.mp4`, `app/src/main/kotlin/com/koch/weather/ui/components/CloudVeilOverlay.kt` | **BLOCKED**: статика r9_07 PASS; фикс F-3 в `dc44ea0` (`onDragEnd` не возвращает hint), но видео снято до фикса и показывает наложение; нужно новое видео |
-| R11 | Блокировка «Пора на улицу!» | `refs/grass_lock.png`: тексты, зона загрузки фото, синяя кнопка «Открыть камеру», без крестика | visual-critic, feature-qa | `shots/r7_12_grass.png` | **BLOCKED**: r7_12 на `8be22d8`, после него менялся `KochSheet` (`cbef2d1`/`05ee399`); нужен свежий кадр шторки травы |
-| R12 | Экран «Карта» | Нет ref: настоящая карта OSM (osmdroid), центр = координаты города, зум, маркер; работает из РФ без VPN и ключа | feature-qa | `shots/r7_15_map.png`, `shots/fqf_04_map.png`, `shots/fqf_05_map_marker.png`, `shots/fqf_07_pinch.png`, `shots/fqf_provider_curl.txt` | **PASS**: OSM-тайлы, центр СПб, маркер и info-window, зум; curl OSM 200 без VPN/ключа; код карты после не менялся |
-| R13 | Экран «Список» | Нет ref: полноэкранный список сохранённых городов с температурой, переход на город | feature-qa, visual-critic | `shots/r9_05_list_footer.png`, `shots/fqf_01_list.png`, `shots/fqf_36.xml` | **PASS**: полноэкранный список, температуры, «Нет данных», футер; r9_05 после `653fc0f`; переход на город — fqf_36 |
-| R14 | Экран «Поиск» | Нет ref: полноэкранный поиск, живой geocoding Open-Meteo, выбор города | feature-qa | `shots/r7_17_search.png`, `shots/fqf_02_search.png`, `shots/fqf_02_search_results.png` | **PASS**: полноэкранный поиск, живая выдача Moscow, выбор города; код поиска после не менялся |
-| R15 | Экран «Вид» | Нет ref: полноэкранный выбор оформления (темы из лутбоксов + рулетка) | feature-qa, visual-critic | `shots/r7_14_view.png`, `shots/fqf_08_view.png`, `shots/fqf_09_theme_blue_view.png`, `shots/fqf_17_persist.png` | **PASS**: «Оформление», 6 тем, бейджи, применение и персист; `ThemeGalleryScreen` после `8be22d8` не менялся |
-| R16 | Deep links | Яндекс Go: маршрут по координатам; Яндекс Еда; веб-фолбэк, если приложения нет | feature-qa | `shots/fqf_19_taxi_sheet.png`…`fqf_23_taxi_chrome.png`, `fqf_25_food_sheet.png`…`fqf_29_food_chrome.png`, `shots/fqf_intents.txt`, `shots/r10_02_taxi.png` | **PASS**: такси/еда, подтверждение, VIEW-intent и веб-фолбэк; intent-код не менялся в `44bc6d6` |
-| R17 | Реальные фото | Coil по URL, источники доступны из РФ (Wikimedia Commons), плейсхолдер при загрузке/ошибке | feature-qa, visual-critic | `shots/r7_07_food.png`, `shots/r7_09_flight.png`, `shots/r10_03_food.png`, `shots/r10_04_flight.png`, `shots/fq_sources_device.txt` | **BLOCKED**: фото грузятся, источник доступен, но плейсхолдер при загрузке/ошибке runtime не проверен; `feature-qa` R17 не тестировал |
-| R18 | Производительность | p50 кадра ≤16 ms на G8342, 60 FPS, release-подобная сборка (`isDebuggable=false`), без системного jank | perf-qa | `shots/perf_final_scroll.txt`, `shots/perf_run10_scroll.txt`, `shots/perf_run12_scroll_clean.txt`, `_history/reports/phase-4/perf-qa-final.md` | **FAIL**: p50 5–10 мс PASS, но jank 23–27 % на скролле; чистый замер не снят — `perf_run12_scroll_clean.txt` 43 байта, «No process found»; loadavg 4.2–4.8 |
-| R19 | Оффлайн | Кэш последнего прогноза в DataStore, баннер «нет сети», скрытие при восстановлении | feature-qa | `shots/r7_21_offline.png`, `shots/r7_22_after_online.png`, `shots/r7_22b_source_7timer.png`, `shots/fqf_39_offline.png`, `shots/fqf_40_offline_footer.png`, `shots/fqf_42_online.png`, `shots/fqf_43_online_footer.png`, `shots/fqf_cache_before_offline.pb`, `shots/fqf_cache_after_online.pb` | **PASS**: баннер кэша → оффлайн → онлайн без перезапуска; 7timer end-to-end; r7_21/r7_22/r7_22b на `8be22d8`, data-слой после не менялся |
-| R20 | Города | Санкт-Петербург по умолчанию, затем Москва; поиск и переключение | feature-qa | `shots/fqf_00_launch.png`, `shots/fqf_02_search_results.png`, `shots/fqf_03_moscow.png`, `shots/r7_17_search.png` | **PASS**: СПб по умолчанию, поиск Moscow за 4.2 с, выбор Москвы; код городов после не менялся |
-| R21 | Без заглушек и фейков | Нет TODO/заглушек; при отсутствии данных — «нет данных», а не выдуманные цифры | code-reviewer, feature-qa | `shots/fqf_01_list.png`, `shots/fqf_32_dubai.png`, `shots/fqf_35_dubai_traffic.png`, `shots/r9_05_list_footer.png`, `shots/r7_20_segment_wind.png` | **PASS**: «Нет данных» без фейковых цифр; ветер в м/с на `8be22d8`; M1/M2 закрыты кодом и тестами |
-| R22 | Сборка и стабильность | `assembleDebug` OK, install на G8342 OK, logcat без крэшей/ANR, `testDebugUnitTest` PASS | device-qa, code-reviewer, judge | `shots/build_run12_benchmark.txt`, `_history/reports/phase-4/device-qa.md`, `shots/logcat_run10.txt`, `_history/reports/phase-4/code-reviewer-delta.md` | **BLOCKED**: benchmark `44bc6d6` собран и установлен 10:52:46, но приложение не запускалось и logcat не снят (secure-lock); `assembleDebug` последний на `8be22d8`; unit-тесты 144 PASS на `05ee399` |
-| R23 | RU-тексты и отсутствие обрезаний | Все тексты по-русски, дословно; нет обрезаний/наложений на всех экранах фазы | visual-critic | `shots/r9_01_main_blue_status.png`, `shots/r9_02_main_copper_status.png`, `shots/r9_04_daily_detail.png`, `shots/r9_05_list_footer.png`, `shots/r9_07_veil.png`, `shots/r9_08_after_swipes.png` | **BLOCKED**: F-1/F-2/F-4 закрыты (r9_01/02/04/05), но F-3 не подтверждён видео, а тарифы такси после `44bc6d6` не пересняты; полного прохода «без обрезаний» на финальном APK нет |
+| ID | Требование (кратко) | Критерий приёмки | Проверяет | Доказательство | Статус | Ограничение / примечание |
+|----|---------------------|------------------|-----------|----------------|--------|--------------------------|
+| P1 | Локальные качественные блюр-фоны всех 7 тем | 7 локальных JPEG 1080×1920 с блюром, встроены в APK, фон рисуется из ресурса; реальные фото и свободные лицензии | visual-critic, code-reviewer | `app/src/main/res/drawable-nodpi/theme_*.jpg` (7 файлов), `app/src/main/kotlin/com/koch/weather/data/model/ThemeBackgrounds.kt`, `ATTRIBUTIONS.md`, `_history/reports/phase-5/data-coder-assets.md`, `shots/r14_12_theme_blue.png`, `r14_12_theme_copper.png`, `r14_12_theme_forest.png`, `r14_18_gallery.png` | **PASS** | Полноэкранная главная снята для 3 тем из 7, галерея — для 6 (7-я, «Северное сияние», ниже видимой области); все 7 ассетов проверены по размеру/весу/лицензии, маппинг `AppThemeMode.backgroundRes` — кодом и тестами |
+| P2 | Реальные цены такси Яндекс Go СПб | Цена зависит от маршрута и тарифа; минимум/км/мин по официальным тарифам; без наценки при отсутствии данных о пробках; deep link в Яндекс Go / веб-фолбэк | feature-qa, code-reviewer | `_history/reports/phase-5/feature-qa.md` §1 п.7, `shots/r14_14a_taxi.png`, `r14_14b_taxi.png`, `fq15_33_taxi_sheet.png`, `fq15_34_taxi_airport.png`, `fq15_36_traffic_nodata.png`, `fq15_dumpsys_browser.txt` | **PASS** | 3,2 км → 260/363/591 ₽; 18,5 км → 848/1195/1892 ₽; Ultima — документированная оценка по Business; приложение Яндекс Go на устройстве отсутствует, проверен intent и штатный веб-фолбэк |
+| P3 | Навбар не исчезает ни на одной функции | Бар виден и нажимаем на всех 5 вкладках, включая «Карту», «Список», «Поиск» (в т.ч. при открытой клавиатуре) и «Вид» | feature-qa, visual-critic | `shots/r14_01_navbar_themes.png`, `r14_02_navbar_list.png`, `r14_02b_navbar_map.png`, `r14_02c_navbar_search.png`, `r16_01_ime_search.png`, `fq16_ui1_ime.xml`, `fq16_ui3_map.xml` | **PASS** | D-1 (бар под IME) закрыт на финальной сборке: тапы по бару на y=952…987 переключают вкладку, в поле не печатается; подложка бара на «Карте» непрозрачная |
+| P4 | Одна механика рулетки — внутри лутбокса | Отдельной «Рулетки тем» и карточки в «Виде» нет; тема выпадает в лутбоксе, показывается «Поздравляем!», применяется только кнопкой и переживает перезапуск | visual-critic, feature-qa, code-reviewer | `shots/r14_18_gallery.png`, `r14_15_lootbox_reveal.png`, `r14_15c_theme_applied.png`, `fq15_46_theme_drop_before.png`, `fq15_47_theme_after_apply.png`, `fq15_48_home_theme_applied.png`, `fq15_49_theme_persist.png` | **PASS** | В коде остались только комментарии об удалённой отдельной рулетке; `ThemeGalleryScreen` — чистый выбор оформления; тема не применяется сама |
+| P5 | Анимация смены города свайпом | Анимированный переход (slide + fade), в слоях видны разные города/состояния; анимация не перезапускает всю ленту | visual-critic, code-reviewer | `shots/r14_03_swipe_a.png`, `r14_03_swipe_b.png`, `_history/reports/phase-5/visual-critic-delta.md` (M8), `_history/reports/phase-5/device-qa.md` §2 | **PASS** | Кадры сняты при `animator_duration_scale=10`; в `03_swipe_a` одновременно видны слои «ТЕКУЩЕЕ МЕСТО / Санкт-Петербург» и «ВЫБРАННЫЙ ГОРОД» с разными позициями пагинатора, в `03_swipe_b` — другой момент; видео `r14_swipe.mp4` transition не содержит (ограничение screenrecord, не дефект) |
+| P6 | Добавление городов из списка | В «Списке» есть вход «+»/«Добавить город», поиск открывается, город добавляется и выбирается; дубль не добавляется; температуры у всех городов | feature-qa | `shots/r14_04_city_add.png`, `r14_04b_city_list_after.png`, `r14_04c_list_loaded.png`, `fq15_09_list_before.png`, `fq15_10_add_from_list.png`, `fq15_11_search_kazan.png`, `fq15_12_kazan_added.png`, `fq15_13_search_dupe_state.png`, `fq15_14_list_5cities.png`, `fq15_ui6_dupe.xml` | **PASS** | Дубль «Казань» не создан (5 городов, не 6); в выдаче поиска «+» без текстовой подписи — косметика m11 |
+| P7 | «ТЕКУЩЕЕ МЕСТО» только для гео-города | СПб (гео) — «ТЕКУЩЕЕ МЕСТО», Москва/Сочи/Казань и добавленные — «ВЫБРАННЫЙ ГОРОД»; выбор переживает перезапуск | feature-qa, visual-critic | `shots/r14_05a_selected_city.png`, `r14_05b_current_place.png`, `fq15_15_home_spb.png`, `fq15_07_swipe_moscow.png`, `fq15_12_kazan_added.png`, `r16_03_last_city_restart.png` | **PASS** | Персист выбранного города добавлен отдельным ключом `selected_city_json`; после `force-stop` открывается Сочи/Казань, а не СПб |
+| P8 | Лутбокс: анимация, конфетти, вибрация | Закрытый сундук, тряска/открытие, конфетти, карточка приза с редкостью, вибрация при выпадении | visual-critic, code-reviewer | `shots/r14_06_lootbox_closed.png`, `r14_07a_lootbox_open1.png`, `r14_07b_lootbox_glow.png`, `r14_07c_lootbox_confetti.png`, `r14_07d_lootbox_reward.png`, `r14_vibrator.txt`, `r14_gfxinfo_lootbox.txt` | **PASS** | `screenrecord` на G8342 не фиксирует Compose-анимацию: `r14_lootbox.mp4` статичен (визуальный критик извлёк 480 кадров, diff ≤0,38); анимация доказана четырьмя стиллами 07a–d и записью вибратора `Waveform[0,40,60,40]`, uid `com.koch.weather` |
+| P9 | Ротация рекламы и понятный CTA | Не менее 4 креативов, разные заголовки/фото/CTA, метка «РЕКЛАМА», CTA ведёт в свою функцию, пейволл с пояснением | feature-qa, visual-critic | `shots/r14_08_ad_creative_a.png`, `r14_09_ad_creative_b.png`, `fq15_28_ad_open_a.png`, `fq15_31_ad_open_b.png`, `fq15_29_ad_cta_food.png`, `fq15_32_paywall_from_ad.png`, `fq15_51_ad_umbrella.png`, `fq15_52_umbrella_shop.png`, `r16_02_ad_banner.png` | **PASS** | Ротация `(dayOfYear + openCount) % 4`; подряд открыты 4 разных креатива; тело «Магазина зонтов» всё ещё обрезается с «…» (косметика); в iPhone-креативе «0.001 %» с точкой; вторичный текст на светлых темах 2,64:1 |
+| P10 | Рабочий график осадков | мм/ч по часам, ось Y в мм, сумма за 24 ч; при отсутствии мм — проценты или честное «Нет данных об осадках», не «—» на весь ряд; деталь дня с мм | feature-qa, visual-critic | `shots/r14_10_rain_chart.png`, `r14_10c_rain_spb.png`, `r14_17b_daily_precip.png`, `fq15_18_precip_sochi.png`, `fq15_16b_precip_spb_scrolled.png`, `fq15_19_daily_detail.png`, `fq15_ui11_precip_sochi.xml` | **PASS** | Данные MET Norway: «Σ 15,4 мм за 24 часа» (Сочи), компактное «Осадков не ожидается» (СПб), «Осадки 22,7 мм» в детали дня; ось исправлена (M4), остаётся «Сейчас» на 3-часовом слоте и капс «ММ» |
+| P11 | Убрать Минск и BYN, перейти на ₽ | Нет упоминаний Минска/Беларуси/BYN в `app/src/main` и UI; премиум 179/899 ₽, зонты в ₽, билеты в ₽; Минск заменён на Сочи | code-reviewer, feature-qa | `_history/reports/phase-5/code-reviewer-delta.md` §1, `app/src/test/kotlin/com/koch/weather/data/RussianContentGuardTest.kt`, `shots/r14_13_premium_rub.png`, `r14_13b_umbrella.png`, `fq15_32_paywall_from_ad.png`, `fq15_52_umbrella_shop.png` | **PASS** | Независимый скан `app/src/main` (Минск, minsk, BYN, Беларус; без учёта регистра) — 0 совпадений; упоминание «5.99» осталось только в историческом комментарии `PremiumModels.kt`; тест-гард регистронезависим и сканирует `.kt` + `.xml` |
+| P12 | Совет/факт меняются | «Другой факт» меняет текст, не открывает траву; факт детерминирован на день и переживает перезапуск; совет по одежде зависит от дня/города/погоды | feature-qa, code-reviewer | `shots/r14_16b_clothing.png`, `r14_16c_fact_refreshed.png`, `fq15_20_fact_changed.png`, `fq15_ui51_fact1.xml`, `fq15_ui52_fact2.xml`, `r14_16d_grass.png`, `_history/reports/phase-5/code-reviewer-delta.md` §4 | **PASS** | Два перезапуска — один и тот же факт; «Другой факт» даёт другой; long-press по блоку открывает «Пора на улицу!». LOW: если приложение не уходит в фон, на полуночи факт сменится при следующем `ON_START` |
+| P13 | Убрать «Развернуть» у оценки | Нет кнопки «Развернуть/Свернуть» и скрытого блока; средняя, звёзды и подпись согласованы | feature-qa, visual-critic | `shots/r14_11_rating_no_expand.png`, `fq15_17_rating_5stars.png`, `fq15_ui10_rating.xml` | **PASS** | В дампе 0 совпадений «Развернуть»; 3,5 ★ = 3 полных + половина; INFO D-6: голос 5★ почти не сдвигает среднюю (вес 9:1) |
+| P14 | Реальные виды погоды на завтра в лутбоксе | Погодный приз формируется по реальному `daily[1]` (дождь/снег/гроза/туман/солнце/облачно), текст «выпал/выпала … на завтра», без прогноза приз не выпадает | feature-qa, code-reviewer | `shots/r14_15b_weather_prize.png`, `fq15_25_weather_prize.png`, `fq15_cache_parsed.txt`, `_history/reports/phase-5/feature-qa.md` §1 п.4 | **PASS** | Два приза сверены с кэшем: Сочи — «солнце на завтра, +10…+15°» ↔ `daily[1]` code=0; СПб — «облачная погода на завтра, +3…+7°» ↔ code=3. LOW D-4: провайдер может дать «Ясно» и 12,9 мм в один день — приз следует коду дня |
 
-## Открытые пункты фазы 4 (REJECT)
+## Матрица R1–R23 (актуализация Фазы 5)
 
-| ID / роль | Что именно закрыть | Чем подтвердить |
+| ID | Требование | Критерий приёмки | Проверяет | Доказательство | Статус | Примечание |
+|----|------------|------------------|-----------|----------------|--------|------------|
+| R1 | Чистый главный экран | Шапка (метка, город, температура, состояние, макс/мин), почасовой ряд, 10 дней, порядок блоков | visual-critic | `shots/fq15_06d_home_top.png`, `fq15_06c_scrolled.png`, `r14_11_rating_no_expand.png`, `r14_05c_header_range.png` | **PASS** | Диапазон отдельной строкой, цифра не заходит на капсулу; почасовой ряд и 10-дневная карточка видны при скролле; все 10 строк в один кадр не влезают |
+| R2 | Сегменты условий | 5 сегментов, контент переключается, «Осадки» показывает мм/ч | visual-critic, feature-qa | `shots/r14_10_rain_chart.png`, `r14_10c_rain_spb.png`, `r14_16b_clothing.png`, `fq15_36_traffic_nodata.png` | **PASS** | «Погод. усл. / Осадки / Ветер / Одежда / Пробки»; переключение проверено, ветер в м/с, пробки — «Нет данных» при отсутствии |
+| R3 | Оценка погоды и зонтики | 3.5★, 3 полных + половина, «Зонтики от 649 ₽ / Смотреть ›», без «Развернуть» | visual-critic, feature-qa | `shots/r14_11_rating_no_expand.png`, `r14_13b_umbrella.png`, `fq15_52_umbrella_shop.png`, `app/src/main/kotlin/com/koch/weather/ui/main/MainWeatherCards.kt:654`, `WeatherModels.kt:264` | **PASS** | Строка зонтиков в кадре Run 15 не попала в видимую область; цена 649 ₽ подтверждена витриной `r14_13b` и кодом `UmbrellaRow`/`minPriceLabel`; звёзды 3,5 согласованы |
+| R4 | Таб-бар и темы | Состав табов, активное состояние, читаемость на голубой и медной теме, бар не просвечивает | visual-critic | `shots/r14_01_navbar_themes.png`, `r14_02_navbar_list.png`, `r14_02b_navbar_map.png`, `r14_12_theme_blue.png`, `r14_12_theme_copper.png` | **PASS** | M1 закрыт: подложка бара плотная на всех вкладках; 5 табов, активный таб читается |
+| R5 | Путешествия и лутбоксы | Сетка 2×2, RU-тексты, контраст, нет ухода под бар | visual-critic, feature-qa | `shots/fq15_06d_home_top.png`, `r14_12_theme_blue.png`, `r14_12_theme_copper.png` | **PASS** | «Путешествия / Лутбоксы / Такси / Еда», тексты RU, карточки не уходят под бар |
+| R6 | Рулетка тем / «Поздравляем!» | Тема выпадает в лутбоксе; экран «Поздравляем!» с превью/тикетами и «Применить»; отдельной рулетки в «Виде» нет | visual-critic, feature-qa | `shots/r14_15_lootbox_reveal.png`, `r14_15c_theme_applied.png`, `r14_18_gallery.png`, `fq15_46_theme_drop_before.png`…`fq15_49_theme_persist.png` | **PASS** | Критерий обновлён под item 4: две механики слиты в одну; тема не применяется без кнопки; персист после перезапуска |
+| R7 | Медная тема | Палитра, карточки, таб-бар, контраст | visual-critic | `shots/r14_12_theme_copper.png`, `fq15_03_tab_themes.png` | **PASS** | Палитра и читаемость сохранены; фон локальный, сетевых плейсхолдеров нет |
+| R8 | Такси и еда | Карточки 2×2, чипы «Куда едем? / Что желаете?», шторки, цены по маршруту | visual-critic, feature-qa | `shots/r14_14a_taxi.png`, `r14_14b_taxi.png`, `fq15_33_taxi_sheet.png`, `fq15_34_taxi_airport.png`, `fq15_ui45_food.xml`, `fq15_ui48_foodconfirm.xml` | **PASS** | 3 тарифа помещаются по ширине (260/363/591 ₽); еда открывается и подтверждается; разная высота карточек тарифов — косметика m12 |
+| R9 | Премиум, реклама, AI-факт | Пейволл 179/899 ₽, 4 ротируемых креатива, CTA, «РЕКЛАМА»+disclaimer, вторичная ссылка на премиум; факт меняется | visual-critic, feature-qa | `shots/r14_13_premium_rub.png`, `r14_08_ad_creative_a.png`, `r14_09_ad_creative_b.png`, `fq15_28_ad_open_a.png`, `fq15_31_ad_open_b.png`, `fq15_32_paywall_from_ad.png`, `r16_02_ad_banner.png` | **PASS** | Пейволл 899→179 ₽; 4 креатива и все 4 CTA проверены; в листе есть «Реклама. …» и «Отключить рекламу — Премиум 179 ₽/год»; в баннере — метка «РЕКЛАМА» |
+| R10 | Облака пальцем | Облака закрывают шапку, жест открывает погоду, подсказка гаснет на первом касании и не возвращается, город остаётся СПб | visual-critic, feature-qa | `shots/fq15_00_launch.png`, `fq15_01_veil_cleared.png`, `fq15_45_after_veil_fresh.png`, `app/src/main/kotlin/com/koch/weather/ui/components/CloudVeilOverlay.kt:67-134` | **PASS** | Вуаль показана один раз, стёрта и не вернулась за 50 минут; логика одностороннего гашения в коде; отдельного видео после фикса нет — ограничение доказательств, не дефект |
+| R11 | Блокировка «Пора на улицу!» | Тексты, зона фото, «Открыть камеру», без крестика; достижима | visual-critic, feature-qa | `shots/r14_16d_grass.png`, `fq15_21_grass_longpress.png`, `fq15_ui15_grass.xml` | **PASS** | Триггер — long-press по блоку «А знали ли вы…» (осознанно); тексты и камера на месте |
+| R12 | Экран «Карта» | OSM-тайлы, центр города, маркер, зум, без VPN/ключа | feature-qa | `shots/r14_02b_navbar_map.png`, `fq15_02_tab_map.png`, `fq16_ui3_map.xml` | **PASS** | Тайлы OSM, центр СПб, маркер; карта не регрессировала после правок навбара |
+| R13 | Экран «Список» | Полноэкранный список, температуры, «Нет данных», переход на город | feature-qa, visual-critic | `shots/fq15_04_tab_list.png`, `fq15_09_list_before.png`, `fq15_14_list_5cities.png`, `r14_04c_list_loaded.png`, `fq15_ui77_backlist.xml` | **PASS** | 5 городов с температурой; добавление и дубли проверены; «·» на переносе строки — косметика m10 |
+| R14 | Экран «Поиск» | Полноэкранный поиск, живой geocoding, выбор/добавление, бар над IME | feature-qa | `shots/fq15_05_tab_search.png`, `fq15_11_search_kazan.png`, `fq16_01_search_ime.png`, `fq16_03_search_return.png`, `fq16_ui2_typed.xml` | **PASS** | IME-инсет исправлен; «Moscow» без мусора; выдача и добавление работают |
+| R15 | Экран «Вид» | Полноэкранное оформление, темы из лутбоксов, без отдельной рулетки, локальные превью, применение/персист | feature-qa, visual-critic | `shots/fq15_03_tab_themes.png`, `r14_18_gallery.png`, `fq15_46_theme_drop_before.png`…`fq15_49_theme_persist.png` | **PASS** | Критерий обновлён под item 4; 7 тем, локальные фоны, «Доступно», применение и персист |
+| R16 | Deep links | Яндекс Go: маршрут по координатам; Яндекс Еда; веб-фолбэк | feature-qa | `shots/fq15_dumpsys_browser.txt`, `fq15_36_traffic_nodata.png`, `fq15_ui38_taxi_confirm.xml`, `fq15_logcat_food.txt` | **PASS** | Полный VIEW-URI такси снят из `dumpsys`; приложений нет — штатный веб-фолбэк; код intent-ов в Run 16 не менялся |
+| R17 | Реальные фото | Coil по URL, источник доступен из РФ, плейсхолдер при загрузке/ошибке | feature-qa, visual-critic | `shots/r14_08_ad_creative_a.png`, `r14_09_ad_creative_b.png`, `shots/fq_sources_device.txt`, `app/src/main/kotlin/com/koch/weather/ui/components/WeatherImage.kt:69-111` | **PASS** | Фото грузятся, источник доступен; `placeholder`/`error` реализованы (ColorPainter/fallback), но runtime-состояние ошибки в Фазе 5 не воспроизводилось — ограничение доказательств |
+| R18 | Производительность | p50 ≤16 мс, p95 ≤33 мс, jank ≤10 % на release-подобной сборке | perf-qa | `shots/r16_gfxinfo_benchmark.txt`, `shots/r15_gfxinfo_benchmark_scroll.txt`, `_history/reports/phase-5/perf-qa.md` §11 | **PASS** | Финальный benchmark 23:38: p50 8–9 мс, p95 12–20 мс, jank 1,30 % (2-й проход) и 9,81 % (1-й, прогрев); tabs/лутбокс — в норме; прежний FAIL относился к debug |
+| R19 | Оффлайн | Кэш последнего прогноза, баннер «Сохранённый прогноз», скрытие при восстановлении | feature-qa | `shots/fq15_41_offline_launch.png`, `fq15_42_online_auto.png`, `fq15_43_offline_nodata.png`, `fq15_44_retry_online.png`, `fq15_ui54_offline.xml`…`fq15_ui57_retry_online.xml`, `fq15_cache_parsed.txt` | **PASS** | Авиарежим + перезапуск → кэш; сеть on → автообновление без перезапуска; чистая установка без сети → «Нет данных» + «Повторить»; INFO D-5: баннер кэша виден и онлайн |
+| R20 | Города | СПб по умолчанию, затем Москва; поиск, добавление, переключение, персист выбора | feature-qa | `shots/fq16_00_launch.png`, `fq15_02_tab_map.png`, `fq15_11_search_kazan.png`, `fq15_14_list_5cities.png`, `r16_03_last_city_restart.png` | **PASS** | СПб по умолчанию; поиск Moscow/Kazan; добавление; выбранный город переживает перезапуск |
+| R21 | Без заглушек и фейков | Нет TODO/заглушек; при отсутствии данных — «нет данных», не выдуманные цифры | code-reviewer, feature-qa | `shots/fq15_36_traffic_nodata.png`, `fq15_43_offline_nodata.png`, `r14_16d_grass.png`, `_history/reports/phase-5/code-reviewer-delta.md`, `app/src/test/kotlin/com/koch/weather/data/RussianContentGuardTest.kt` | **PASS** | Скан `app/src/main`: TODO/FIXME/XXX/HACK — 0, Минск/BYN — 0; «Нет данных о пробках/погоде», «Данные: нет данных»; пустых состояний без объяснения нет |
+| R22 | Сборка и стабильность | `assembleDebug` OK, install на G8342, logcat без крэшей/ANR, unit-тесты PASS | device-qa, code-reviewer, judge | `app/build/outputs/apk/debug/app-debug.apk` (24 181 706 B, 23:33:17), `app/build/outputs/apk/benchmark/app-benchmark.apk` (4 699 136 B, 23:38:19), `_history/reports/phase-5/device-qa.md`, `shots/r16_launch.txt`, `shots/r16_logcat.txt`, `app/build/test-results/testDebugUnitTest/TEST-*.xml` | **PASS** | `assembleDebug` 23:33:18, install 23:34; logcat 783 КБ — FATAL/ANR 0; 37 сьютов / 229 тестов, 0 падений/ошибок/пропусков (23:31) |
+| R23 | RU-тексты и отсутствие обрезаний | Все тексты по-русски, дословно; нет обрезаний/наложений на экранах фазы | visual-critic | `shots/r14_05c_header_range.png`, `r14_15e_history_scrolled.png`, `r14_15b_weather_prize.png`, `r16_01_ime_search.png`, `fq16_ad_banner_umbrella.png` | **PASS** | Все новые тексты RU; «…на завтра» целиком; остаются косметические Ellipsis в теле «Магазина зонтов», «0.001 %» с точкой в одном креативе и вторичный текст 2,64:1 на светлых темах — не блокируют |
+
+## Закрытие открытых пунктов фазы 4
+
+| ID / роль | Что было блокером | Чем закрыто в Фазе 5 |
 |---|---|---|
-| R18 / `perf-qa` | Чистый замер скролла после ребута: loadavg рядом, ≥300 кадров, p95 ≤33 мс, jank ≤10 %. Сейчас `perf_run12_scroll_clean.txt` — 43 байта, «No process found»; последние 23–27 % jank сняты при loadavg 4.2–4.8 | `shots/perf_run12_scroll_clean.txt` + `gfxinfo` + `logcat`; при jank >15 % — правка скролл-пути и повторный замер |
-| R10 / F-3 / `visual-critic` | Фикс `dc44ea0` в коде есть, но видео на финальном APK нет. Нужно 6–8 с, 4–5 штрихов: подсказка гаснет на первом касании и не появляется поверх капсулы; город остаётся СПб | `shots/dynamics/r12_clouds.mp4` + 8–10 кадров по PTS + `r12_03_veil_hint_first` |
-| R6 / `visual-critic` | Новый кадр рулетки после `dc44ea0`: «Доступно» — белая пилюля с тёмным текстом, над чипами, не обрезано; телефон 118×160, жёлтые ◀ ▶ | `shots/r12_04_roulette.png` (или r13) |
-| R8 / `visual-critic` | Кадр шторки такси после `44bc6d6`: все 3 тарифа видны, третий не выходит за правый padding. Арифметика: 3×112 + 2×8 = 352 dp при content-width ≈335.7 dp (375.7 dp экран − 2×20 dp), в комментарии кода ошибочно 353 dp | `shots/r12_05_taxi.png`; если тариф обрезан — вернуть LazyRow/веса и пересобрать |
-| R1, R11, R17 / `visual-critic`, `feature-qa` | R1: скролл-кадр с почасовым рядом и 10 днями; R11: свежий кадр шторки травы; R17: runtime-проверка плейсхолдера при загрузке/ошибке фото | `r12_01_main_scrolled`, `r12_06_grass`, отчёт `feature-qa` по R17 |
-| R12–R16, R19–R21 / `feature-qa` | PASS относится только к `b8c7290`. Нужен ретест на финальном APK: оффлайн/онлайн R19 (7timer уже подтверждён `r7_22b` на `8be22d8`), ветер м/с R2/R21, «Нет данных» R21, smoke R12–R16 | новый `_history/reports/phase-4/feature-qa-final.md` с APK `44bc6d6`/новее |
-| R22 / `device-qa` | Запустить финальную сборку после разблокировки, снять `logcat` без FATAL/ANR, пересобрать `assembleDebug` на HEAD | `shots/logcat_run12.txt`, `shots/build_run12_debug.txt`, `dumpsys package` |
-| M1/M2 / `code-reviewer` | PASS-дельта покрывает `05ee399`; `dc44ea0` и `44bc6d6` (UI-only) не ревьюились. Нужна короткая дельта-подпись | `_history/reports/phase-4/code-reviewer-delta.md` (дополнение) |
+| R18 / `perf-qa` | Чистый замер, jank 23–27 % на debug | `shots/r16_gfxinfo_benchmark.txt`: benchmark p50 8–9, jank 1,30 %; `perf-qa.md` §11 PASS |
+| R10 / F-3 / `visual-critic` | Не было видео после фикса подсказки | `fq15_00_launch`, `fq15_01_veil_cleared`, `fq15_45_after_veil_fresh`; логика в `CloudVeilOverlay.kt`; видео не снято |
+| R6 / `visual-critic` | Кадр рулетки после `dc44ea0` | `r14_15`, `r14_15c`, `r14_18`; отдельная рулетка удалена |
+| R8 / `visual-critic` | Шторка такси после `44bc6d6`, третий тариф | `r14_14a/b`, `fq15_33b_taxi_scroll`; 3 тарифа в ширине |
+| R1, R11, R17 / `visual-critic`, `feature-qa` | Скролл-кадр, шторка травы, плейсхолдер фото | `fq15_06c_scrolled`, `r14_16d`, `fq15_21`; плейсхолдер — код `WeatherImage.kt` (runtime ошибки не воспроизводился) |
+| R12–R16, R19–R21 / `feature-qa` | PASS только на `b8c7290` | `feature-qa.md` Run 15 + §6 ретест на 23:33; 11/12 + D-1…D-3 PASS |
+| R22 / `device-qa` | Запуск и logcat финальной сборки | debug 23:33, install 23:34, `r16_logcat.txt` 0 FATAL/ANR, 229 тестов |
+| M1/M2 / `code-reviewer` | Дельта после `05ee399` | `code-reviewer-delta.md` PASS; H1/M1/M2/M3 закрыты |
+
+## Известные ограничения Фазы 5
+
+### Ограничения доказательств (не функциональные дефекты)
+
+1. **Видео динамики.** `shots/dynamics/r14_lootbox.mp4` и `r14_swipe.mp4` не содержат
+   Compose-анимации: запись статична/дедуплицирована. Анимация сундука и конфетти доказана
+   стиллами `r14_07a–d` и записью вибратора; смена города — двумя кадрами
+   `r14_03_swipe_a/b` с разными слоями и пагинатором. Полный видео-пересъём не даст нового
+   доказательства на этом устройстве.
+2. **Свежесть кадров.** 38 из 44 кадров `r14_*` сняты на сборке Run 15 (21:26); остальные
+   6 (`03_swipe_a/b`, `06b`, `15b`, `15d`, `15e`) — на финальной 23:33. Финальная сборка
+   23:33 отличалась только экранами, которые пересняты: `03_swipe_a/b` (слои
+   `AnimatedContent`), `15b` (погодный приз), `15d/e` (история), `06b` (закрытие лутбокса),
+   `r16_01` (IME-инсет), `r16_02` (тело баннера), `r16_03` (персист города). Полный пересъём
+   не требуется: дельта кода 23:20 зеркально покрыта переснятыми кадрами.
+3. **`code-reviewer-delta.md`** подписан в 19:32 на 223 тестах; поздние правки 23:20
+   (IME-инсет, персист города, сжатие истории, тело баннера) формально не входили в его
+   дельту. Judge точечно проверил эти файлы; финальный прогон — 229 тестов, 0 падений.
+   Рекомендация: короткий post-commit addendum `code-reviewer` (не блокер: новых HIGH/MEDIUM
+   не найдено, изменения покрыты тестами и runtime-ретестами).
+4. **`perf-qa.md`** формально подписан на benchmark 21:00; финальный benchmark 23:38
+   (`r16_gfxinfo_benchmark.txt`) даёт те же или лучшие цифры (p50 8–9, jank 1,30 %).
+5. **R3/R17/R10:** строка «Зонтики от 649 ₽» не попала в отдельный кадр Run 15 (цена
+   подтверждена витриной и кодом); runtime-плейсхолдер ошибки фото и момент гашения
+   подсказки облаков отдельно не снимались (код и поведение проверены).
+
+### Косметические остатки (не блокируют приёмку)
+
+- Тело креатива «Магазин зонтов» обрезается с «…» (`fq16_ad_banner_umbrella.png`); у «Еды»
+  после правки 3 строки — целиком (`r16_02`).
+- «0.001 %» с точкой в iPhone-креативе против «0,001 %» в лутбоксе.
+- Вторичный текст на светлых темах 2,64:1 (ниже AA), «Σ 0,5 ММ» капсом, «Сейчас» занимает
+  один 3-часовой слот на оси осадков.
+- «Продолжить» серым контуром в карточке приза; тикеты тем со штриховкой читаются как
+  «недоступно»; «(Лес, Марс)» в пейволле вместо полных названий.
+- «·» на переносе строки в «Списке»; «+» без подписи «Добавить» в поиске; тарифы разной
+  высоты (Ultima в 2 строки); белое на золоте в шапке (наследие `refs/bottom_nav.png`).
+- Информационные D-4/D-5/D-6: «Ясно + 12,9 мм» в один день у провайдера; баннер
+  «Сохранённый прогноз» виден и онлайн; средняя оценка почти не реагирует на один голос.
+
+## Фаза 5 — итог
+
+**Вердикт: PASS** (judge, 2026-11-15 00:25 MSK).
+
+- **14/14 замечаний пользователя закрыты**: P1–P14 — PASS, у каждого есть путь к кадру,
+  отчёту или коду. Функциональных FAIL/BLOCKED по пунктам фазы нет.
+- **PASS ролей:** `feature-qa` — Run 15 (11/12) + §6 ретест D-1…D-3 на сборке 23:33
+  (PASS); `visual-critic` — Run 14 FAIL, `visual-critic-delta` PASS (все 8 major закрыты,
+  новых blocker/major нет); `code-reviewer` — FAIL, `code-reviewer-delta` PASS (H1/M1/M2/M3
+  закрыты, 37 сьютов / 223 теста; финальный прогон — 229); `perf-qa` — PASS на benchmark
+  (p50 12–13, jank 0,8–1,3 %; свежий r16 — p50 8–9, jank 1,30 %).
+- **Сборка и стабильность:** debug `assembleDebug` 23:33:18, APK 24 181 706 B, install 23:34;
+  benchmark 23:38:21, APK 4 699 136 B. `r16_logcat.txt` — FATAL/ANR 0; 37 сьютов / 229
+  тестов, 0 падений; 47 уникальных кадров `r14_*`/`r16_*`, побайтных дублей нет.
+- **Spot-check judge:** `r14_05c_header_range` — диапазон отдельной строкой, цифра не
+  перекрыта капсулой; `r14_10_rain_chart` — ось «мм 0,5/0», бар над «Сейчас», «Σ 0,5 ММ»;
+  `r14_15e_history_scrolled` — 5 строк истории, «…на завтра» целиком, CTA не обрезан;
+  `r16_01_ime_search` — навбар над IME и нажимаем; `r14_03_swipe_a/b` — два слоя с разными
+  состояниями города.
+- **Решение по пересъёму:** точечного пересъёма достаточно; полный проход не требуется
+  (см. «Ограничения доказательств» п. 2). Повторять 44 кадра ради 16 dp высоты баннера и
+  IME-инсета — лишние 2–3 часа без нового сигнала.
+- **Остаточные риски:** статичное видео динамики, отсутствие post-final addendum
+  `code-reviewer`, косметические Ellipsis/контраст/«0.001 %». Ни один не меняет
+  пользовательский сценарий и не является блокером.
 
 ## Правила обновления
 

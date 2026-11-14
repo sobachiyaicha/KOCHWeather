@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,8 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,9 +41,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.koch.weather.data.model.CityCatalog
 import com.koch.weather.data.model.CityLocation
 import com.koch.weather.ui.design.KochCard
 import com.koch.weather.ui.design.KochEmptyState
+import com.koch.weather.ui.design.KochIconButton
 import com.koch.weather.ui.design.KochListRow
 import com.koch.weather.ui.design.KochPageHeader
 import com.koch.weather.ui.theme.KochSpace
@@ -56,17 +57,20 @@ import com.koch.weather.ui.theme.LocalKochColors
 /**
  * R14: полноэкранный поиск города. Поле без рамки в покое, результаты — одна группа строк,
  * координаты (отладочная информация) убраны.
+ *
+ * Навигация — нижний бар, поэтому собственной стрелки «назад» у экрана нет.
+ * У каждого результата — «+» («Добавить»); уже сохранённый город помечен «В списке».
  */
 @Composable
 fun CitySearchScreen(
     query: String,
     results: List<CityLocation>,
+    savedCities: List<CityLocation>,
     isSearching: Boolean,
     errorMessage: String?,
     background: Brush,
     onQueryChange: (String) -> Unit,
-    onSelectCity: (CityLocation) -> Unit,
-    onBack: () -> Unit
+    onSelectCity: (CityLocation) -> Unit
 ) {
     val colors = LocalKochColors.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -85,7 +89,7 @@ fun CitySearchScreen(
             KochPageHeader(
                 title = "Поиск города",
                 subtitle = "Название, регион или страна",
-                onBack = onBack
+                onBack = null
             )
 
             OutlinedTextField(
@@ -223,8 +227,7 @@ fun CitySearchScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .navigationBarsPadding(),
+                            .weight(1f),
                         contentPadding = PaddingValues(
                             start = KochSpace.xl,
                             end = KochSpace.xl,
@@ -234,6 +237,7 @@ fun CitySearchScreen(
                         item(key = "results_group") {
                             KochCard(padding = PaddingValues(vertical = KochSpace.xs)) {
                                 results.forEachIndexed { index, city ->
+                                    val alreadySaved = CityCatalog.contains(savedCities, city)
                                     KochListRow(
                                         title = city.name,
                                         subtitle = city.locationLine(),
@@ -248,12 +252,31 @@ fun CitySearchScreen(
                                             )
                                         },
                                         trailing = {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                contentDescription = "Выбрать город",
-                                                tint = colors.textTertiary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
+                                            if (alreadySaved) {
+                                                Text(
+                                                    text = "В списке",
+                                                    style = KochType.caption,
+                                                    color = colors.textTertiary,
+                                                    maxLines = 1,
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(KochRadius.badge))
+                                                        .background(
+                                                            colors.textPrimary.copy(alpha = 0.10f)
+                                                        )
+                                                        .padding(
+                                                            horizontal = KochSpace.s,
+                                                            vertical = 3.dp
+                                                        )
+                                                )
+                                            } else {
+                                                KochIconButton(
+                                                    icon = Icons.Default.Add,
+                                                    contentDescription = "Добавить город ${city.name}",
+                                                    onClick = { onSelectCity(city) },
+                                                    tint = colors.accent,
+                                                    containerAlpha = 0.16f
+                                                )
+                                            }
                                         }
                                     )
                                 }

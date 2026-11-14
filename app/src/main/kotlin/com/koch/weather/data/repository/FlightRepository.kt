@@ -19,7 +19,6 @@ class FlightRepository {
             arrivalTime = "23:15",
             durationText = "5 ч 30 мин",
             priceRu = 34500,
-            priceByn = 1120.0,
             weatherAtDestination = "Солнечно, море тёплое",
             isDirect = true
         ),
@@ -33,22 +32,20 @@ class FlightRepository {
             arrivalTime = "08:35",
             durationText = "5 ч 25 мин",
             priceRu = 27900,
-            priceByn = 899.0,
             weatherAtDestination = "Солнечно, штиль",
             isDirect = true
         ),
         FlightOffer(
-            id = "fl_minsk_msq",
+            id = "fl_sochi_aer",
             fromCity = "Санкт-Петербург (LED)",
-            toCity = "Минск (MSQ)",
-            airline = "Белавиа (Belavia)",
-            flightNumber = "B2-946",
-            departureTime = "19:20",
-            arrivalTime = "20:45",
-            durationText = "1 ч 25 мин",
-            priceRu = 5400,
-            priceByn = 175.0,
-            weatherAtDestination = "Облачно",
+            toCity = "Сочи (AER)",
+            airline = "Россия",
+            flightNumber = "FV-6543",
+            departureTime = "09:40",
+            arrivalTime = "12:20",
+            durationText = "2 ч 40 мин",
+            priceRu = 6900,
+            weatherAtDestination = "Солнечно, +26",
             isDirect = true
         ),
         FlightOffer(
@@ -61,7 +58,6 @@ class FlightRepository {
             arrivalTime = "12:30",
             durationText = "1 ч 30 мин",
             priceRu = 3800,
-            priceByn = 125.0,
             weatherAtDestination = "Переменная облачность",
             isDirect = true
         )

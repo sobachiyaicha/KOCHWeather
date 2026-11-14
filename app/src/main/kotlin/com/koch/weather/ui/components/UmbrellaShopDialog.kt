@@ -129,15 +129,9 @@ fun UmbrellaShopDialog(
                     )
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            text = "29.99 BYN",
+                            text = "649 ₽",
                             style = KochType.numberPrice,
                             color = colors.textPrimary
-                        )
-                        Spacer(Modifier.width(KochSpace.s))
-                        Text(
-                            text = "649 ₽",
-                            style = KochType.caption,
-                            color = colors.textTertiary
                         )
                     }
                 }
@@ -162,7 +156,7 @@ fun UmbrellaShopDialog(
                     )
                 } else {
                     KochPrimaryButton(
-                        text = "Купить за 29.99 BYN",
+                        text = "Купить за 649 ₽",
                         onClick = { isPurchased = true }
                     )
                 }

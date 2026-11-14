@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Вибрация при выпадении приза в лутбоксе (item 8 фазы 5). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Android 11+ package visibility: without these queries resolveActivity() returns null
          for the Yandex apps and the app-first deep link would silently fall back to the browser. -->

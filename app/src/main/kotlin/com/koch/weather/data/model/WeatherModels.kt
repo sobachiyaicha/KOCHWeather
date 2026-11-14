@@ -45,7 +45,9 @@ data class HourlyWeatherDto(
     @SerialName("precipitation_probability") val precipitationProbability: List<Int>? = null,
     @SerialName("weather_code") val weatherCode: List<Int> = emptyList(),
     // null-элемент = у источника нет ветра на этот час; не подменяем нулём.
-    @SerialName("wind_speed_10m") val windSpeed10m: List<Double?>? = null
+    @SerialName("wind_speed_10m") val windSpeed10m: List<Double?>? = null,
+    // Осадки за час в мм. null-элемент = источник их не сообщает.
+    val precipitation: List<Double?>? = null
 )
 
 @Serializable
@@ -54,7 +56,9 @@ data class DailyWeatherDto(
     @SerialName("weather_code") val weatherCode: List<Int> = emptyList(),
     @SerialName("temperature_2m_max") val temperature2mMax: List<Double> = emptyList(),
     @SerialName("temperature_2m_min") val temperature2mMin: List<Double> = emptyList(),
-    @SerialName("precipitation_probability_max") val precipitationProbabilityMax: List<Int>? = null
+    @SerialName("precipitation_probability_max") val precipitationProbabilityMax: List<Int>? = null,
+    // Сумма осадков за сутки в мм. null-элемент = источник их не сообщает.
+    @SerialName("precipitation_sum") val precipitationSum: List<Double?>? = null
 )
 
 @Serializable
@@ -79,8 +83,14 @@ data class CityLocation(
     val latitude: Double,
     val longitude: Double,
     val country: String = "Россия",
-    /** Регион/admin1 (например, «Санкт-Петербург», «Минская область»); null = не показываем. */
-    val region: String? = null
+    /** Регион/admin1 (например, «Санкт-Петербург», «Краснодарский край»); null = не показываем. */
+    val region: String? = null,
+    /**
+     * true только у гео-города по умолчанию (Санкт-Петербург).
+     * У городов из поиска всегда false — даже если совпало имя.
+     * Сериализуется с дефолтом, поэтому старый кэш читается без миграции.
+     */
+    val isCurrentLocation: Boolean = false
 )
 
 @Serializable
@@ -109,7 +119,9 @@ data class HourlyItem(
     /** null = у источника нет скорости ветра; UI показывает «нет данных», не 0. */
     val wind: Double? = null,
     /** false = вероятность осадков недоступна у источника; UI должен показать «нет данных». */
-    val popKnown: Boolean = true
+    val popKnown: Boolean = true,
+    /** Реальное количество осадков за час, мм. null = источника нет; 0 не подставляем. */
+    val precipitationMm: Double? = null
 )
 
 @Immutable
@@ -122,7 +134,9 @@ data class DailyItem(
     val minTemp: Int,
     val maxTemp: Int,
     /** false = вероятность осадков недоступна у источника; UI должен показать «нет данных». */
-    val popKnown: Boolean = true
+    val popKnown: Boolean = true,
+    /** Сумма осадков за сутки, мм. null = источника нет; 0 не подставляем. */
+    val precipitationMm: Double? = null
 )
 
 @Immutable
@@ -200,7 +214,6 @@ data class UmbrellaItem(
     val id: String,
     val name: String,
     val priceRu: String,
-    val priceByn: String,
     val colorHex: Long,
     val isCompact: Boolean = true,
     val description: String = ""
@@ -212,7 +225,6 @@ object DefaultUmbrellas {
             id = "umb_sky_blue",
             name = "Зонт-автомат Sky Blue",
             priceRu = "649 ₽",
-            priceByn = "29.99 BYN",
             colorHex = 0xFF2196F3,
             isCompact = true,
             description = "Компактный 3-сложения, ветрозащита 15 м/с"
@@ -221,7 +233,6 @@ object DefaultUmbrellas {
             id = "umb_classic_black",
             name = "Зонт-трость Classic Black",
             priceRu = "990 ₽",
-            priceByn = "44.99 BYN",
             colorHex = 0xFF212121,
             isCompact = false,
             description = "Усиленный каркас из фибергласса, деревянная ручка"
@@ -230,7 +241,6 @@ object DefaultUmbrellas {
             id = "umb_copper_sunset",
             name = "Зонт Copper Sunset",
             priceRu = "790 ₽",
-            priceByn = "36.50 BYN",
             colorHex = 0xFFD84315,
             isCompact = true,
             description = "Тефлоновое нано-покрытие, сохнет за 1 минуту"
@@ -239,12 +249,19 @@ object DefaultUmbrellas {
             id = "umb_dome_transparent",
             name = "Прозрачный зонт-купол",
             priceRu = "850 ₽",
-            priceByn = "39.99 BYN",
             colorHex = 0xFF90CAF9,
             isCompact = false,
             description = "Глубокий купол, защита при сильном ветре"
         )
     )
+
+    /** Минимальная цена витрины в рублях — из тех же строк, что видит пользователь. */
+    val minPriceRu: Int
+        get() = items.mapNotNull { it.priceRu.filter(Char::isDigit).toIntOrNull() }
+            .minOrNull() ?: 0
+
+    /** «Зонтики от 649 ₽» — единая подпись для баннера и витрины. */
+    val minPriceLabel: String get() = "$minPriceRu ₽"
 }
 
 @Immutable
@@ -255,6 +272,11 @@ data class MainScreenUiState(
     val selectedCity: CityLocation? = null,
     val selectedCityIndex: Int = 0,
     val currentCityIndex: Int = 0,
+    /**
+     * true только когда выбран гео-город по умолчанию (Санкт-Петербург).
+     * Города из поиска и остальные сохранённые — всегда false.
+     */
+    val isSelectedCityCurrentLocation: Boolean = false,
     val isOffline: Boolean = false,
 
     // ------------------------------------------------------------------
@@ -315,6 +337,11 @@ data class MainScreenUiState(
     val isPremiumPurchasePending: Boolean = false,
     val premiumOffer: PremiumOffer = PremiumOffer(),
     val showAds: Boolean = true,
+
+    /** Реклама: креатив дня, выбран детерминированно из [AdCatalog]. */
+    val adCreative: AdCreative = AdCatalog.creatives.first(),
+    /** Фото для рекламного листа; null — рисуем иконку категории. */
+    val adImageUrl: String? = null,
 
     // AI Facts
     val aiFact: String = "Чтобы точно узнать погоду, нужно посмотреть в окно",

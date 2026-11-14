@@ -22,7 +22,6 @@ data class FoodItem(
     val name: String,
     val description: String,
     val priceRu: Int,
-    val priceByn: Double,
     val weightGrams: Int
 )
 
@@ -40,7 +39,6 @@ data class FoodOrder(
     val restaurantName: String,
     val itemsSummary: String,
     val totalPriceRu: Int,
-    val totalPriceByn: Double,
     val status: FoodOrderStatus,
     val etaMinutes: Int
 )
@@ -57,5 +55,4 @@ data class FoodState(
 ) {
     val cartCount: Int get() = cart.values.sum()
     val totalCartPriceRu: Int get() = cart.entries.sumOf { it.key.priceRu * it.value }
-    val totalCartPriceByn: Double get() = cart.entries.sumOf { it.key.priceByn * it.value }
 }

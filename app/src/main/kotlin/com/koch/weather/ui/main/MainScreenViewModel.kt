@@ -48,6 +48,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val flightRepository: FlightRepository by lazy { FlightRepository() }
     private val aiFactsRepository: AiFactsRepository by lazy { AiFactsRepository() }
     private val imageRepository: ImageRepository by lazy { ImageRepository() }
+    private val adRepository: AdRepository by lazy { AdRepository() }
+
+    /** Сколько раз за сессию открывали рекламный лист: ротация креативов. */
+    private var adOpenCount: Int = 0
 
     // Первый кадр не ждёт ни DataStore, ни сети: только лёгкое начальное состояние.
     private val _uiState = MutableStateFlow(
@@ -67,6 +71,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var taxiJob: Job? = null
     private var foodJob: Job? = null
     private var cloudTimerJob: Job? = null
+    private var savedCitiesJob: Job? = null
+
+    /** День года, для которого сейчас показан детерминированный факт дня. */
+    @Volatile
+    private var aiFactDayOfYear: Int = 0
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
@@ -165,10 +174,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         // Initialize cities, cache, static content and only then network — всё на IO.
         viewModelScope.launch(Dispatchers.IO) {
             val initialCities = repository.getInitialCities()
+            val savedSelectedCity = repository.getSelectedCity()
             val lastSavedCity = repository.getLastCity()
-            val targetCity = lastSavedCity ?: initialCities.firstOrNull() ?: repository.defaultCities.first()
-            val initialIndex = initialCities.indexOfFirst { it.name.equals(targetCity.name, ignoreCase = true) }
-                .coerceAtLeast(0)
+            // D-2: выбранный город переживает перезапуск. Ключ отдельный от
+            // «последнего прогноза»; город, которого нет в списке, не возвращаем —
+            // падаем на гео-город. Для старой установки без выбора сохраняем
+            // прежнее поведение (последний прогноз), затем гео-город.
+            val targetCity = SelectedCityRestorePolicy.resolve(
+                savedSelected = savedSelectedCity,
+                legacyLastCity = lastSavedCity,
+                cities = initialCities
+            ) ?: initialCities.firstOrNull() ?: repository.defaultCities.first()
+            val initialIndex = initialCities.indexOfFirst {
+                CityCatalog.isSamePlace(it, targetCity)
+            }.coerceAtLeast(0)
 
             // Последний реальный прогноз из DataStore (не синтетика).
             val cachedWeather = repository.getCachedWeather(targetCity)
@@ -177,8 +196,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
             val restaurants = foodRepository.getRestaurants()
             val flightOffers = flightRepository.getFlightOffers()
-            val fact = aiFactsRepository.getDefaultFact()
+            val today = dayOfYear()
+            // D5: сид — гео-город + день, а не восстановленный «последний открытый»
+            // город. Иначе перезапуск в тот же день показывал другой факт.
+            val fact = aiFactsRepository.getFactForDay(
+                FactOfDayPolicy.anchorCityName(initialCities),
+                today
+            )
+            aiFactDayOfYear = today
             val imageUrls = imageRepository.getUrlsByCategory()
+            val adCreative = adRepository.creativeFor(today, adOpenCount)
+            // История дропов переживает перезапуск: отдаём её в state и не теряем счётчик.
+            val lootboxHistory = lootboxRepository.getHistory()
 
             _uiState.update {
                 it.copy(
@@ -186,6 +215,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     selectedCity = targetCity,
                     selectedCityIndex = initialIndex,
                     currentCityIndex = initialIndex,
+                    isSelectedCityCurrentLocation = DefaultCities.isGeoCity(targetCity),
                     weather = cachedDomain,
                     weatherState = if (cachedDomain != null) {
                         WeatherDataState.CACHED
@@ -207,7 +237,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     foodState = it.foodState.copy(restaurants = restaurants),
                     flightState = it.flightState.copy(offers = flightOffers),
                     aiFact = fact,
-                    imageUrls = imageUrls
+                    imageUrls = imageUrls,
+                    adCreative = adCreative,
+                    adImageUrl = adCreative.imageCategory?.let { category ->
+                        imageUrls[category]?.firstOrNull()
+                    },
+                    lootboxState = it.lootboxState.copy(
+                        history = lootboxHistory,
+                        totalOpened = lootboxHistory.size
+                    )
                 )
             }
 
@@ -248,6 +286,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 selectedCity = targetCity,
                 selectedCityIndex = index,
                 currentCityIndex = index,
+                // «ТЕКУЩЕЕ МЕСТО» — только для гео-города, а не для любого выбранного.
+                isSelectedCityCurrentLocation = DefaultCities.isGeoCity(targetCity),
                 weather = null,
                 weatherState = WeatherDataState.LOADING,
                 isWeatherUnavailable = false,
@@ -260,12 +300,29 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 nextRetryAt = null,
                 retryAttempt = 0,
                 isLoading = true,
-                isRefreshing = true
+                isRefreshing = true,
+                // Пробки предыдущего города не должны влиять на цену такси.
+                taxiState = it.taxiState.withRoute(
+                    distanceKm = it.taxiState.selectedDestination.distanceKm,
+                    trafficScore = null
+                )
             )
         }
 
         preloadCachedWeather(targetCity)
+        persistSelectedCity(targetCity)
         fetchWeatherQuietly(targetCity)
+    }
+
+    /**
+     * Выбор города пишется в отдельный ключ DataStore. Запуск на Main (а запись —
+     * на IO): при быстрых свайпах вызовы уходят в DataStore в порядке выбора,
+     * последний выбор побеждает. «Последний прогноз» (`last_city_json`) не трогаем.
+     */
+    private fun persistSelectedCity(city: CityLocation) {
+        viewModelScope.launch {
+            repository.saveSelectedCity(city)
+        }
     }
 
     fun selectCityByIndex(index: Int) {
@@ -273,7 +330,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun selectCity(city: CityLocation) {
-        val index = _uiState.value.cities.indexOfFirst { it.name.equals(city.name, ignoreCase = true) }
+        val index = _uiState.value.cities.indexOfFirst { CityCatalog.isSamePlace(it, city) }
         if (index >= 0) {
             selectCity(index)
         } else {
@@ -282,7 +339,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun loadWeather(city: CityLocation) {
-        val index = _uiState.value.cities.indexOfFirst { it.name.equals(city.name, ignoreCase = true) }
+        val index = _uiState.value.cities.indexOfFirst { CityCatalog.isSamePlace(it, city) }
         if (index >= 0) {
             selectCity(index)
         } else {
@@ -290,6 +347,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.update {
                 it.copy(
                     selectedCity = city,
+                    isSelectedCityCurrentLocation = DefaultCities.isGeoCity(city),
                     weather = null,
                     weatherState = WeatherDataState.LOADING,
                     isWeatherUnavailable = false,
@@ -302,7 +360,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     nextRetryAt = null,
                     retryAttempt = 0,
                     isLoading = true,
-                    isRefreshing = true
+                    isRefreshing = true,
+                    taxiState = it.taxiState.withRoute(
+                        distanceKm = it.taxiState.selectedDestination.distanceKm,
+                        trafficScore = null
+                    )
                 )
             }
             preloadCachedWeather(city)
@@ -341,6 +403,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val wasForeground = _uiState.value.isAppForeground
         _uiState.update { it.copy(isAppForeground = true) }
         if (wasForeground) return
+        refreshAiFactForNewDayIfNeeded()
         val state = _uiState.value
         val needsRetry = state.weather == null ||
             state.weatherState == WeatherDataState.UNAVAILABLE ||
@@ -358,6 +421,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         retryJob?.cancel()
         loadJob?.cancel()
         trafficJob?.cancel()
+        savedCitiesJob?.cancel()
         _uiState.update {
             it.copy(
                 isAppForeground = false,
@@ -447,6 +511,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 // навсегда оставалась в состоянии «Обновляем…» и была disabled (run 4).
                 val applied = WeatherUiReducer.apply(state, result, isConnected)
                     .copy(isRefreshing = false)
+                    .let { appliedState ->
+                        // Реальные пробки нового прогноза сразу влияют на цену такси.
+                        appliedState.copy(
+                            taxiState = appliedState.taxiState.withRoute(
+                                distanceKm = appliedState.taxiState.selectedDestination.distanceKm,
+                                trafficScore = appliedState.weather?.trafficScore
+                            )
+                        )
+                    }
                 val previousRetry = WeatherRetryState(
                     attempt = state.retryAttempt,
                     isRetrying = state.isRetrying,
@@ -504,10 +577,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     val traffic = repository.getTraffic(city)
                     _uiState.update { state ->
                         if (state.selectedCity?.name == city.name && state.weather != null) {
+                            val weatherWithTraffic = state.weather.copy(
+                                trafficScore = traffic.score,
+                                trafficAdvice = traffic.description
+                            )
                             state.copy(
-                                weather = state.weather.copy(
-                                    trafficScore = traffic.score,
-                                    trafficAdvice = traffic.description
+                                weather = weatherWithTraffic,
+                                taxiState = state.taxiState.withRoute(
+                                    distanceKm = state.taxiState.selectedDestination.distanceKm,
+                                    trafficScore = weatherWithTraffic.trafficScore
                                 )
                             )
                         } else {
@@ -524,11 +602,47 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         super.onCleared()
     }
 
-    /** Перечитать температуры сохранённых городов из памяти/DataStore (R13). */
+    /**
+     * «Список»: сначала честный кэш из памяти/DataStore (как раньше), затем
+     * в фоне догружаем погоду для городов без данных (D4 с устройства).
+     *
+     * Новый вызов отменяет предыдущую догрузку; при уходе с вкладки её
+     * отменяет [selectTab]. В сеть идут только строки без данных, максимум
+     * 12 городов и не более 3 параллельных запросов.
+     */
     fun refreshSavedCities() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
-            _uiState.update { it.copy(savedCities = savedCities) }
+        savedCitiesJob?.cancel()
+        savedCitiesJob = viewModelScope.launch(Dispatchers.IO) {
+            val cities = _uiState.value.cities.take(SavedCitiesWeatherSync.MAX_CITIES)
+            val cached = repository.getSavedCitiesWeather(cities)
+            _uiState.update { it.copy(savedCities = cached, isLoadingSavedCities = false) }
+
+            val pending = SavedCitiesWeatherSync.pendingCities(cached)
+            if (pending.isEmpty()) return@launch
+            // Без сети не ждём провайдерских таймаутов: «Нет данных» честно.
+            if (!networkMonitor.isCurrentlyConnected()) return@launch
+
+            SavedCitiesWeatherSync.loadPending(
+                cities = pending,
+                load = { city ->
+                    when (val result = repository.getWeatherData(city = city, isOnline = true)) {
+                        is WeatherLoadResult.Live -> result.data
+                        is WeatherLoadResult.Cached -> result.data
+                        is WeatherLoadResult.Unavailable -> null
+                    }
+                },
+                onLoaded = { city, weather ->
+                    _uiState.update { state ->
+                        state.copy(
+                            savedCities = SavedCitiesWeatherSync.applyLoaded(
+                                saved = state.savedCities,
+                                city = city,
+                                weather = weather
+                            )
+                        )
+                    }
+                }
+            )
         }
     }
 
@@ -569,6 +683,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // Navigation Tabs (5 Tabs: HOME, MAP, THEMES, LIST, SEARCH)
     // ------------------------------------------------------------------------
     fun selectTab(tab: BottomTab) {
+        // Догрузка «Списка» не должна жить после ухода с вкладки.
+        if (tab != BottomTab.LIST) savedCitiesJob?.cancel()
         _uiState.update { it.copy(selectedTab = tab) }
     }
 
@@ -695,12 +811,49 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Открытие рекламного листа: креатив переключается по счётчику открытий,
+     * чтобы «всегда одна и та же реклама» не воспроизводилась (item 9).
+     */
+    fun openAdPromo() {
+        adOpenCount += 1
+        val creative = adRepository.creativeFor(dayOfYear(), adOpenCount)
+        _uiState.update { state ->
+            state.copy(
+                adCreative = creative,
+                adImageUrl = creative.imageCategory?.let { category ->
+                    state.imageUrls[category]?.firstOrNull()
+                }
+            )
+        }
+    }
+
     // ------------------------------------------------------------------------
     // AI Facts
     // ------------------------------------------------------------------------
+    /**
+     * Другой факт: единственный способ сменить факт внутри дня. Детерминированный
+     * факт дня (город + день года) возвращается при следующем старте/новом дне.
+     */
     fun refreshAiFact() {
+        aiFactDayOfYear = dayOfYear()
         viewModelScope.launch(Dispatchers.IO) {
-            val fact = aiFactsRepository.getRandomFact()
+            val fact = aiFactsRepository.getNextFact(_uiState.value.aiFact)
+            _uiState.update { it.copy(aiFact = fact) }
+        }
+    }
+
+    /**
+     * D5: на новом календарном дне (после возврата из фона) факт пересчитывается
+     * детерминированно от гео-города и нового дня. Смена города факт не меняет.
+     */
+    private fun refreshAiFactForNewDayIfNeeded() {
+        val today = dayOfYear()
+        if (aiFactDayOfYear == 0 || aiFactDayOfYear == today) return
+        aiFactDayOfYear = today
+        val cityName = FactOfDayPolicy.anchorCityName(_uiState.value.cities)
+        viewModelScope.launch(Dispatchers.IO) {
+            val fact = aiFactsRepository.getFactForDay(cityName, today)
             _uiState.update { it.copy(aiFact = fact) }
         }
     }
@@ -709,34 +862,43 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // Lootbox Service
     // ------------------------------------------------------------------------
     fun openLootbox() {
-        if (_uiState.value.lootboxState.isOpening) return
+        // «Замок» ставится атомарно ДО запуска корутины: второй быстрый тап видит
+        // isOpening = true и не запускает второй дроп. Раньше флаг выставлялся
+        // внутри IO-корутины, поэтому два тапа успевали выдать две награды,
+        // а вторая запись истории терялась при перезаписи.
+        while (true) {
+            val state = _uiState.value
+            if (state.lootboxState.isOpening) return
+            val opening = state.copy(lootboxState = state.lootboxState.copy(isOpening = true))
+            if (_uiState.compareAndSet(state, opening)) break
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(lootboxState = it.lootboxState.copy(isOpening = true)) }
-            delay(1200) // Spin animation delay
-            // Только реальный прогноз из уже полученных данных; иначе награда
-            // «прогноз на завтра» не выдаётся (см. LootboxRepository).
-            val tomorrowDesc = _uiState.value.weather?.daily?.getOrNull(1)?.let {
-                "${WmoHelper.getDescriptionRu(it.weatherCode)}, днем ${it.maxTemp}°, ночью ${it.minTemp}°"
-            }
-            val reward = lootboxRepository.openLootbox(tomorrowDesc)
-            val unlockedThemes = lootboxRepository.getUnlockedThemes()
-            val newTheme = ThemePreferenceCodec.decode(reward.unlockedThemeName)
-            _uiState.update { state ->
-                state.copy(
-                    availableThemes = unlockedThemes,
-                    themeCatalog = ThemeCatalog.build(unlockedThemes),
-                    currentTheme = newTheme ?: state.currentTheme,
-                    lootboxState = state.lootboxState.copy(
-                        isOpening = false,
-                        lastReward = reward,
-                        history = listOf(reward) + state.lootboxState.history,
-                        totalOpened = state.lootboxState.totalOpened + 1,
-                        unlockedThemes = unlockedThemes
+            try {
+                delay(1200) // Spin animation delay
+                // Только реальный прогноз из уже полученных данных: завтрашний день,
+                // а если его нет — сегодняшний (тогда приз честно скажет «на сегодня»).
+                val daily = _uiState.value.weather?.daily
+                val tomorrow = daily?.getOrNull(1) ?: daily?.getOrNull(0)
+                val reward = lootboxRepository.openLootbox(tomorrow)
+                val unlockedThemes = lootboxRepository.getUnlockedThemes()
+                _uiState.update { state ->
+                    state.copy(
+                        // Дроп только разблокирует тему. currentTheme не трогаем:
+                        // фон переключает setTheme() по кнопке «Применить», а не лутбокс.
+                        availableThemes = unlockedThemes,
+                        themeCatalog = ThemeCatalog.build(unlockedThemes),
+                        // seq растёт на каждый дроп: UI ловит один «выстрел» анимации.
+                        lootboxState = state.lootboxState.withDrop(reward, unlockedThemes)
                     )
-                )
-            }
-            if (newTheme != null) {
-                cache.setCurrentTheme(ThemePreferenceCodec.encode(newTheme))
+                }
+            } finally {
+                // Снимаем замок и при отмене/ошибке, чтобы кнопка не залипла
+                // в loading. После withDrop флаг уже false — тогда это no-op.
+                _uiState.update { state ->
+                    if (!state.lootboxState.isOpening) state
+                    else state.copy(lootboxState = state.lootboxState.copy(isOpening = false))
+                }
             }
         }
     }
@@ -753,11 +915,24 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun selectTaxiTariff(tariff: TaxiTariffType) {
-        _uiState.update { it.copy(taxiState = it.taxiState.copy(selectedTariff = tariff)) }
+        _uiState.update {
+            // Цена и время — всегда для текущего маршрута и реальных пробок.
+            val taxi = it.taxiState.withRoute(
+                distanceKm = it.taxiState.selectedDestination.distanceKm,
+                trafficScore = it.weather?.trafficScore
+            )
+            it.copy(taxiState = taxi.copy(selectedTariff = tariff))
+        }
     }
 
     fun selectTaxiDestination(destination: TaxiDestination) {
-        _uiState.update { it.copy(taxiState = it.taxiState.copy(selectedDestination = destination)) }
+        _uiState.update {
+            val taxi = it.taxiState.withRoute(
+                distanceKm = destination.distanceKm,
+                trafficScore = it.weather?.trafficScore
+            )
+            it.copy(taxiState = taxi.copy(selectedDestination = destination))
+        }
     }
 
     fun orderTaxi() {
@@ -1014,29 +1189,38 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Добавление города из поиска или из списка (item 6).
+     *
+     * Дедупликация по имени+координатам: повторный выбор того же места не создаёт
+     * дубликат, а просто выбирает существующий город. Новый город сразу становится
+     * выбранным, сохраняется в `saved_cities_json` и его погода грузится.
+     */
     fun addCity(city: CityLocation) {
-        val currentCities = _uiState.value.cities.toMutableList()
-        val existingIndex = currentCities.indexOfFirst { it.name.equals(city.name, ignoreCase = true) }
-        val targetIndex: Int
-
-        if (existingIndex >= 0) {
-            targetIndex = existingIndex
-        } else {
-            currentCities.add(city)
-            targetIndex = currentCities.lastIndex
-            viewModelScope.launch(Dispatchers.IO) {
-                repository.saveCities(currentCities)
-                val saved = repository.getSavedCitiesWeather(currentCities)
-                _uiState.update { it.copy(savedCities = saved) }
+        val current = _uiState.value
+        val plan = CityCatalog.planAdd(current.cities, city)
+        if (plan == null) {
+            // Лимит списка не ломаем: честно сообщаем, почему город не добавлен.
+            _uiState.update {
+                it.copy(
+                    searchError = "В списке уже ${CityCatalog.MAX_SAVED_CITIES} городов — " +
+                        "больше не помещается."
+                )
             }
+            return
         }
 
+        val selected = plan.cities[plan.selectedIndex]
+        // Выбор города уводит с «Списка» на главную: фоновую догрузку списка
+        // останавливаем, чтобы её ответы не конкурировали с загрузкой города.
+        savedCitiesJob?.cancel()
         _uiState.update {
             it.copy(
-                cities = currentCities,
-                selectedCity = city,
-                selectedCityIndex = targetIndex,
-                currentCityIndex = targetIndex,
+                cities = plan.cities,
+                selectedCity = selected,
+                selectedCityIndex = plan.selectedIndex,
+                currentCityIndex = plan.selectedIndex,
+                isSelectedCityCurrentLocation = DefaultCities.isGeoCity(selected),
                 searchQuery = "",
                 searchResults = emptyList(),
                 isSearching = false,
@@ -1045,8 +1229,31 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
 
-        selectCity(targetIndex)
+        if (plan.isNew) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.saveCities(plan.cities)
+                val saved = repository.getSavedCitiesWeather(plan.cities)
+                _uiState.update { it.copy(savedCities = saved) }
+            }
+        }
+
+        selectCity(plan.selectedIndex)
     }
+
+    // ------------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------------
+    private fun dayOfYear(): Int =
+        java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+
+    /**
+     * Пересчёт цен/времени такси под конкретный маршрут и честные пробки.
+     * trafficScore == null — данных нет, наценки нет.
+     */
+    private fun TaxiState.withRoute(distanceKm: Double, trafficScore: Int?): TaxiState = copy(
+        priceByTariff = TaxiPricing.priceByTariff(distanceKm, trafficScore),
+        durationMinByTariff = TaxiPricing.durationMinByTariff(distanceKm)
+    )
 
     // ------------------------------------------------------------------------
     // Grass & Congrats Modals

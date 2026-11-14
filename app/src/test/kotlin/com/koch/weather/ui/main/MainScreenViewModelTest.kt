@@ -192,15 +192,24 @@ class MainScreenViewModelTest {
     }
 
     @Test
-    fun defaultCities_spbAndMoscowAreTop() {
-        val defaultCities = listOf(
-            CityLocation("Санкт-Петербург", 59.9386, 30.3141, "Россия"),
-            CityLocation("Москва", 55.7558, 37.6173, "Россия"),
-            CityLocation("Минск", 53.9006, 27.5590, "Беларусь"),
-            CityLocation("Дубай", 25.2048, 55.2708, "ОАЭ")
+    fun defaultCities_arePetersburgMoscowSochiDubai() {
+        val defaultCities = DefaultCities.cities
+        assertEquals(
+            listOf("Санкт-Петербург", "Москва", "Сочи", "Дубай"),
+            defaultCities.map { it.name }
         )
-        assertEquals("Санкт-Петербург", defaultCities[0].name)
-        assertEquals("Москва", defaultCities[1].name)
+        assertEquals("Россия", defaultCities[0].country)
+        assertEquals("Россия", defaultCities[2].country)
+        assertEquals("Краснодарский край", defaultCities[2].region)
+        assertEquals(43.5855, defaultCities[2].latitude, 0.0001)
+        assertEquals(39.7231, defaultCities[2].longitude, 0.0001)
+        // Гео-город — только первый, и у него подпись «текущее место».
+        assertTrue(defaultCities[0].isCurrentLocation)
+        assertFalse(defaultCities[1].isCurrentLocation)
+        assertFalse(DefaultCities.isGeoCity(defaultCities[3]))
+        assertTrue(DefaultCities.isGeoCity(defaultCities[0]))
+        // Прежние дефолты с чужой страной в каталог не возвращаются.
+        assertTrue(defaultCities.all { it.country == "Россия" || it.country == "ОАЭ" })
     }
 
     @Test
@@ -209,6 +218,8 @@ class MainScreenViewModelTest {
         assertTrue(umbrellas.size >= 4)
         assertTrue(umbrellas.any { it.name.contains("Sky Blue") })
         assertTrue(umbrellas.any { it.priceRu.contains("649") })
+        assertEquals(649, DefaultUmbrellas.minPriceRu)
+        assertEquals("649 ₽", DefaultUmbrellas.minPriceLabel)
     }
 
     @Test
@@ -217,12 +228,10 @@ class MainScreenViewModelTest {
         val destinations = taxiRepo.getDestinations()
         assertTrue(destinations.isNotEmpty())
 
-        val basePrice = taxiRepo.calculatePriceRu(TaxiTariffType.ECONOMY, distanceKm = 3.0, trafficScore = 3)
-        val surgePrice = taxiRepo.calculatePriceRu(TaxiTariffType.ECONOMY, distanceKm = 3.0, trafficScore = 9)
+        val basePrice = taxiRepo.calculatePriceRu(TaxiTariffType.ECONOMY, distanceKm = 10.0, trafficScore = null)
+        val surgePrice = taxiRepo.calculatePriceRu(TaxiTariffType.ECONOMY, distanceKm = 10.0, trafficScore = 9)
         assertTrue(surgePrice > basePrice)
-
-        val priceByn = taxiRepo.calculatePriceByn(TaxiTariffType.ECONOMY, distanceKm = 3.0, trafficScore = 3)
-        assertTrue(priceByn > 0.0)
+        assertEquals(521, basePrice)
     }
 
     @Test
@@ -247,6 +256,18 @@ class MainScreenViewModelTest {
         assertTrue(offers.any { it.toCity.contains("Дубай") })
         assertTrue(offers.any { it.airline.contains("Emirates") })
 
+        val sochi = offers.first { it.toCity.contains("Сочи") }
+        assertEquals("Сочи (AER)", sochi.toCity)
+        assertEquals("Россия", sochi.airline)
+        assertTrue(sochi.flightNumber.startsWith("FV-") || sochi.flightNumber.startsWith("SU-"))
+        assertEquals("09:40", sochi.departureTime)
+        assertEquals("12:20", sochi.arrivalTime)
+        assertEquals("2 ч 40 мин", sochi.durationText)
+        assertEquals(6900, sochi.priceRu)
+        assertEquals("Солнечно, +26", sochi.weatherAtDestination)
+        // Прежнего оффера с чужой страной больше нет.
+        assertTrue(offers.none { it.toCity.contains("(MSQ)") })
+
         val seats = flightRepo.getAvailableSeats()
         assertTrue(seats.contains("12A"))
         assertTrue(seats.contains("14F"))
@@ -256,11 +277,24 @@ class MainScreenViewModelTest {
     fun aiFactsRepository_hasFacts() {
         val aiRepo = AiFactsRepository()
         val facts = aiRepo.getAllFacts()
-        assertTrue(facts.size >= 5)
+        assertTrue("Нужно минимум 16 фактов", facts.size >= 16)
+        assertTrue(facts.none { it.isBlank() })
         assertEquals("Чтобы точно узнать погоду, нужно посмотреть в окно", aiRepo.getDefaultFact())
         assertTrue(facts.any { it.contains("окно") })
         assertTrue(facts.any { it.contains("носки") })
         assertTrue(facts.any { it.contains("Питере") })
         assertNotNull(aiRepo.getRandomFact())
+        assertTrue(facts.toSet().size == facts.size)
+    }
+
+    @Test
+    fun uiState_hasAdCreativeAndCurrentLocationContract() {
+        val state = MainScreenUiState()
+        assertNotNull(state.adCreative)
+        assertEquals(AdCatalog.creatives.first(), state.adCreative)
+        assertNull(state.adImageUrl)
+        assertFalse(state.isSelectedCityCurrentLocation)
+        assertTrue(state.lootboxState.history.isEmpty())
+        assertEquals(0, state.lootboxState.lastRewardSeq)
     }
 }

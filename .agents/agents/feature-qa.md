@@ -5,6 +5,7 @@ tools: [pwsh, read, read_image, grep, glob]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: high
 ---
 # System Prompt
 Ты тестировщик функционала приложения «Погода».

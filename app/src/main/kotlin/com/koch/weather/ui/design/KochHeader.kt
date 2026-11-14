@@ -90,14 +90,17 @@ fun KochSection(
 }
 
 /**
- * Шапка полноэкранной страницы: 44 dp назад, заголовок 28/700, подпись 12/55 %.
- * Без разделителя — его роль играет отступ 24 dp.
+ * Шапка полноэкранной страницы: 44 dp назад (если передан [onBack]), заголовок 28/700,
+ * подпись 12/55 %. Без разделителя — его роль играет отступ 24 dp.
+ *
+ * Навигация на вкладках «Карта/Список/Поиск/Вид» теперь в нижнем баре, поэтому
+ * `onBack = null` — штатный режим: стрелка не рисуется, заголовок выровнен по контенту.
  */
 @Composable
 fun KochPageHeader(
     title: String,
     subtitle: String?,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -107,7 +110,7 @@ fun KochPageHeader(
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(
-                start = KochSpace.xs,
+                start = if (onBack != null) KochSpace.xs else KochSpace.xl,
                 end = KochSpace.xl,
                 top = KochSpace.xs,
                 bottom = KochSpace.s
@@ -115,13 +118,15 @@ fun KochPageHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start
     ) {
-        KochIconButton(
-            icon = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Назад",
-            onClick = onBack,
-            tint = colors.textPrimary.copy(alpha = 0.9f),
-            containerAlpha = 0f
-        )
+        if (onBack != null) {
+            KochIconButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Назад",
+                onClick = onBack,
+                tint = colors.textPrimary.copy(alpha = 0.9f),
+                containerAlpha = 0f
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,

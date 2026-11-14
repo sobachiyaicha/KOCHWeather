@@ -37,6 +37,19 @@ Kotlin + Compose + Material3, minSdk 24, Gradle Kotlin DSL, kotlinx.serializatio
 ### 4. Финальный судья и гейткипер (Внутренняя приемка)
 - `judge` — независимый финальный гейт. Не дублирует `visual-critic` и `code-reviewer`: проверяет матрицу `ACCEPTANCE.md`, свежесть доказательств, наличие PASS от `feature-qa` + `visual-critic` + `code-reviewer` (+ `perf-qa` для релиза), делает spot-check 2–3 экранов и выносит PASS/REJECT. Пока нет PASS — результат пользователю не отдаётся.
 
+### 5. Модель и эффорт (экономия)
+- Базовая модель — `deepseek-v4.1-flash`; дефолт профиля — `reasoningEffort: high`.
+- `max` — **только** `judge` и `code-reviewer`: финальный вердикт и поиск тонких дефектов
+  (гонки, отмена, обработка ошибок) реально выигрывают от максимального эффорта.
+- `high` — `ui-coder`, `data-coder`, `visual-critic`, `feature-qa`, `perf-qa`.
+- `low` — `device-qa` (механические adb-шаги, сборка, установка, скриншоты) и мелкие
+  точечные правки в любой роли.
+- `visual-critic`, `judge`, `feature-qa`, `device-qa`, `ui-coder` не переводятся на text-only
+  модели: им нужны изображения (`refs/*.png`, `shots/*.png`).
+- Дешёвые text-only модели (`iceman-contributor-free`, `glm-5.3-flash`) — только для
+  `data-coder` и мелких правок, после проверки на реальных задачах; не по умолчанию.
+- Оркестратор передаёт `reasoning_effort` явно при каждом запуске субагента.
+
 ## ЦИКЛ СДАЧИ (QUALITY GATE):
 ```
 [ui-coder / data-coder] (compile + unit tests)

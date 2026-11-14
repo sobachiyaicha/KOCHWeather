@@ -237,6 +237,45 @@ class WeatherMapperTest {
     }
 
     @Test
+    fun precipitationArrays_mapToHourlyAndDailyMm() {
+        val dto = sampleDto().copy(
+            hourly = sampleDto().hourly?.copy(
+                precipitation = listOf(0.0, 1.4)
+            ),
+            daily = sampleDto().daily?.copy(
+                precipitationSum = listOf(2.5, null)
+            )
+        )
+        val data = map(dto)
+        assertEquals(0.0, data.hourly.first().precipitationMm ?: -1.0, 0.001)
+        assertEquals(1.4, data.hourly[1].precipitationMm ?: -1.0, 0.001)
+        assertEquals(2.5, data.daily[0].precipitationMm ?: -1.0, 0.001)
+        assertNull(data.daily[1].precipitationMm)
+    }
+
+    @Test
+    fun missingPrecipitationArrays_stayNull_notZero() {
+        val dto = sampleDto().copy(
+            hourly = sampleDto().hourly?.copy(precipitation = null),
+            daily = sampleDto().daily?.copy(precipitationSum = null)
+        )
+        val data = map(dto)
+        // «Сейчас» берёт реальное current.precipitation (= 0.0 мм, данные есть).
+        assertEquals(0.0, data.hourly.first().precipitationMm ?: -1.0, 0.001)
+        // Дальше источника нет — null, а не выдуманный ноль.
+        assertTrue(data.hourly.drop(1).all { it.precipitationMm == null })
+        assertTrue(data.daily.all { it.precipitationMm == null })
+    }
+
+    @Test
+    fun clothingAdvice_isDeterministicForSameCityAndDay() {
+        val first = map(sampleDto(), at = 1_763_000_000_000L).clothingAdvice
+        val second = map(sampleDto(), at = 1_763_000_000_000L).clothingAdvice
+        assertEquals(first, second)
+        assertTrue(first.isNotBlank())
+    }
+
+    @Test
     fun malformedDailyArrays_doNotProduceInventedDays() {
         val dto = sampleDto().copy(
             daily = DailyWeatherDto(

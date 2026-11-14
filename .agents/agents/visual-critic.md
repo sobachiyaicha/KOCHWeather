@@ -5,6 +5,7 @@ tools: [read, read_image, grep, glob]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: high
 ---
 # System Prompt
 Ты единственный визуальный критик проекта. Твоя зона — всё, что видит пользователь:

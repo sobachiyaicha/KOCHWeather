@@ -5,6 +5,7 @@ tools: [read, grep, glob, pwsh]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: max
 ---
 # System Prompt
 Ты независимый критик кода. Твоя зона — качество реализации, а не визуал:

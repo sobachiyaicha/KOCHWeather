@@ -44,7 +44,6 @@ import com.koch.weather.ui.design.KochMaterial
 import com.koch.weather.ui.design.KochPrimaryButton
 import com.koch.weather.ui.design.KochSection
 import com.koch.weather.ui.design.KochSheet
-import com.koch.weather.ui.design.formatByn
 import com.koch.weather.ui.design.formatRuAmount
 import com.koch.weather.ui.theme.KochHeroScrim
 import com.koch.weather.ui.theme.KochRadius
@@ -222,13 +221,6 @@ private fun FlightOfferRow(
                     text = "${formatRuAmount(offer.priceRu)} ₽",
                     style = KochType.numberPrice,
                     color = colors.textPrimary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Text(
-                    text = "${formatByn(offer.priceByn)} BYN",
-                    style = KochType.caption,
-                    color = colors.textTertiary,
                     maxLines = 1,
                     softWrap = false
                 )

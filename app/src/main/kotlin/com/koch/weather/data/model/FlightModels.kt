@@ -15,7 +15,6 @@ data class FlightOffer(
     val arrivalTime: String,
     val durationText: String,
     val priceRu: Int,
-    val priceByn: Double,
     val weatherAtDestination: String,
     val isDirect: Boolean = true
 )

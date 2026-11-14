@@ -71,6 +71,11 @@ fun KochSheet(
     footer: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val colors = LocalKochColors.current
+    // M3 (visual-critic r14): при альфе ~0.95 сквозь лист читался контент предыдущего
+    // экрана («Билеты в Дубай», «Осадков не ожидается», «Открыто: 7») — на светлой теме
+    // это было заметно как фантом 1.2–1.5 : 1. Тон темы сохраняем, а альфу доводим до 1:
+    // подложка листа не пропускает фон ни на одной из семи тем.
+    val sheetFill = colors.sheetSurface.copy(alpha = 1f)
 
     Dialog(
         onDismissRequest = { if (!blocking) onDismiss() },
@@ -119,7 +124,7 @@ fun KochSheet(
             Surface(
                 modifier = sheetModifier.pointerInput(Unit) { detectTapGestures { } },
                 shape = if (isInset) KochShape.sheetInset else KochShape.sheetTop,
-                color = if (isInset) Color.Transparent else colors.sheetSurface,
+                color = if (isInset) Color.Transparent else sheetFill,
                 border = androidx.compose.foundation.BorderStroke(
                     KochBorderWidth.hairline,
                     colors.borderStrong
@@ -134,6 +139,17 @@ fun KochSheet(
                         Modifier.fillMaxWidth()
                     }
                 ) {
+                    // M6 (visual-critic r14): инсет-лист брал светлый градиент темы, и белый
+                    // текст «Поздравляем!» давал 1.8–2.2 : 1. На светлых темах кладём тёмный
+                    // скрим 50 %: градиент темы остаётся узнаваемым, а текст читается.
+                    // На тёмных темах скрим не нужен — фон и так тёмный.
+                    if (isInset && !colors.isDark) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = 0.5f))
+                        )
+                    }
                     Column(
                         modifier = if (isInset) {
                             Modifier.fillMaxSize()
@@ -193,7 +209,7 @@ fun KochSheet(
                                             .height(KochSpace.x2l)
                                             .background(
                                                 Brush.verticalGradient(
-                                                    listOf(Color.Transparent, colors.sheetSurface)
+                                                    listOf(Color.Transparent, sheetFill)
                                                 )
                                             )
                                     )

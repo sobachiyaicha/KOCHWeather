@@ -1,6 +1,7 @@
 package com.koch.weather.data.mapper
 
 import com.koch.weather.data.model.CityLocation
+import com.koch.weather.data.model.ClothingAdvisor
 import com.koch.weather.data.model.DailyItem
 import com.koch.weather.data.model.HourlyItem
 import com.koch.weather.data.model.WeatherApiResponse
@@ -9,6 +10,7 @@ import com.koch.weather.data.model.WeatherErrorReason
 import com.koch.weather.data.model.WeatherFailure
 import com.koch.weather.data.model.WmoHelper
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -84,7 +86,13 @@ object WeatherMapper {
                 windSpeed = currentWindMps,
                 weatherCode = weatherCode,
                 iconType = currentIcon,
-                clothingAdvice = WmoHelper.getClothingAdvice(currentTemp, weatherCode),
+                clothingAdvice = ClothingAdvisor.adviceFor(
+                    tempC = currentTemp,
+                    weatherCode = weatherCode,
+                    windSpeedMps = currentWindMps,
+                    cityName = city.name,
+                    dayOfYear = dayOfYear(lastUpdated)
+                ),
                 trafficScore = trafficScore,
                 trafficAdvice = trafficAdvice,
                 hourly = hourlyList,
@@ -109,6 +117,7 @@ object WeatherMapper {
         val hourlyCodes = hourly?.weatherCode.orEmpty()
         val hourlyPops = hourly?.precipitationProbability.orEmpty()
         val hourlyWinds = hourly?.windSpeed10m.orEmpty()
+        val hourlyPrecips = hourly?.precipitation.orEmpty()
         val hourlyWindFactor = windToMetersPerSecond(dto.hourlyUnits?.windSpeed10m)
 
         val current = dto.current
@@ -128,7 +137,10 @@ object WeatherMapper {
                 iconType = currentIcon,
                 pop = hourlyPops.getOrNull(currentIndex) ?: 0,
                 wind = currentWind,
-                popKnown = hourlyPops.getOrNull(currentIndex) != null
+                popKnown = hourlyPops.getOrNull(currentIndex) != null,
+                // Осадки «сейчас» — из current.precipitation; нет поля → null.
+                precipitationMm = current?.precipitation
+                    ?: hourlyPrecips.getOrNull(currentIndex)
             )
         )
 
@@ -147,7 +159,8 @@ object WeatherMapper {
                     iconType = WmoHelper.getIconType(code, isHourDay(hour)),
                     pop = hourlyPops.getOrNull(i) ?: 0,
                     wind = hourlyWinds.getOrNull(i)?.times(hourlyWindFactor),
-                    popKnown = hourlyPops.getOrNull(i) != null
+                    popKnown = hourlyPops.getOrNull(i) != null,
+                    precipitationMm = hourlyPrecips.getOrNull(i)
                 )
             )
         }
@@ -159,9 +172,10 @@ object WeatherMapper {
         currentCode: Int
     ): List<DailyItem> {
         val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val dayFormat = SimpleDateFormat("EE", Locale.forLanguageTag("ru"))
+        val dayNameFormat = SimpleDateFormat("EE", Locale.forLanguageTag("ru"))
         val dayNames = listOf("Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб")
         val dailyPops = daily.precipitationProbabilityMax.orEmpty()
+        val dailyPrecips = daily.precipitationSum.orEmpty()
         val list = mutableListOf<DailyItem>()
 
         for (i in daily.time.indices) {
@@ -174,7 +188,7 @@ object WeatherMapper {
                 try {
                     val date = inputFormat.parse(daily.time[i])
                     if (date != null) {
-                        dayFormat.format(date).replaceFirstChar { it.uppercase() }
+                        dayNameFormat.format(date).replaceFirstChar { it.uppercase() }
                     } else {
                         fallbackDayLabel(dayNames, i)
                     }
@@ -190,11 +204,20 @@ object WeatherMapper {
                     pop = dailyPops.getOrNull(i) ?: 0,
                     minTemp = min,
                     maxTemp = max,
-                    popKnown = dailyPops.getOrNull(i) != null
+                    popKnown = dailyPops.getOrNull(i) != null,
+                    precipitationMm = dailyPrecips.getOrNull(i)
                 )
             )
         }
         return list
+    }
+
+    /** День года из времени снимка — для детерминированного «совета на сегодня». */
+    private fun dayOfYear(epochMillis: Long): Int {
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = if (epochMillis > 0) epochMillis else System.currentTimeMillis()
+        }
+        return calendar.get(Calendar.DAY_OF_YEAR)
     }
 
     private fun fallbackDayLabel(dayNames: List<String>, offset: Int): String {

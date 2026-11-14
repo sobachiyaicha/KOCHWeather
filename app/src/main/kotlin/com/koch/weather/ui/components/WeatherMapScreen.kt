@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.view.ViewGroup
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -16,13 +15,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,6 +59,10 @@ import org.osmdroid.views.overlay.Marker
 /**
  * R12: полноэкранная карта OSM. Хром — плавающее стекло поверх карты.
  *
+ * Навигация — нижний бар, поэтому собственной кнопки «назад» у экрана нет:
+ * шапка только показывает город и источник, [modifier] приходит из `MainScreen`
+ * с отступом под бар (`bottomContentPadding`), чтобы карта не уходила под него.
+ *
  * Маркер создаётся и добавляется ПРЯМО В `AndroidView.factory` (а не в `LaunchedEffect`),
  * иконка — `BitmapDrawable` из Canvas: `GradientDrawable` без `setSize()` имеет
  * intrinsicWidth = -1, и osmdroid не может его нарисовать (это и была причина, почему пин
@@ -76,10 +77,8 @@ fun WeatherMapScreen(
     longitude: Double,
     currentTemp: Int?,
     conditionRu: String? = null,
-    onClose: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    BackHandler(onBack = onClose)
-
     val colors = LocalKochColors.current
     val context = LocalContext.current
     var mapReady by remember { mutableStateOf(false) }
@@ -137,7 +136,7 @@ fun WeatherMapScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF101820))
     ) {
@@ -197,16 +196,9 @@ fun WeatherMapScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = KochSpace.xs, vertical = 4.dp),
+                    .padding(horizontal = KochSpace.l, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                KochIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Назад",
-                    onClick = onClose,
-                    tint = colors.textPrimary,
-                    containerAlpha = 0f
-                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = cityName,
@@ -250,7 +242,6 @@ fun WeatherMapScreen(
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
                 .padding(horizontal = KochSpace.l, vertical = KochSpace.l),
             shape = RoundedCornerShape(KochRadius.card),
             color = colors.sheetSurface,

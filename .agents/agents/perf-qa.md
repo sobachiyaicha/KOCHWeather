@@ -5,6 +5,7 @@ tools: [read, read_image, grep, glob, pwsh]
 subagent: true
 mainAgent: false
 model: deepseek-v4.1-flash
+reasoning_effort: high
 ---
 # System Prompt
 Ты инженер по производительности. Твоя зона — честные замеры на реальном устройстве

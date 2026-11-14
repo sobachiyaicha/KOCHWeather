@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.ui.design.KochCard
@@ -54,6 +55,8 @@ internal fun GoldenCapsuleHeader(
     weather: WeatherDomainData,
     citiesCount: Int,
     selectedCityIndex: Int,
+    /** true только для гео-города (Санкт-Петербург); у выбранных/добавленных городов — false. */
+    isCurrentLocation: Boolean,
     onSelectCityIndex: (Int) -> Unit,
     onHeaderClick: () -> Unit
 ) {
@@ -71,7 +74,11 @@ internal fun GoldenCapsuleHeader(
             androidx.compose.material3.Surface(
                 modifier = Modifier
                     // В референсе капсула занимает ~74 % ширины экрана, а не всю строку.
-                    .fillMaxWidth(0.84f)
+                    // m1 (visual-critic r14): при 0.84 правый край капсулы уходил под
+                    // повёрнутую «3°», и белая цифра частично пропадала на золоте.
+                    // Температуру не двигаем (rotate -15°, offset -12/-24 — заморожено),
+                    // сужаем только капсулу: правый край заканчивается до цифры.
+                    .fillMaxWidth(0.74f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -91,7 +98,7 @@ internal fun GoldenCapsuleHeader(
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "ТЕКУЩЕЕ МЕСТО",
+                            text = if (isCurrentLocation) "ТЕКУЩЕЕ МЕСТО" else "ВЫБРАННЫЙ ГОРОД",
                             style = KochType.microCaps,
                             color = colors.textPrimary.copy(alpha = 0.85f)
                         )
@@ -101,31 +108,36 @@ internal fun GoldenCapsuleHeader(
                             style = KochType.displayCity,
                             color = colors.textPrimary,
                             maxLines = 1,
-                            softWrap = false
+                            softWrap = false,
+                            // Капсула уже — длинное название не обрезается молча.
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = weather.conditionDescription,
-                                style = KochType.sub,
-                                color = colors.textPrimary.copy(alpha = 0.95f),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = formatMaxMinRu(weather.maxTemp, weather.minTemp),
-                                style = KochType.caption,
-                                color = colors.textPrimary.copy(alpha = 0.85f),
-                                textAlign = TextAlign.End,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
+                        // Условие и диапазон — двумя строками, как в refs/clean_main.png
+                        // (там «Облачно» и «Макс.:22°, мин.:13°» тоже идут раздельно).
+                        // В одну строку диапазон уходил под повёрнутую температуру в углу
+                        // капсулы и обрезался на «мин.: …». Саму температуру не двигаем
+                        // (rotate -15°, offset -12/-24 — заморожено).
+                        Text(
+                            text = weather.conditionDescription,
+                            style = KochType.sub,
+                            color = colors.textPrimary.copy(alpha = 0.95f),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            // Запас справа под температуру: длинное условие не залезает под неё.
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 56.dp)
+                        )
+                        Text(
+                            text = formatMaxMinRu(weather.maxTemp, weather.minTemp),
+                            style = KochType.caption,
+                            color = colors.textPrimary.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(top = 2.dp, end = 56.dp)
+                        )
                     }
                 }
             }
@@ -152,7 +164,12 @@ internal fun GoldenCapsuleHeader(
             Icon(
                 imageVector = Icons.Default.Navigation,
                 contentDescription = "Текущая геопозиция",
-                tint = colors.textPrimary,
+                // Подсвечен только когда выбран сам гео-город: иначе это просто переход к нему.
+                tint = if (isCurrentLocation) {
+                    colors.textPrimary
+                } else {
+                    colors.textPrimary.copy(alpha = 0.45f)
+                },
                 modifier = Modifier
                     .size(13.dp)
                     .rotate(-45f)
