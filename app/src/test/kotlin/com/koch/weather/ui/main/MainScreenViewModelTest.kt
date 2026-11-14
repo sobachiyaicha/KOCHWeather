@@ -45,6 +45,40 @@ class MainScreenViewModelTest {
     }
 
     @Test
+    fun defaultUiState_hasHonestEmptyWeatherState() {
+        val state = MainScreenUiState()
+        assertNull(state.weather)
+        assertEquals(WeatherDataState.LOADING, state.weatherState)
+        assertFalse(state.isWeatherUnavailable)
+        assertNull(state.weatherErrorMessage)
+        assertNull(state.weatherLastUpdated)
+        assertFalse(state.isRefreshing)
+        assertEquals(WeatherSource.NONE, state.weatherSource)
+        assertEquals(WeatherSource.NONE.attributionRu, state.weatherAttributionRu)
+        assertNull(state.weatherSourceNote)
+        assertTrue(state.savedCities.isEmpty())
+        assertFalse(state.isLoadingSavedCities)
+        assertEquals(7, state.themeCatalog.size)
+        assertNull(state.searchError)
+        assertTrue(state.imageUrls.isEmpty())
+    }
+
+    @Test
+    fun unavailableWeatherState_isExplicit() {
+        val state = MainScreenUiState().copy(
+            weather = null,
+            weatherState = WeatherDataState.UNAVAILABLE,
+            isWeatherUnavailable = true,
+            weatherErrorMessage = "Нет данных о погоде",
+            isOffline = true
+        )
+        assertTrue(state.isWeatherUnavailable)
+        assertEquals(WeatherDataState.UNAVAILABLE, state.weatherState)
+        assertNull(state.weather)
+        assertEquals("Нет данных о погоде", state.weatherErrorMessage)
+    }
+
+    @Test
     fun uiState_phase3Features_copyUpdatesState() {
         val state = MainScreenUiState()
         val updated = state.copy(

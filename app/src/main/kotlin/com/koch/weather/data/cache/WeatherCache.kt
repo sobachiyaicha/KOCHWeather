@@ -19,6 +19,13 @@ import java.util.Locale
 
 private val Context.dataStore by preferencesDataStore(name = "weather_cache")
 
+/** Последний реальный прогноз для конкретного города + время и источник. */
+data class CachedForecast(
+    val json: String,
+    val savedAt: Long,
+    val sourceId: String? = null
+)
+
 class WeatherCache(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -31,6 +38,12 @@ class WeatherCache(private val context: Context) {
 
     private fun cityKey(cityName: String) =
         stringPreferencesKey("weather_${cityName.trim().lowercase(Locale.ROOT).replace(" ", "_")}")
+
+    private fun cityUpdatedKey(cityName: String) =
+        longPreferencesKey("weather_updated_${cityName.trim().lowercase(Locale.ROOT).replace(" ", "_")}")
+
+    private fun citySourceKey(cityName: String) =
+        stringPreferencesKey("weather_source_${cityName.trim().lowercase(Locale.ROOT).replace(" ", "_")}")
 
     val isPremiumFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_IS_PREMIUM] ?: false
@@ -73,30 +86,38 @@ class WeatherCache(private val context: Context) {
         }
     }
 
-    suspend fun saveForecast(city: CityLocation, jsonString: String) = withContext(Dispatchers.IO) {
+    suspend fun saveForecast(
+        city: CityLocation,
+        jsonString: String,
+        sourceId: String
+    ) = withContext(Dispatchers.IO) {
         try {
+            val now = System.currentTimeMillis()
             context.dataStore.edit { prefs ->
                 prefs[KEY_LAST_WEATHER] = jsonString
                 prefs[KEY_LAST_CITY] = json.encodeToString(city)
-                prefs[KEY_LAST_UPDATED] = System.currentTimeMillis()
+                prefs[KEY_LAST_UPDATED] = now
                 prefs[cityKey(city.name)] = jsonString
+                prefs[cityUpdatedKey(city.name)] = now
+                prefs[citySourceKey(city.name)] = sourceId
             }
         } catch (_: Exception) {}
     }
 
-    suspend fun getForecastForCity(cityName: String): String? = withContext(Dispatchers.IO) {
+    /**
+     * Кэш только для запрошенного города. Никакого fallback на прогноз другого
+     * города: иначе Москва показывала бы погоду Санкт-Петербурга как свою.
+     */
+    suspend fun getCachedForecast(cityName: String): CachedForecast? = withContext(Dispatchers.IO) {
         try {
-            val key = cityKey(cityName)
-            context.dataStore.data.map { prefs -> prefs[key] }.first()
-                ?: getLastForecastJson()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    suspend fun getLastForecastJson(): String? = withContext(Dispatchers.IO) {
-        try {
-            context.dataStore.data.map { prefs -> prefs[KEY_LAST_WEATHER] }.first()
+            val prefs = context.dataStore.data.first()
+            val json = prefs[cityKey(cityName)] ?: return@withContext null
+            val savedAt = prefs[cityUpdatedKey(cityName)] ?: prefs[KEY_LAST_UPDATED] ?: 0L
+            CachedForecast(
+                json = json,
+                savedAt = savedAt,
+                sourceId = prefs[citySourceKey(cityName)]
+            )
         } catch (_: Exception) {
             null
         }

@@ -2,22 +2,56 @@ package com.koch.weather.data.repository
 
 import android.content.Context
 import com.koch.weather.data.api.OpenMeteoClient
+import com.koch.weather.data.cache.CachedForecast
 import com.koch.weather.data.cache.WeatherCache
-import com.koch.weather.data.model.*
+import com.koch.weather.data.mapper.WeatherErrors
+import com.koch.weather.data.mapper.WeatherMapResult
+import com.koch.weather.data.mapper.WeatherMapper
+import com.koch.weather.data.model.CachedWeather
+import com.koch.weather.data.model.CityLocation
+import com.koch.weather.data.model.CitySearchResult
+import com.koch.weather.data.model.SavedCityWeather
+import com.koch.weather.data.model.WeatherApiResponse
+import com.koch.weather.data.model.WeatherDomainData
+import com.koch.weather.data.model.WeatherErrorReason
+import com.koch.weather.data.model.WeatherFailure
+import com.koch.weather.data.model.WeatherLoadResult
+import com.koch.weather.data.model.WeatherSource
+import com.koch.weather.data.provider.GeocodingChain
+import com.koch.weather.data.provider.MetNoProvider
+import com.koch.weather.data.provider.NominatimGeocodingProvider
+import com.koch.weather.data.provider.OpenMeteoGeocodingProvider
+import com.koch.weather.data.provider.OpenMeteoProvider
+import com.koch.weather.data.provider.PhotonGeocodingProvider
+import com.koch.weather.data.provider.ProviderAttemptFailure
+import com.koch.weather.data.provider.WeatherProviderChain
+import com.koch.weather.data.provider.WeatherProviderChainResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
-import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.roundToInt
 
 class WeatherRepository @JvmOverloads constructor(
     context: Context,
     private val trafficRepository: TrafficRepository = TrafficRepository()
 ) {
-    private val client = OpenMeteoClient()
+    private val openMeteoClient = OpenMeteoClient()
+    private val metNoProvider = MetNoProvider()
+    private val weatherProviderChain = WeatherProviderChain(
+        listOf(
+            metNoProvider,
+            OpenMeteoProvider(openMeteoClient)
+        )
+    )
+    private val geocodingChain = GeocodingChain(
+        listOf(
+            PhotonGeocodingProvider(),
+            NominatimGeocodingProvider(),
+            OpenMeteoGeocodingProvider(openMeteoClient)
+        )
+    )
+
     private val cache = WeatherCache(context.applicationContext)
     private val json = Json {
         ignoreUnknownKeys = true
@@ -25,26 +59,44 @@ class WeatherRepository @JvmOverloads constructor(
         coerceInputValues = true
     }
 
-    // In-memory cache for ultra-fast (0ms) tab and city switching
+    // Только реальные прогнозы: сеть (MET Norway/Open-Meteo) или DataStore.
     private val memoryCache = ConcurrentHashMap<String, WeatherDomainData>()
+    private val memorySource = ConcurrentHashMap<String, WeatherSource>()
 
     val defaultCities = listOf(
-        CityLocation("Санкт-Петербург", 59.9386, 30.3141, "Россия"),
-        CityLocation("Москва", 55.7558, 37.6173, "Россия"),
-        CityLocation("Минск", 53.9006, 27.5590, "Беларусь"),
-        CityLocation("Дубай", 25.2048, 55.2708, "ОАЭ")
+        CityLocation("Санкт-Петербург", 59.9386, 30.3141, "Россия", "Санкт-Петербург"),
+        CityLocation("Москва", 55.7558, 37.6173, "Россия", "Москва"),
+        CityLocation("Минск", 53.9006, 27.5590, "Беларусь", "Минск"),
+        CityLocation("Дубай", 25.2048, 55.2708, "ОАЭ", "Дубай")
     )
 
-    init {
-        // Pre-fill memory cache with rich baseline data for instant render
-        for (city in defaultCities) {
-            memoryCache[city.name] = getFallbackData(city.name, isOffline = false)
+    /** Мгновенный доступ к уже загруженному реальному прогнозу (без сети и DataStore). */
+    fun getCachedWeatherFast(city: CityLocation): WeatherDomainData? =
+        memoryCache[city.name]?.copy(dataSourceLabel = null)
+
+    /** Реальный прогноз из памяти или DataStore с указанием источника; null — данных нет. */
+    suspend fun getCachedWeather(city: CityLocation): CachedWeather? = withContext(Dispatchers.IO) {
+        val memory = memoryCache[city.name]
+        if (memory != null) {
+            return@withContext CachedWeather(
+                data = memory.copy(dataSourceLabel = null, isOffline = true),
+                source = memorySource[city.name] ?: WeatherSource.CACHE
+            )
         }
+        readCachedWeather(city)
     }
 
-    fun getCachedWeatherFast(city: CityLocation): WeatherDomainData {
-        return memoryCache[city.name] ?: getFallbackData(city.name, isOffline = false)
-    }
+    /**
+     * Список сохранённых городов с реальными температурами из памяти/DataStore.
+     * Для города без данных [SavedCityWeather.tempC] == null.
+     */
+    suspend fun getSavedCitiesWeather(cities: List<CityLocation>): List<SavedCityWeather> =
+        withContext(Dispatchers.IO) {
+            cities.map { city ->
+                val domain = memoryCache[city.name] ?: readCachedWeather(city)?.data
+                SavedCityWeather.from(city, domain)
+            }
+        }
 
     suspend fun getInitialCities(): List<CityLocation> = withContext(Dispatchers.IO) {
         val saved = cache.getSavedCities()
@@ -78,276 +130,216 @@ class WeatherRepository @JvmOverloads constructor(
         cache.saveCitiesList(cities)
     }
 
-    suspend fun getWeatherData(city: CityLocation): WeatherDomainData = withContext(Dispatchers.IO) {
-        val result = client.getForecast(city.latitude, city.longitude)
-        if (result.isSuccess) {
-            val dto = result.getOrThrow()
-            val domain = mapToDomain(city, dto, isOffline = false)
-            memoryCache[city.name] = domain
-            // Persist to DataStore cache in background
-            try {
-                cache.saveForecast(city, json.encodeToString(dto))
-            } catch (_: Exception) {}
-            domain
-        } else {
-            // Read from DataStore cache for this city
-            val cachedJson = cache.getForecastForCity(city.name)
-            if (!cachedJson.isNullOrBlank()) {
-                try {
-                    val dto = json.decodeFromString<WeatherApiResponse>(cachedJson)
-                    val domain = mapToDomain(city, dto, isOffline = true)
-                    memoryCache[city.name] = domain
-                    domain
-                } catch (_: Exception) {
-                    val fallback = getFallbackData(city.name, isOffline = true)
-                    memoryCache[city.name] = fallback
-                    fallback
-                }
-            } else {
-                val fallback = getFallbackData(city.name, isOffline = true)
-                memoryCache[city.name] = fallback
-                fallback
+    suspend fun getWeatherData(
+        city: CityLocation,
+        isOnline: Boolean = true
+    ): WeatherLoadResult = withContext(Dispatchers.IO) {
+        // Без сети не ждём таймаутов: сразу честный кэш/«нет данных».
+        if (!isOnline) {
+            return@withContext cachedOrUnavailable(
+                city = city,
+                failure = WeatherErrors.noNetwork(),
+                attempts = emptyList()
+            )
+        }
+        val now = System.currentTimeMillis()
+
+        // Политика MET Norway: при наличии свежего кэша не дёргаем сеть чаще
+        // разрешённого интервала (30 мин Скандинавия / 3 ч остальной мир).
+        val snapshot = cache.getCachedForecast(city.name)
+        if (snapshot != null && metNoProvider.shouldUseCachedForecast(
+                sourceId = snapshot.sourceId,
+                savedAt = snapshot.savedAt,
+                now = now,
+                latitude = city.latitude,
+                longitude = city.longitude
+            )
+        ) {
+            val interval = metNoProvider.minRefreshIntervalMs(city.latitude, city.longitude)
+            val domain = decodeCachedDomain(city, snapshot)
+            if (domain != null) {
+                val freshEnough = domain.copy(
+                    isOffline = false,
+                    // Это DataStore-кэш, поэтому подпись источника в домене null;
+                    // источник для UI идёт отдельно в weatherAttributionRu.
+                    dataSourceLabel = null
+                )
+                memoryCache[city.name] = freshEnough
+                memorySource[city.name] = WeatherSource.MET_NO
+                return@withContext WeatherLoadResult.Live(
+                    data = freshEnough,
+                    source = WeatherSource.MET_NO,
+                    fallbackNote = "MET Norway: данные из кэша (обновление не чаще " +
+                        "${interval / 60_000} мин)."
+                )
             }
         }
-    }
 
-    suspend fun searchCities(query: String): List<CityLocation> = withContext(Dispatchers.IO) {
-        val res = client.searchCity(query)
-        if (res.isSuccess) {
-            val list = res.getOrThrow()
-            if (list.isNotEmpty()) {
-                return@withContext list.map {
-                    CityLocation(
-                        name = it.name,
-                        latitude = it.latitude,
-                        longitude = it.longitude,
-                        country = it.country ?: it.admin1 ?: "Мир"
+        when (val chain = weatherProviderChain.fetch(city.latitude, city.longitude)) {
+            is WeatherProviderChainResult.Success -> {
+                val traffic = trafficRepository.getTraffic(city)
+                val mapped = WeatherMapper.map(
+                    city = city,
+                    dto = chain.response,
+                    isOffline = false,
+                    lastUpdated = chain.fetchedAt,
+                    trafficScore = traffic.score,
+                    trafficAdvice = traffic.description,
+                    dataSourceLabel = if (chain.fromProviderCache) {
+                        null
+                    } else {
+                        chain.source.displayNameRu
+                    }
+                )
+                when (mapped) {
+                    is WeatherMapResult.Success -> {
+                        memoryCache[city.name] = mapped.data
+                        memorySource[city.name] = chain.source
+                        try {
+                            // R19: сохраняем полный доменный снимок (не только ответ API),
+                            // чтобы при офлайне показать ровно те же цифры и время.
+                            cache.saveForecast(
+                                city = city,
+                                jsonString = json.encodeToString(mapped.data),
+                                sourceId = chain.source.id
+                            )
+                        } catch (_: Exception) {
+                            // Показ уже полученного реального прогноза не должен падать из-за кэша.
+                        }
+                        val failoverNote = buildFailoverNote(chain.failedAttempts)
+                        val providerCacheNote = if (chain.fromProviderCache) {
+                            "MET Norway: данные из кэша провайдера."
+                        } else {
+                            null
+                        }
+                        WeatherLoadResult.Live(
+                            data = mapped.data,
+                            source = chain.source,
+                            fallbackNote = listOfNotNull(failoverNote, providerCacheNote)
+                                .joinToString(" ")
+                                .ifBlank { null }
+                        )
+                    }
+
+                    is WeatherMapResult.Failure -> cachedOrUnavailable(
+                        city = city,
+                        failure = mapped.failure,
+                        attempts = chain.failedAttempts
                     )
                 }
             }
-        }
-        defaultCities.filter { it.name.contains(query, ignoreCase = true) }
-    }
 
-    private suspend fun mapToDomain(city: CityLocation, dto: WeatherApiResponse, isOffline: Boolean): WeatherDomainData {
-        val cityName = city.name
-        val cur = dto.current ?: CurrentWeatherDto()
-        val curTemp = cur.temperature2m.roundToInt()
-        val wmoCode = cur.weatherCode
-        val isDay = (cur.isDay ?: 1) == 1
-        val desc = WmoHelper.getDescriptionRu(wmoCode)
-        val iconType = WmoHelper.getIconType(wmoCode, isDay)
-
-        val dailyDto = dto.daily
-        val maxTemp = dailyDto?.temperature2mMax?.firstOrNull()?.roundToInt() ?: (curTemp + 2)
-        val minTemp = dailyDto?.temperature2mMin?.firstOrNull()?.roundToInt() ?: (curTemp - 6)
-
-        val clothingAdvice = WmoHelper.getClothingAdvice(curTemp, wmoCode)
-        val trafficInfo = trafficRepository.getTraffic(city)
-        val trafficScore = trafficInfo.score
-        val trafficAdvice = trafficInfo.description
-
-        // Hourly mapping
-        val hourlyList = mutableListOf<HourlyItem>()
-        val hourlyTimes = dto.hourly?.time ?: emptyList()
-        val hourlyTemps = dto.hourly?.temperature2m ?: emptyList()
-        val hourlyCodes = dto.hourly?.weatherCode ?: emptyList()
-        val hourlyPops = dto.hourly?.precipitationProbability ?: emptyList()
-        val hourlyWinds = dto.hourly?.windSpeed10m ?: emptyList()
-
-        val curHourPrefix = cur.time.take(13)
-        var currentIndex = hourlyTimes.indexOfFirst { it.startsWith(curHourPrefix) }
-        if (currentIndex < 0) {
-            currentIndex = 0
-        }
-
-        hourlyList.add(
-            HourlyItem(
-                hourLabel = "Сейчас",
-                temp = curTemp,
-                weatherCode = wmoCode,
-                iconType = iconType,
-                pop = hourlyPops.getOrNull(currentIndex) ?: 0,
-                wind = cur.windSpeed10m ?: 4.0
-            )
-        )
-
-        val startIdx = currentIndex + 1
-        val endIdx = minOf(startIdx + 24, hourlyTimes.size)
-        for (i in startIdx until endIdx) {
-            val rawTime = hourlyTimes[i]
-            val hourStr = rawTime.substringAfter("T").take(2)
-            val code = hourlyCodes.getOrNull(i) ?: wmoCode
-            val hourInt = hourStr.toIntOrNull() ?: 12
-            val isHourDay = hourInt in 6..21
-            hourlyList.add(
-                HourlyItem(
-                    hourLabel = hourStr,
-                    temp = hourlyTemps.getOrNull(i)?.roundToInt() ?: curTemp,
-                    weatherCode = code,
-                    iconType = WmoHelper.getIconType(code, isHourDay),
-                    pop = hourlyPops.getOrNull(i) ?: 0,
-                    wind = hourlyWinds.getOrNull(i) ?: 3.5
-                )
-            )
-        }
-
-        if (hourlyList.size <= 1) {
-            hourlyList.clear()
-            hourlyList.addAll(getMockHourly(curTemp, wmoCode, iconType))
-        }
-
-        // Daily mapping
-        val dailyList = mutableListOf<DailyItem>()
-        val dailyTimes = dailyDto?.time ?: emptyList()
-        val dailyCodes = dailyDto?.weatherCode ?: emptyList()
-        val dailyMaxs = dailyDto?.temperature2mMax ?: emptyList()
-        val dailyMins = dailyDto?.temperature2mMin ?: emptyList()
-        val dailyPops = dailyDto?.precipitationProbabilityMax ?: emptyList()
-
-        val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val dayFormat = SimpleDateFormat("EE", Locale.forLanguageTag("ru"))
-        val dayNames = listOf("Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб")
-
-        for (i in dailyTimes.indices) {
-            val label = if (i == 0) {
-                "Сегодня"
-            } else {
-                try {
-                    val date = inputFormat.parse(dailyTimes[i])
-                    if (date != null) {
-                        dayFormat.format(date).replaceFirstChar { it.uppercase() }
-                    } else {
-                        val cal = Calendar.getInstance()
-                        cal.add(Calendar.DAY_OF_YEAR, i)
-                        dayNames[cal.get(Calendar.DAY_OF_WEEK) - 1]
-                    }
-                } catch (_: Exception) {
-                    val cal = Calendar.getInstance()
-                    cal.add(Calendar.DAY_OF_YEAR, i)
-                    dayNames[cal.get(Calendar.DAY_OF_WEEK) - 1]
-                }
+            is WeatherProviderChainResult.AllFailed -> {
+                val failure = chain.failedAttempts.lastOrNull()?.failure
+                    ?: WeatherFailure(
+                        WeatherErrorReason.UNKNOWN,
+                        "Не удалось получить прогноз. Повторите попытку."
+                    )
+                cachedOrUnavailable(city, failure, chain.failedAttempts)
             }
+        }
+    }
 
-            val code = dailyCodes.getOrNull(i) ?: 2
-            dailyList.add(
-                DailyItem(
-                    dayLabel = label,
-                    weatherCode = code,
-                    iconType = WmoHelper.getIconType(code, isDay = true),
-                    pop = dailyPops.getOrNull(i) ?: 0,
-                    minTemp = dailyMins.getOrNull(i)?.roundToInt() ?: (curTemp - 6),
-                    maxTemp = dailyMaxs.getOrNull(i)?.roundToInt() ?: (curTemp + 2)
-                )
+    suspend fun searchCities(query: String): CitySearchResult = withContext(Dispatchers.IO) {
+        // Photon → Nominatim → Open-Meteo geocoding; локальных «поисков» по
+        // дефолтным городам при ошибке больше нет.
+        geocodingChain.search(query)
+    }
+
+    /**
+     * При сетевой ошибке отдаём последний РЕАЛЬНЫЙ прогноз для этого же города
+     * (память/DataStore) с isOffline=true. Если кэша нет — Unavailable.
+     */
+    private suspend fun cachedOrUnavailable(
+        city: CityLocation,
+        failure: WeatherFailure,
+        attempts: List<ProviderAttemptFailure>
+    ): WeatherLoadResult {
+        val reason = combinedFailure(failure, attempts)
+        val memory = memoryCache[city.name]
+        if (memory != null) {
+            val offline = memory.copy(isOffline = true, dataSourceLabel = null)
+            memoryCache[city.name] = offline
+            return WeatherLoadResult.Cached(
+                data = offline,
+                source = memorySource[city.name] ?: WeatherSource.CACHE,
+                reason = reason
             )
         }
-
-        if (dailyList.isEmpty()) {
-            dailyList.addAll(getMockDaily(curTemp))
-        }
-
-        return WeatherDomainData(
-            cityName = cityName,
-            currentTemp = curTemp,
-            conditionDescription = desc,
-            minTemp = minTemp,
-            maxTemp = maxTemp,
-            humidity = cur.relativeHumidity2m ?: 65,
-            windSpeed = cur.windSpeed10m ?: 4.2,
-            weatherCode = wmoCode,
-            iconType = iconType,
-            clothingAdvice = clothingAdvice,
-            trafficScore = trafficScore,
-            trafficAdvice = trafficAdvice,
-            hourly = hourlyList,
-            daily = dailyList,
-            isOffline = isOffline
-        )
-    }
-
-    private fun getFallbackData(cityName: String, isOffline: Boolean): WeatherDomainData {
-        val isMinsk = cityName.contains("Минск", ignoreCase = true)
-        val isSpb = cityName.contains("Санкт", ignoreCase = true) || cityName.contains("Петербург", ignoreCase = true)
-        val isDubai = cityName.contains("Дубай", ignoreCase = true)
-        val isMoscow = cityName.contains("Москва", ignoreCase = true)
-
-        val temp = when {
-            isMinsk -> 21
-            isDubai -> 31
-            isSpb -> 5
-            isMoscow -> 7
-            else -> 15
-        }
-
-        val minTemp = when {
-            isMinsk -> 13
-            isDubai -> 24
-            isSpb -> 1
-            isMoscow -> 2
-            else -> 8
-        }
-
-        val maxTemp = when {
-            isMinsk -> 22
-            isDubai -> 34
-            isSpb -> 7
-            isMoscow -> 9
-            else -> 18
-        }
-
-        val wmoCode = when {
-            isDubai -> 0
-            isMinsk -> 3
-            isMoscow -> 2
-            else -> 2
-        }
-
-        val desc = WmoHelper.getDescriptionRu(wmoCode)
-        val iconType = WmoHelper.getIconType(wmoCode, isDay = true)
-
-        return WeatherDomainData(
-            cityName = cityName,
-            currentTemp = temp,
-            conditionDescription = desc,
-            minTemp = minTemp,
-            maxTemp = maxTemp,
-            humidity = if (isDubai) 45 else 72,
-            windSpeed = if (isDubai) 3.1 else 4.2,
-            weatherCode = wmoCode,
-            iconType = iconType,
-            clothingAdvice = WmoHelper.getClothingAdvice(temp, wmoCode),
-            trafficScore = null,
-            trafficAdvice = "Нет данных о пробках",
-            hourly = getMockHourly(temp, wmoCode, iconType),
-            daily = getMockDaily(temp),
-            isOffline = isOffline
-        )
-    }
-
-    private fun getMockHourly(baseTemp: Int, baseCode: Int, baseIcon: WeatherIconType): List<HourlyItem> {
-        val hours = listOf("Сейчас", "15", "16", "17", "18", "19", "20", "21", "22", "23", "00", "01")
-        return hours.mapIndexed { index, label ->
-            HourlyItem(
-                hourLabel = label,
-                temp = if (index == 0) baseTemp else baseTemp - (index / 4),
-                weatherCode = baseCode,
-                iconType = baseIcon,
-                pop = if (index % 3 == 0) 10 else 0,
-                wind = 3.5
+        val cached = readCachedWeather(city)
+        if (cached != null) {
+            val offline = cached.data.copy(isOffline = true, dataSourceLabel = null)
+            memoryCache[city.name] = offline
+            memorySource[city.name] = cached.source
+            return WeatherLoadResult.Cached(
+                data = offline,
+                source = cached.source,
+                reason = reason
             )
         }
+        return WeatherLoadResult.Unavailable(reason, attempts.map { it.failure })
     }
 
-    private fun getMockDaily(baseTemp: Int): List<DailyItem> {
-        return listOf(
-            DailyItem("Сегодня", 2, WeatherIconType.PARTLY_CLOUDY_DAY, 0, baseTemp - 8, baseTemp + 1),
-            DailyItem("Пн", 3, WeatherIconType.CLOUDY, 20, baseTemp - 8, baseTemp + 1),
-            DailyItem("Вт", 2, WeatherIconType.PARTLY_CLOUDY_DAY, 0, baseTemp - 8, baseTemp + 1),
-            DailyItem("Ср", 3, WeatherIconType.CLOUDY, 10, baseTemp - 8, baseTemp + 1),
-            DailyItem("Чт", 2, WeatherIconType.PARTLY_CLOUDY_DAY, 0, baseTemp - 8, baseTemp + 1),
-            DailyItem("Пт", 2, WeatherIconType.PARTLY_CLOUDY_DAY, 0, baseTemp - 7, baseTemp + 2),
-            DailyItem("Сб", 1, WeatherIconType.CLEAR_DAY, 0, baseTemp - 6, baseTemp + 3),
-            DailyItem("Вс", 2, WeatherIconType.PARTLY_CLOUDY_DAY, 5, baseTemp - 7, baseTemp + 2)
+    private suspend fun readCachedWeather(city: CityLocation): CachedWeather? {
+        val snapshot = cache.getCachedForecast(city.name) ?: return null
+        val domain = decodeCachedDomain(city, snapshot) ?: return null
+        val source = WeatherSource.fromId(snapshot.sourceId) ?: WeatherSource.CACHE
+        return CachedWeather(
+            data = domain.copy(isOffline = true, dataSourceLabel = null),
+            source = source
         )
     }
+
+    private fun decodeCachedDomain(
+        city: CityLocation,
+        snapshot: CachedForecast
+    ): WeatherDomainData? {
+        // Новый формат R19: полный WeatherDomainData-снимок.
+        try {
+            val domain = json.decodeFromString<WeatherDomainData>(snapshot.json)
+            return domain.copy(
+                lastUpdated = if (domain.lastUpdated > 0) domain.lastUpdated else snapshot.savedAt,
+                isOffline = true,
+                dataSourceLabel = null
+            )
+        } catch (_: Exception) {
+            // Миграция старого кэша (JSON ответа Open-Meteo) — без потери данных.
+        }
+        return try {
+            val dto = json.decodeFromString<WeatherApiResponse>(snapshot.json)
+            val mapped = WeatherMapper.map(
+                city = city,
+                dto = dto,
+                isOffline = true,
+                lastUpdated = snapshot.savedAt,
+                trafficScore = null,
+                trafficAdvice = "Нет данных о пробках"
+            )
+            (mapped as? WeatherMapResult.Success)?.data?.copy(dataSourceLabel = null)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun buildFailoverNote(attempts: List<ProviderAttemptFailure>): String? =
+        if (attempts.isEmpty()) {
+            null
+        } else {
+            attempts.joinToString("; ") {
+                "${it.source.displayNameRu} недоступен: ${it.failure.messageRu}"
+            }
+        }
+
+    private fun combinedFailure(
+        failure: WeatherFailure,
+        attempts: List<ProviderAttemptFailure>
+    ): WeatherFailure =
+        if (attempts.isEmpty()) {
+            failure
+        } else {
+            WeatherFailure(
+                reason = failure.reason,
+                messageRu = buildFailoverNote(attempts) ?: failure.messageRu
+            )
+        }
 }

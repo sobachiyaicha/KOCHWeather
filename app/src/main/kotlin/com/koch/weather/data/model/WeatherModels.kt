@@ -15,13 +15,14 @@ data class WeatherApiResponse(
 @Serializable
 data class CurrentWeatherDto(
     val time: String = "",
-    @SerialName("temperature_2m") val temperature2m: Double = 21.0,
-    @SerialName("relative_humidity_2m") val relativeHumidity2m: Int? = 65,
-    @SerialName("apparent_temperature") val apparentTemperature: Double? = 20.0,
-    @SerialName("is_day") val isDay: Int? = 1,
-    val precipitation: Double? = 0.0,
-    @SerialName("weather_code") val weatherCode: Int = 2,
-    @SerialName("wind_speed_10m") val windSpeed10m: Double? = 4.2
+    // Nullable without fake defaults: a missing field must never become a made-up temperature.
+    @SerialName("temperature_2m") val temperature2m: Double? = null,
+    @SerialName("relative_humidity_2m") val relativeHumidity2m: Int? = null,
+    @SerialName("apparent_temperature") val apparentTemperature: Double? = null,
+    @SerialName("is_day") val isDay: Int? = null,
+    val precipitation: Double? = null,
+    @SerialName("weather_code") val weatherCode: Int? = null,
+    @SerialName("wind_speed_10m") val windSpeed10m: Double? = null
 )
 
 @Serializable
@@ -62,9 +63,12 @@ data class CityLocation(
     val name: String,
     val latitude: Double,
     val longitude: Double,
-    val country: String = "Россия"
+    val country: String = "Россия",
+    /** Регион/admin1 (например, «Санкт-Петербург», «Минская область»); null = не показываем. */
+    val region: String? = null
 )
 
+@Serializable
 enum class WeatherIconType {
     CLEAR_DAY,
     CLEAR_NIGHT,
@@ -79,24 +83,31 @@ enum class WeatherIconType {
     THUNDERSTORM
 }
 
+@Serializable
 data class HourlyItem(
     val hourLabel: String,
     val temp: Int,
     val weatherCode: Int,
     val iconType: WeatherIconType = WeatherIconType.PARTLY_CLOUDY_DAY,
     val pop: Int = 0,
-    val wind: Double = 3.0
+    val wind: Double = 3.0,
+    /** false = вероятность осадков недоступна у источника; UI должен показать «нет данных». */
+    val popKnown: Boolean = true
 )
 
+@Serializable
 data class DailyItem(
     val dayLabel: String,
     val weatherCode: Int,
     val iconType: WeatherIconType = WeatherIconType.PARTLY_CLOUDY_DAY,
     val pop: Int = 0,
     val minTemp: Int,
-    val maxTemp: Int
+    val maxTemp: Int,
+    /** false = вероятность осадков недоступна у источника; UI должен показать «нет данных». */
+    val popKnown: Boolean = true
 )
 
+@Serializable
 data class WeatherDomainData(
     val cityName: String,
     val currentTemp: Int,
@@ -113,7 +124,9 @@ data class WeatherDomainData(
     val hourly: List<HourlyItem>,
     val daily: List<DailyItem>,
     val isOffline: Boolean = false,
-    val lastUpdated: Long = System.currentTimeMillis()
+    val lastUpdated: Long = System.currentTimeMillis(),
+    /** "MET Norway" / "Open-Meteo" для живого прогноза; null для кэша и «нет данных». */
+    val dataSourceLabel: String? = null
 )
 
 @Serializable
@@ -219,16 +232,41 @@ data class MainScreenUiState(
     val selectedCityIndex: Int = 0,
     val currentCityIndex: Int = 0,
     val isOffline: Boolean = false,
-    val errorMessage: String? = null,
+
+    // ------------------------------------------------------------------
+    // Честность погодных данных (R19/R21).
+    // weather == null + isWeatherUnavailable == true => UI показывает плейсхолдер,
+    // а не синтетические цифры. weatherState == CACHED => показан последний
+    // реальный прогноз из DataStore, isOffline == true.
+    // ------------------------------------------------------------------
+    val weatherState: WeatherDataState = WeatherDataState.LOADING,
+    val isWeatherUnavailable: Boolean = false,
+    val weatherErrorMessage: String? = null,
+    val weatherLastUpdated: Long? = null,
+    val isRefreshing: Boolean = false,
+
+    // Источник данных и причина failover-а: «Данные: MET Norway (api.met.no)»,
+    // «MET Norway недоступен: ... Использован Open-Meteo» и т.п.
+    val weatherSource: WeatherSource = WeatherSource.NONE,
+    val weatherAttributionRu: String = WeatherSource.NONE.attributionRu,
+    val weatherSourceNote: String? = null,
+
+    // Экран «Список» (R13): города с реальной температурой или с null/«Нет данных».
+    val savedCities: List<SavedCityWeather> = emptyList(),
+    val isLoadingSavedCities: Boolean = false,
+
+    // Экран «Вид» (R15): isUnlocked приходит только из LootboxRepository.
+    val themeCatalog: List<ThemeCatalogItem> = ThemeCatalog.build(ThemeCatalog.DEFAULT_UNLOCKED),
+
+    // Экран «Поиск» (R14): живой geocoding Open-Meteo + явная ошибка.
+    val searchError: String? = null,
+
+    // Реальные фото Wikimedia Commons (R17), сгруппированные по назначению.
+    val imageUrls: Map<ImageCategory, List<String>> = emptyMap(),
 
     // UI state
     val currentTheme: AppThemeMode = AppThemeMode.BLUE_SKY,
-    val availableThemes: Set<AppThemeMode> = setOf(
-        AppThemeMode.BLUE_SKY,
-        AppThemeMode.COPPER_SUNSET,
-        AppThemeMode.FOREST,
-        AppThemeMode.MARS
-    ),
+    val availableThemes: Set<AppThemeMode> = ThemeCatalog.DEFAULT_UNLOCKED,
     val selectedSegment: ConditionSegment = ConditionSegment.WEATHER,
     val selectedTab: BottomTab = BottomTab.HOME,
 

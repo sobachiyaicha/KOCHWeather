@@ -11,31 +11,42 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeliveryDining
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.koch.weather.data.deeplink.DeepLinks
 import com.koch.weather.data.model.*
 
 @Composable
 fun FoodBottomSheet(
     foodState: FoodState,
+    foodImageUrls: List<String> = emptyList(),
     onSelectRestaurant: (Restaurant) -> Unit,
     onAddToCart: (FoodItem) -> Unit,
     onRemoveFromCart: (FoodItem) -> Unit,
-    onOrderFood: () -> Unit,
     onCancelOrder: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    var showLaunchConfirm by remember { mutableStateOf(false) }
+    var launchError by remember { mutableStateOf<String?>(null) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -77,7 +88,7 @@ fun FoodBottomSheet(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "🍕 Доставка горячей еды",
+                                text = "Доставка горячей еды",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -126,7 +137,12 @@ fun FoodBottomSheet(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(rest.iconEmoji, fontSize = 18.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.Fastfood,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color.White else Color(0xFFFFAB91),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Column {
                                         Text(rest.name, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
@@ -144,7 +160,8 @@ fun FoodBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 4.dp)
                     ) {
                         items(foodState.menuItems, key = { it.id }) { item ->
                             val count = foodState.cart[item] ?: 0
@@ -156,56 +173,78 @@ fun FoodBottomSheet(
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.Top
                                 ) {
-                                    Text(item.iconEmoji, fontSize = 32.sp)
+                                    RemotePhoto(
+                                        url = foodImageUrl(item.id, foodImageUrls),
+                                        contentDescription = item.name,
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(12.dp)),
+                                        shape = RoundedCornerShape(12.dp),
+                                        placeholderIcon = Icons.Default.Fastfood,
+                                        placeholderTint = Color(0xFFFFAB91)
+                                    )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(item.name, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
-                                        Text(item.description, color = Color.White.copy(alpha = 0.65f), fontSize = 11.sp, maxLines = 1)
-                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            "${item.priceRu} ₽ / ${item.priceByn} BYN • ${item.weightGrams} г",
-                                            color = Color(0xFFFFCC80),
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.SemiBold
+                                            item.description,
+                                            color = Color.White.copy(alpha = 0.65f),
+                                            fontSize = 11.sp,
+                                            lineHeight = 15.sp,
+                                            maxLines = 2
                                         )
-                                    }
-
-                                    // Counter buttons
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (count > 0) {
-                                            IconButton(
-                                                onClick = { onRemoveFromCart(item) },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Remove,
-                                                    contentDescription = "Убрать",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                            Text(
-                                                text = "$count",
-                                                color = Color.White,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp)
-                                            )
-                                        }
-                                        IconButton(
-                                            onClick = { onAddToCart(item) },
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .background(Color(0xFFFF7043), CircleShape)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "Добавить",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(16.dp)
+                                            Text(
+                                                "${item.priceRu} ₽ / ${item.priceByn} BYN • ${item.weightGrams} г",
+                                                color = Color(0xFFFFCC80),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f)
                                             )
+
+                                            // Counter buttons are next to the price now, so the
+                                            // "+" button never clips the dish description.
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (count > 0) {
+                                                    IconButton(
+                                                        onClick = { onRemoveFromCart(item) },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Remove,
+                                                            contentDescription = "Убрать",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "$count",
+                                                        color = Color.White,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { onAddToCart(item) },
+                                                    modifier = Modifier
+                                                        .size(30.dp)
+                                                        .background(Color(0xFFFF7043), CircleShape)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Add,
+                                                        contentDescription = "Добавить",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(17.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -215,12 +254,15 @@ fun FoodBottomSheet(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Order Button
+                    // Order Button: opens Yandex Eda (app first, web fallback) after confirmation.
                     val cartCount = foodState.cartCount
                     val totalPrice = foodState.totalCartPriceRu
                     Button(
-                        onClick = onOrderFood,
-                        enabled = cartCount > 0 && !foodState.isOrdering,
+                        onClick = {
+                            launchError = null
+                            showLaunchConfirm = true
+                        },
+                        enabled = cartCount > 0,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
@@ -236,10 +278,74 @@ fun FoodBottomSheet(
                             fontWeight = FontWeight.Bold
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Оформление продолжится в приложении Яндекс Еда",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 10.5.sp
+                    )
+
+                    launchError?.let { message ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = message,
+                            color = Color(0xFFFF8A80),
+                            fontSize = 11.5.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
                 }
             }
         }
     }
+
+    if (showLaunchConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLaunchConfirm = false },
+            containerColor = Color(0xFF261815),
+            titleContentColor = Color.White,
+            textContentColor = Color.White.copy(alpha = 0.85f),
+            title = { Text("Открыть Яндекс Еду?") },
+            text = {
+                Text(
+                    "Выбранные блюда продолжим оформлять в приложении Яндекс Еда. " +
+                        "Если приложения нет, откроется сайт."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLaunchConfirm = false
+                        if (!DeepLinks.yandexEda().openFirstAvailable(context)) {
+                            launchError = "Не удалось открыть Яндекс Еду. " +
+                                "Установите приложение или браузер и попробуйте снова."
+                        }
+                    }
+                ) {
+                    Text("Открыть", color = Color(0xFFFFCC80), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLaunchConfirm = false }) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.75f))
+                }
+            }
+        )
+    }
+}
+
+/** Подбор реального фото блюда из ImageCategory.FOOD по стабильному id позиции. */
+private fun foodImageUrl(itemId: String, urls: List<String>): String? {
+    if (urls.isEmpty()) return null
+    val index = when (itemId) {
+        "f_pepperoni", "f_cheese_chicken", "f_dodster" -> 1
+        "f_flat_white", "f_bumble" -> 2
+        "f_cherry_pie", "f_croissant" -> 3
+        else -> 0
+    }
+    return urls.getOrNull(index) ?: urls.first()
 }
 
 @Composable
@@ -271,7 +377,12 @@ private fun ActiveOrderView(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-            Text("🛵💨", fontSize = 48.sp)
+            Icon(
+                imageVector = Icons.Default.DeliveryDining,
+                contentDescription = null,
+                tint = Color(0xFFFFAB91),
+                modifier = Modifier.size(48.dp)
+            )
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(

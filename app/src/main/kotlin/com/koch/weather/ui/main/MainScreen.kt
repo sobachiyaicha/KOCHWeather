@@ -1,4 +1,4 @@
-﻿package com.koch.weather.ui.main
+package com.koch.weather.ui.main
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
@@ -30,11 +32,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LaptopMac
+import androidx.compose.material.icons.filled.LocalTaxi
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.*
@@ -43,10 +47,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -54,17 +61,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koch.weather.BuildConfig
 import com.koch.weather.data.model.BottomTab
 import com.koch.weather.data.model.ConditionSegment
 import com.koch.weather.data.model.DailyItem
 import com.koch.weather.data.model.HourlyItem
+import com.koch.weather.data.model.ImageCategory
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.data.model.WeatherIconType
 import com.koch.weather.ui.components.AdPromoDialog
+import com.koch.weather.ui.components.CityListScreen
 import com.koch.weather.ui.components.CityPickerDialog
-import com.koch.weather.ui.components.CloudSwipeHeader
+import com.koch.weather.ui.components.CitySearchScreen
+import com.koch.weather.ui.components.CloudVeilOverlay
 import com.koch.weather.ui.components.DailyDetailDialog
+import com.koch.weather.ui.components.DataSourceFooter
 import com.koch.weather.ui.components.FlightBookingDialog
 import com.koch.weather.ui.components.FoodBottomSheet
 import com.koch.weather.ui.components.FpsOverlay
@@ -74,12 +86,23 @@ import com.koch.weather.ui.components.PaywallDialog
 import com.koch.weather.ui.components.TShirtIcon
 import com.koch.weather.ui.components.TaxiBottomSheet
 import com.koch.weather.ui.components.TemperatureRangeBar
+import com.koch.weather.ui.components.ThemeGalleryScreen
 import com.koch.weather.ui.components.ThemeRouletteDialog
 import com.koch.weather.ui.components.UmbrellaShopDialog
 import com.koch.weather.ui.components.WeatherIcon
-import com.koch.weather.ui.components.WeatherMapDialog
+import com.koch.weather.ui.components.WeatherMapScreen
+import com.koch.weather.ui.components.RemotePhoto
 import com.koch.weather.ui.theme.getThemePalette
 import kotlin.math.roundToInt
+
+/** Soft shadow that keeps white RU labels readable on the light glassmorphism cards (R5). */
+private val CardTextShadow = TextStyle(
+    shadow = Shadow(
+        color = Color(0x99000000),
+        offset = Offset(1f, 1f),
+        blurRadius = 3f
+    )
+)
 
 @Composable
 fun MainScreen(
@@ -88,12 +111,18 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var isCityPickerOpen by remember { mutableStateOf(false) }
-    var isWeatherMapOpen by remember { mutableStateOf(false) }
     var isThemeRouletteOpen by remember { mutableStateOf(false) }
     var isPaywallOpen by remember { mutableStateOf(false) }
     var isAdPromoOpen by remember { mutableStateOf(false) }
     var isLootboxOpen by remember { mutableStateOf(false) }
     var selectedDayDetail by remember { mutableStateOf<DailyItem?>(null) }
+
+    // «Список» must show fresh cached values every time the tab is opened.
+    LaunchedEffect(uiState.selectedTab) {
+        if (uiState.selectedTab == BottomTab.LIST) {
+            viewModel.refreshSavedCities()
+        }
+    }
 
     MainScreenContent(
         uiState = uiState,
@@ -101,14 +130,9 @@ fun MainScreen(
         onSelectCityIndex = { viewModel.selectCityByIndex(it) },
         onSegmentSelected = { viewModel.setSegment(it) },
         onTabSelected = { tab ->
+            // R13/R14/R15/R12 are full-screen destinations driven by selectedTab;
+            // the old per-tab dialogs are gone.
             viewModel.setTab(tab)
-            when (tab) {
-                BottomTab.HOME -> {}
-                BottomTab.MAP -> isWeatherMapOpen = true
-                BottomTab.THEMES -> isThemeRouletteOpen = true
-                BottomTab.LIST -> isCityPickerOpen = true
-                BottomTab.SEARCH -> isCityPickerOpen = true
-            }
         },
         onRatingChanged = { stars -> viewModel.rateWeather(stars) },
         onToggleHourlyExpanded = { viewModel.toggleHourlyExpanded() },
@@ -169,27 +193,95 @@ fun MainScreen(
         )
     }
 
-    if (isWeatherMapOpen) {
-        WeatherMapDialog(
-            cityName = uiState.weather?.cityName ?: uiState.selectedCity?.name ?: "Город",
-            currentTemp = uiState.weather?.currentTemp ?: 21,
-            onDismiss = {
-                isWeatherMapOpen = false
-                viewModel.setTab(BottomTab.HOME)
+    // Full-screen destinations: Карта (R12), Список (R13), Поиск (R14), Вид (R15).
+    val themeColors = getThemePalette(uiState.currentTheme)
+    when (uiState.selectedTab) {
+        BottomTab.MAP -> {
+            val mapCity = uiState.selectedCity
+                ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
+                ?: uiState.cities.firstOrNull()
+            if (mapCity != null) {
+                WeatherMapScreen(
+                    cityName = uiState.weather?.cityName ?: mapCity.name,
+                    latitude = mapCity.latitude,
+                    longitude = mapCity.longitude,
+                    currentTemp = uiState.weather?.currentTemp,
+                    onClose = { viewModel.setTab(BottomTab.HOME) }
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF101820)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Нет данных о городе для карты",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        modifier = Modifier.clickable { viewModel.setTab(BottomTab.HOME) }
+                    )
+                }
             }
-        )
+        }
+
+        BottomTab.LIST -> {
+            CityListScreen(
+                cities = uiState.savedCities,
+                selectedCityName = uiState.selectedCity?.name,
+                isLoading = uiState.isLoadingSavedCities,
+                background = themeColors.gradientBrush,
+                attribution = uiState.weatherAttributionRu,
+                onRefresh = { viewModel.refreshSavedCities() },
+                onSelectCity = { savedCity -> viewModel.addCity(savedCity.city) },
+                onBack = { viewModel.setTab(BottomTab.HOME) }
+            )
+        }
+
+        BottomTab.SEARCH -> {
+            CitySearchScreen(
+                query = uiState.searchQuery,
+                results = uiState.searchResults,
+                isSearching = uiState.isSearching,
+                errorMessage = uiState.searchError,
+                background = themeColors.gradientBrush,
+                onQueryChange = { viewModel.searchCities(it) },
+                onSelectCity = { city -> viewModel.addCity(city) },
+                onBack = {
+                    viewModel.clearSearch()
+                    viewModel.setTab(BottomTab.HOME)
+                }
+            )
+        }
+
+        BottomTab.THEMES -> {
+            ThemeGalleryScreen(
+                themes = uiState.themeCatalog,
+                currentTheme = uiState.currentTheme,
+                background = themeColors.gradientBrush,
+                attribution = uiState.weatherAttributionRu,
+                onSelectTheme = { theme -> viewModel.setTheme(theme) },
+                onOpenRoulette = { isThemeRouletteOpen = true },
+                onBack = { viewModel.setTab(BottomTab.HOME) }
+            )
+        }
+
+        BottomTab.HOME -> Unit
     }
 
     if (isThemeRouletteOpen) {
         ThemeRouletteDialog(
             currentTheme = uiState.currentTheme,
             availableThemes = uiState.availableThemes,
+            cityName = uiState.weather?.cityName ?: uiState.selectedCity?.name ?: "Город",
+            currentTemp = uiState.weather?.currentTemp,
+            iphoneImageUrl = uiState.imageUrls[ImageCategory.IPHONE]?.firstOrNull(),
             onSelectTheme = { theme ->
                 viewModel.setTheme(theme)
             },
             onDismiss = {
+                // Opened from the «Вид» screen: stay there after closing the roulette.
                 isThemeRouletteOpen = false
-                viewModel.setTab(BottomTab.HOME)
             }
         )
     }
@@ -237,13 +329,16 @@ fun MainScreen(
     }
 
     if (uiState.taxiState.isSheetOpen) {
+        val taxiCity = uiState.selectedCity
+            ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
         TaxiBottomSheet(
             taxiState = uiState.taxiState,
-            trafficScore = uiState.weather?.trafficScore ?: 4,
-            trafficAdvice = uiState.weather?.trafficAdvice ?: "Движение свободное",
+            trafficScore = uiState.weather?.trafficScore,
+            trafficAdvice = uiState.weather?.trafficAdvice?.takeIf { it.isNotBlank() }
+                ?: "Нет данных о пробках",
+            city = taxiCity,
             onSelectTariff = { viewModel.selectTaxiTariff(it) },
             onSelectDestination = { viewModel.selectTaxiDestination(it) },
-            onOrderTaxi = { viewModel.orderTaxi() },
             onCancelTaxi = { viewModel.cancelTaxi() },
             onDismiss = { viewModel.closeTaxiSheet() }
         )
@@ -252,10 +347,10 @@ fun MainScreen(
     if (uiState.foodState.isSheetOpen) {
         FoodBottomSheet(
             foodState = uiState.foodState,
+            foodImageUrls = uiState.imageUrls[ImageCategory.FOOD].orEmpty(),
             onSelectRestaurant = { viewModel.selectRestaurant(it) },
             onAddToCart = { viewModel.addToCart(it) },
             onRemoveFromCart = { viewModel.removeFromCart(it) },
-            onOrderFood = { viewModel.orderFood() },
             onCancelOrder = { viewModel.cancelFoodOrder() },
             onDismiss = { viewModel.closeFoodSheet() }
         )
@@ -328,13 +423,16 @@ internal fun MainScreenContent(
                 )
             }
     ) {
-        // High performance LazyColumn with stable keys
+        // High performance LazyColumn with stable keys.
+        // navigationBarsPadding + 96dp bottom contentPadding keep the last cards and the
+        // segments row fully above the floating bottom bar (bug from device audit_01/audit_02).
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 14.dp),
-            contentPadding = PaddingValues(top = 6.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Offline warning banner
@@ -374,25 +472,17 @@ internal fun MainScreenContent(
 
             val weather = uiState.weather
             if (weather != null) {
-                // Section 1: Cloud Swipe or Golden Capsule Header
-                if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
-                    item(key = "cloud_swipe_header") {
-                        CloudSwipeHeader(
-                            onCleared = onCloudsCleared,
-                            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)
-                        )
-                    }
-                } else {
-                    item(key = "golden_hero_header") {
-                        GoldenCapsuleHeader(
-                            weather = weather,
-                            citiesCount = uiState.cities.size,
-                            selectedCityIndex = uiState.selectedCityIndex,
-                            onSelectCityIndex = onSelectCityIndex,
-                            onHeaderClick = onOpenCityPicker
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
+                // Section 1: Golden Capsule Header. The cloud veil is rendered on top of the
+                // whole screen (see below), so the header stays in the feed underneath it.
+                item(key = "golden_hero_header") {
+                    GoldenCapsuleHeader(
+                        weather = weather,
+                        citiesCount = uiState.cities.size,
+                        selectedCityIndex = uiState.selectedCityIndex,
+                        onSelectCityIndex = onSelectCityIndex,
+                        onHeaderClick = onOpenCityPicker
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
 
                 // Section 2: AI Fact Block (refs/premium_ads.png)
@@ -417,6 +507,7 @@ internal fun MainScreenContent(
                 if (uiState.showAds) {
                     item(key = "ad_banner") {
                         AdBannerCard(
+                            imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull(),
                             onClick = onOpenAdPromo
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -426,6 +517,7 @@ internal fun MainScreenContent(
                 // Section 5: 2x2 Services Grid (refs/cards_travel.png, refs/cards_taxi_food.png)
                 item(key = "services_grid") {
                     ServicesGrid(
+                        travelImageUrl = uiState.imageUrls[ImageCategory.TRAVEL_DUBAI]?.firstOrNull(),
                         onOpenFlight = onOpenFlight,
                         onOpenLootbox = onOpenLootbox,
                         onOpenTaxi = onOpenTaxi,
@@ -464,6 +556,14 @@ internal fun MainScreenContent(
                         cardBorder = themeColors.cardBorder
                     )
                 }
+
+                // Attribution: the label comes from the contract (MET Norway / Open-Meteo / cache),
+                // never hardcoded in the UI.
+                if (uiState.weatherAttributionRu.isNotBlank()) {
+                    item(key = "data_source_footer") {
+                        DataSourceFooter(uiState.weatherAttributionRu)
+                    }
+                }
             } else if (uiState.isLoading) {
                 item(key = "loading_indicator") {
                     Box(
@@ -493,13 +593,22 @@ internal fun MainScreenContent(
                 .padding(bottom = 12.dp, start = 14.dp, end = 14.dp)
         )
 
-        // Floating FPS Overlay in top left corner
-        FpsOverlay(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(top = 8.dp, start = 12.dp)
-        )
+        // Debug-only FPS meter. Anchored just above the floating bar (not over the header,
+        // the offline banner or the cloud hint) and hidden until the first real measurement.
+        if (BuildConfig.DEBUG) {
+            FpsOverlay(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 14.dp, bottom = 92.dp)
+            )
+        }
+
+        // Full-screen cloud veil: dense clouds cover the whole screen until the user wipes
+        // them away with a finger (refs/cloud_swipe.png).
+        if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
+            CloudVeilOverlay(onCleared = onCloudsCleared)
+        }
     }
 }
 
@@ -546,56 +655,50 @@ private fun GoldenCapsuleHeader(
                         )
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left: uppercase label + large city name
-                        Column(modifier = Modifier.weight(1.25f)) {
-                            Text(
-                                text = "ТЕКУЩЕЕ МЕСТО",
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Normal,
-                                letterSpacing = 1.1.sp
-                            )
-                            Spacer(modifier = Modifier.height(1.dp))
-                            val cityFontSize = when {
-                                weather.cityName.length > 12 -> 16.5.sp
-                                weather.cityName.length > 8 -> 20.sp
-                                else -> 26.sp
-                            }
-                            Text(
-                                text = weather.cityName,
-                                color = Color.White,
-                                fontSize = cityFontSize,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false
-                            )
+                    // Condition + min/max are laid out on their own line under the city, so the
+                    // big slanted temperature (top-right, never moved) cannot overlap them.
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "ТЕКУЩЕЕ МЕСТО",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Normal,
+                            letterSpacing = 1.1.sp
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        val cityFontSize = when {
+                            weather.cityName.length > 12 -> 16.5.sp
+                            weather.cityName.length > 8 -> 20.sp
+                            else -> 26.sp
                         }
-
-                        // Right: condition + min/max range
-                        Column(
-                            modifier = Modifier.weight(1.05f),
-                            horizontalAlignment = Alignment.End
+                        Text(
+                            text = weather.cityName,
+                            color = Color.White,
+                            fontSize = cityFontSize,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             val conditionFontSize = when {
-                                weather.conditionDescription.length > 18 -> 8.5.sp
-                                weather.conditionDescription.length > 14 -> 9.5.sp
-                                else -> 11.sp
+                                weather.conditionDescription.length > 22 -> 10.sp
+                                weather.conditionDescription.length > 16 -> 10.5.sp
+                                else -> 11.5.sp
                             }
                             Text(
                                 text = weather.conditionDescription,
                                 color = Color.White.copy(alpha = 0.95f),
                                 fontSize = conditionFontSize,
                                 fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.End,
                                 maxLines = 1,
                                 softWrap = false
                             )
-                            Spacer(modifier = Modifier.height(1.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Макс.: ${weather.maxTemp}°, мин.: ${weather.minTemp}°",
                                 color = Color.White.copy(alpha = 0.88f),
@@ -682,7 +785,12 @@ private fun AiFactCard(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("✨", fontSize = 20.sp)
+            Icon(
+                imageVector = Icons.Default.AutoAwesome,
+                contentDescription = null,
+                tint = Color(0xFFFFD54F),
+                modifier = Modifier.size(20.dp)
+            )
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -692,7 +800,7 @@ private fun AiFactCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = aiFact.removePrefix("✨ "),
+                    text = aiFact.trim(),
                     color = Color.White.copy(alpha = 0.95f),
                     fontSize = 12.sp,
                     lineHeight = 16.sp
@@ -785,6 +893,7 @@ private fun PremiumBanner(
  */
 @Composable
 private fun AdBannerCard(
+    imageUrl: String?,
     onClick: () -> Unit
 ) {
     Surface(
@@ -831,20 +940,15 @@ private fun AdBannerCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Surface(
+            RemotePhoto(
+                url = imageUrl,
+                contentDescription = "Реклама: ноутбук",
+                modifier = Modifier.size(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = Color(0x35000000),
-                modifier = Modifier.size(46.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.LaptopMac,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-            }
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                placeholderIcon = Icons.Default.LaptopMac,
+                placeholderTint = Color.White.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -854,6 +958,7 @@ private fun AdBannerCard(
  */
 @Composable
 private fun ServicesGrid(
+    travelImageUrl: String?,
     onOpenFlight: () -> Unit,
     onOpenLootbox: () -> Unit,
     onOpenTaxi: () -> Unit,
@@ -880,38 +985,70 @@ private fun ServicesGrid(
                     .height(102.dp)
                     .clickable(onClick = onOpenFlight)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // R17: real Dubai photo from Wikimedia Commons with dark scrim for the
+                    // white RU labels; placeholder/error come from RemotePhoto.
+                    RemotePhoto(
+                        url = travelImageUrl,
+                        contentDescription = "Дубай",
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(18.dp),
+                        placeholderIcon = Icons.Default.Flight,
+                        placeholderTint = Color.White.copy(alpha = 0.7f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0x99000000), Color(0x77000000))
+                                )
+                            )
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "✈ Путешествия",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 11.sp
-                        )
-                        Text("›", color = Color.White, fontSize = 14.sp)
-                    }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Flight,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Путешествия",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text("›", color = Color.White, fontSize = 14.sp)
+                        }
 
-                    Column {
-                        Text(
-                            text = "Билеты в Дубай",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Вы недавно смотрели...",
-                            color = Color.White.copy(alpha = 0.65f),
-                            fontSize = 10.sp,
-                            maxLines = 1
-                        )
+                        Column {
+                            Text(
+                                text = "Билеты в Дубай",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                style = CardTextShadow
+                            )
+                            Text(
+                                text = "Вы недавно смотрели...",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 10.sp,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }
@@ -937,12 +1074,22 @@ private fun ServicesGrid(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "🎁 Лутбоксы",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CardGiftcard,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Лутбоксы",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                style = CardTextShadow
+                            )
+                        }
                         Text("›", color = Color.White, fontSize = 14.sp)
                     }
 
@@ -951,13 +1098,15 @@ private fun ServicesGrid(
                             text = "Не повезло с погодой?",
                             color = Color.White,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            style = CardTextShadow
                         )
                         Text(
                             text = "Повезет тут!",
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = Color.White,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold,
+                            style = CardTextShadow
                         )
                     }
                 }
@@ -985,11 +1134,20 @@ private fun ServicesGrid(
                         .padding(10.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "🚖 Такси",
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 11.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocalTaxi,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Такси",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 11.sp
+                        )
+                    }
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1027,11 +1185,20 @@ private fun ServicesGrid(
                         .padding(10.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "🍕 Еда",
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = 11.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Fastfood,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Еда",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 11.sp
+                        )
+                    }
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -1345,7 +1512,12 @@ private fun HourlyWeatherCard(
                                     modifier = Modifier.padding(14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = "🚦", fontSize = 28.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.Traffic,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFD54F),
+                                        modifier = Modifier.size(28.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1355,18 +1527,21 @@ private fun HourlyWeatherCard(
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = Color(0xFFFFA000)
-                                            ) {
-                                                Text(
-                                                    text = "${weather.trafficScore} баллов",
-                                                    color = Color.White,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
+                                            val trafficScore = weather.trafficScore
+                                            if (trafficScore != null) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = Color(0xFFFFA000)
+                                                ) {
+                                                    Text(
+                                                        text = "$trafficScore баллов",
+                                                        color = Color.White,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
@@ -1622,7 +1797,12 @@ private fun TenDayForecastCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "🌂", fontSize = 18.sp)
+                    Icon(
+                        imageVector = Icons.Default.BeachAccess,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Зонтики от 29.99 BYN",

@@ -4,15 +4,17 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.*
@@ -24,7 +26,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -38,6 +39,9 @@ import kotlin.random.Random
 fun ThemeRouletteDialog(
     currentTheme: AppThemeMode,
     availableThemes: Set<AppThemeMode>,
+    cityName: String = "Санкт-Петербург",
+    currentTemp: Int? = null,
+    iphoneImageUrl: String? = null,
     onSelectTheme: (AppThemeMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -89,13 +93,13 @@ fun ThemeRouletteDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "🎨 Рулетка тем 2025",
-                                fontSize = 18.sp,
+                                text = "Поздравляем!",
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Поздравляем! Выберите стиль",
+                                text = "Рулетка тем 2025 — выберите стиль",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFFD1C4E9)
                             )
@@ -136,16 +140,16 @@ fun ThemeRouletteDialog(
                         Surface(
                             shape = CircleShape,
                             color = Color(0x35000000),
-                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFFFD600)),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFD600)),
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(46.dp)
                                 .clickable {
                                     val prev = (currentIndex - 1 + allThemes.size) % allThemes.size
                                     previewTheme = allThemes[prev]
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("◀", color = Color(0xFFFFD600), fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                Text("◀", color = Color(0xFFFFD600), fontSize = 22.sp, fontWeight = FontWeight.Black)
                             }
                         }
 
@@ -166,9 +170,31 @@ fun ThemeRouletteDialog(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(getThemePreviewBrush(previewTheme))
                                         .padding(6.dp)
                                 ) {
+                                    // R17: real iPhone photo from Wikimedia + theme-colored
+                                    // scrim, so both the device and the chosen theme are visible.
+                                    RemotePhoto(
+                                        url = iphoneImageUrl,
+                                        contentDescription = "iPhone 16 Pro Max",
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        placeholderIcon = Icons.Default.Smartphone,
+                                        placeholderTint = Color.White.copy(alpha = 0.75f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(
+                                                        themeAccentColor(previewTheme).copy(alpha = 0.5f),
+                                                        Color(0x77000000)
+                                                    )
+                                                )
+                                            )
+                                    )
+
                                     // Mini phone screen elements
                                     Column(
                                         modifier = Modifier.fillMaxSize(),
@@ -195,10 +221,12 @@ fun ThemeRouletteDialog(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "Санкт-Петербург",
+                                                text = cityName,
                                                 color = Color.White,
                                                 fontSize = 8.5.sp,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
 
@@ -206,7 +234,7 @@ fun ThemeRouletteDialog(
 
                                         // Mini temperature
                                         Text(
-                                            text = "21°",
+                                            text = currentTemp?.let { "$it°" } ?: "—",
                                             color = Color.White,
                                             fontSize = 24.sp,
                                             fontWeight = FontWeight.ExtraBold
@@ -247,28 +275,61 @@ fun ThemeRouletteDialog(
                             )
 
                             val isUnlocked = availableThemes.contains(previewTheme)
-                            Text(
-                                text = if (isUnlocked) "Доступно ✓" else "🔒 Открывается в лутбоксах",
-                                color = if (isUnlocked) Color(0xFFA5D6A7) else Color(0xFFFFB74D),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(0.92f),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isUnlocked) {
+                                    Text(
+                                        text = "Доступно",
+                                        color = Color(0xFFA5D6A7),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color(0xFFA5D6A7),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFB74D),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Открывается в лутбоксах",
+                                        color = Color(0xFFFFB74D),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
                         }
 
                         // Right arrow (neon yellow triangle refs/congrats.png)
                         Surface(
                             shape = CircleShape,
                             color = Color(0x35000000),
-                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFFFD600)),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFD600)),
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(46.dp)
                                 .clickable {
                                     val next = (currentIndex + 1) % allThemes.size
                                     previewTheme = allThemes[next]
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("▶", color = Color(0xFFFFD600), fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                Text("▶", color = Color(0xFFFFD600), fontSize = 22.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
@@ -276,14 +337,14 @@ fun ThemeRouletteDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Bottom Theme Selection Row (fully scrollable, chips not truncated)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Bottom Theme Selection Row: real horizontal scroll (LazyRow) plus an end
+                // padding, so the last chip ("Изумрудный лес") can always be scrolled into view.
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
                 ) {
-                    allThemes.forEach { theme ->
+                    items(allThemes, key = { it.name }) { theme ->
                         val isCurrent = theme == currentTheme
                         val isPreview = theme == previewTheme
                         Surface(
@@ -338,7 +399,7 @@ fun ThemeRouletteDialog(
                         border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFAB47BC))
                     ) {
                         Text(
-                            text = if (isSpinning) "Крутим..." else "🎰 Рулетка!",
+                            text = if (isSpinning) "Крутим..." else "Рулетка!",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.5.sp
                         )
@@ -367,17 +428,5 @@ fun ThemeRouletteDialog(
                 }
             }
         }
-    }
-}
-
-private fun getThemePreviewBrush(theme: AppThemeMode): Brush {
-    return when (theme) {
-        AppThemeMode.BLUE_SKY -> Brush.verticalGradient(listOf(Color(0xFF2196F3), Color(0xFF64B5F6)))
-        AppThemeMode.COPPER_SUNSET -> Brush.verticalGradient(listOf(Color(0xFF7A351D), Color(0xFFBF5B2B), Color(0xFFE8985E)))
-        AppThemeMode.FOREST -> Brush.verticalGradient(listOf(Color(0xFF1B4D3E), Color(0xFF2E7D32)))
-        AppThemeMode.MARS -> Brush.verticalGradient(listOf(Color(0xFF8B2500), Color(0xFFD84315)))
-        AppThemeMode.CYBERPUNK -> Brush.verticalGradient(listOf(Color(0xFF4A148C), Color(0xFF00E5FF)))
-        AppThemeMode.BLOODY_SUNSET -> Brush.verticalGradient(listOf(Color(0xFFB71C1C), Color(0xFFFF5252)))
-        AppThemeMode.AURORA_BOREALIS -> Brush.verticalGradient(listOf(Color(0xFF004D40), Color(0xFF00E676)))
     }
 }

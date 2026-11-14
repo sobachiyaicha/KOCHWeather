@@ -141,41 +141,41 @@ fun PaywallDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Price pill
+                // Price pill. The title, the discount line and both prices get the full width
+                // of the pill, so nothing is truncated (device audit_07).
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color(0x25FFFFFF),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x40FFFFFF)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 12.dp)
-                        ) {
-                            Text(
-                                text = "Тариф «Годовой VIP»",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Скидка 80% только сегодня",
-                                color = Color(0xFFFFD54F),
-                                fontSize = 11.sp,
-                                maxLines = 1
-                            )
-                        }
+                        Text(
+                            text = "Тариф «Годовой VIP»",
+                            color = Color.White,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Скидка 80% только сегодня",
+                            color = Color(0xFFFFD54F),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(
-                            verticalAlignment = Alignment.Bottom,
-                            modifier = Modifier.wrapContentWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.Bottom
                         ) {
                             Text(
                                 text = "29.99 BYN",
@@ -183,7 +183,7 @@ fun PaywallDialog(
                                 fontSize = 12.sp,
                                 softWrap = false,
                                 textDecoration = TextDecoration.LineThrough,
-                                modifier = Modifier.padding(end = 8.dp)
+                                modifier = Modifier.padding(end = 10.dp)
                             )
                             Text(
                                 text = "5.99 BYN",

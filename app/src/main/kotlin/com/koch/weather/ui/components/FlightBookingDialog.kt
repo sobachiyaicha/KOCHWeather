@@ -84,7 +84,7 @@ fun FlightBookingDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "✈ Авиабилеты в тепло",
+                                text = "Авиабилеты в тепло",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -121,7 +121,8 @@ fun FlightBookingDialog(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
                         item(key = "offers_header") {
                             Text(
@@ -201,9 +202,13 @@ fun FlightBookingDialog(
                             Spacer(modifier = Modifier.width(10.dp))
                             Text("Бронирование билета...", fontSize = 14.sp)
                         } else {
-                            val price = flightState.selectedOffer?.priceRu ?: 42990
+                            val price = flightState.selectedOffer?.priceRu
                             Text(
-                                text = "Забронировать за $price ₽ ›",
+                                text = if (price != null) {
+                                    "Забронировать за $price ₽ ›"
+                                } else {
+                                    "Выберите рейс"
+                                },
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -233,7 +238,7 @@ private fun FlightOfferCard(
             .clickable(onClick = onClick)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -241,18 +246,21 @@ private fun FlightOfferCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${offer.fromCity} ➔ ${offer.toCity}",
+                    // The route must never be clipped: the destination city is the whole point
+                    // of the offer (device audit_06 showed an arrow with no city).
+                    text = "${offer.fromCity} → ${offer.toCity}",
                     color = Color.White,
-                    fontSize = 14.5.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f, fill = false)
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "${offer.priceRu} ₽",
                     color = Color(0xFFFFD54F),
-                    fontSize = 16.sp,
+                    fontSize = 15.5.sp,
                     fontWeight = FontWeight.ExtraBold,
                     softWrap = false,
                     maxLines = 1,
@@ -367,7 +375,7 @@ private fun BoardingPassCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "${booking.flight.fromCity} ✈ ${booking.flight.toCity}",
+                text = "${booking.flight.fromCity} → ${booking.flight.toCity}",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold

@@ -13,13 +13,19 @@ class TaxiRepository {
 
     fun getDestinations(): List<TaxiDestination> = DefaultTaxiDestinations.items
 
-    fun calculatePriceRu(tariff: TaxiTariffType, distanceKm: Double, trafficScore: Int): Int {
-        val surgeMultiplier = 1.0 + (trafficScore - 3).coerceAtLeast(0) * 0.12
+    /**
+     * trafficScore == null означает «нет данных о пробках»: надбавку не
+     * придумываем, считаем по базовому тарифу и расстоянию.
+     */
+    fun calculatePriceRu(tariff: TaxiTariffType, distanceKm: Double, trafficScore: Int?): Int {
+        val surgeMultiplier = trafficScore?.let {
+            1.0 + (it.coerceIn(0, 10) - 3).coerceAtLeast(0) * 0.12
+        } ?: 1.0
         val distanceMultiplier = 1.0 + (distanceKm - 3.0).coerceAtLeast(0.0) * 0.08
         return (tariff.basePriceRu * surgeMultiplier * distanceMultiplier).roundToInt()
     }
 
-    fun calculatePriceByn(tariff: TaxiTariffType, distanceKm: Double, trafficScore: Int): Double {
+    fun calculatePriceByn(tariff: TaxiTariffType, distanceKm: Double, trafficScore: Int?): Double {
         val priceRu = calculatePriceRu(tariff, distanceKm, trafficScore)
         return kotlin.math.round((priceRu / 31.0) * 100.0) / 100.0
     }
@@ -27,7 +33,7 @@ class TaxiRepository {
     suspend fun createRideSimulation(
         tariff: TaxiTariffType,
         destination: TaxiDestination,
-        trafficScore: Int
+        trafficScore: Int?
     ): Flow<TaxiRide> = flow {
         val orderId = "TAX-" + UUID.randomUUID().toString().take(6).uppercase()
         val priceRu = calculatePriceRu(tariff, destination.distanceKm, trafficScore)

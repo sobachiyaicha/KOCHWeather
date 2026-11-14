@@ -125,7 +125,7 @@ fun AdPromoDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "🎉 Ссылка на интенсив отправлена! До встречи на вебинаре.",
+                            text = "Ссылка на интенсив отправлена! До встречи на вебинаре.",
                             color = Color(0xFFA5D6A7),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Medium,

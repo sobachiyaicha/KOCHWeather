@@ -20,7 +20,7 @@ class FlightRepository {
             durationText = "5 ч 30 мин",
             priceRu = 34500,
             priceByn = 1120.0,
-            weatherAtDestination = "☀️ Солнечно, +31°C, море 28°C",
+            weatherAtDestination = "Солнечно, море тёплое",
             isDirect = true
         ),
         FlightOffer(
@@ -34,7 +34,7 @@ class FlightRepository {
             durationText = "5 ч 25 мин",
             priceRu = 27900,
             priceByn = 899.0,
-            weatherAtDestination = "☀️ Солнечно, +31°C, штиль",
+            weatherAtDestination = "Солнечно, штиль",
             isDirect = true
         ),
         FlightOffer(
@@ -48,7 +48,7 @@ class FlightRepository {
             durationText = "1 ч 25 мин",
             priceRu = 5400,
             priceByn = 175.0,
-            weatherAtDestination = "⛅ Облачно, +21°C",
+            weatherAtDestination = "Облачно",
             isDirect = true
         ),
         FlightOffer(
@@ -62,7 +62,7 @@ class FlightRepository {
             durationText = "1 ч 30 мин",
             priceRu = 3800,
             priceByn = 125.0,
-            weatherAtDestination = "🌤 Переменная облачность, +7°C",
+            weatherAtDestination = "Переменная облачность",
             isDirect = true
         )
     )

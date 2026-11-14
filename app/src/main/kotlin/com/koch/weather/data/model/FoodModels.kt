@@ -9,7 +9,6 @@ data class Restaurant(
     val category: String,
     val deliveryTimeMinutes: Int,
     val rating: Double,
-    val iconEmoji: String,
     val bannerColorHex: Long
 )
 
@@ -21,8 +20,7 @@ data class FoodItem(
     val description: String,
     val priceRu: Int,
     val priceByn: Double,
-    val weightGrams: Int,
-    val iconEmoji: String
+    val weightGrams: Int
 )
 
 enum class FoodOrderStatus(val titleRu: String) {

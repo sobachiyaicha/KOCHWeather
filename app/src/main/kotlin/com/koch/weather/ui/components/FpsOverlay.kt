@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 fun FpsOverlay(
     modifier: Modifier = Modifier
 ) {
-    var fpsText by remember { mutableStateOf("60 FPS") }
+    var fps by remember { mutableStateOf<Int?>(null) }
     var fpsColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
 
     DisposableEffect(Unit) {
@@ -32,7 +32,7 @@ fun FpsOverlay(
                 val elapsed = frameTimeNanos - lastTimeNanos
                 if (elapsed >= 1_000_000_000L) {
                     val currentFps = (frameCount * 1_000_000_000L / elapsed).toInt()
-                    fpsText = "$currentFps FPS"
+                    fps = currentFps
                     fpsColor = when {
                         currentFps >= 55 -> Color(0xFF4CAF50)
                         currentFps >= 30 -> Color(0xFFFFD54F)
@@ -52,13 +52,16 @@ fun FpsOverlay(
         }
     }
 
+    // Do not show a fake "0 FPS"/"60 FPS" on the first frames: wait for a real measurement.
+    val measuredFps = fps ?: return
+
     Box(
         modifier = modifier
             .background(Color(0x99000000), shape = RoundedCornerShape(12.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(
-            text = fpsText,
+            text = "$measuredFps FPS",
             color = fpsColor,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,

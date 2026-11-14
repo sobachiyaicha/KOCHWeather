@@ -1,4 +1,4 @@
-﻿package com.koch.weather.data.api
+package com.koch.weather.data.api
 
 import android.util.Log
 import com.koch.weather.data.model.GeocodingResponse
@@ -47,13 +47,16 @@ class OpenMeteoClient {
                 if (!response.isSuccessful) {
                     val err = "HTTP " + response.code
                     Log.e("WeatherApp", "OpenMeteo failed with " + err)
-                    return@withContext Result.failure(Exception(err))
+                    return@withContext Result.failure(OpenMeteoHttpException(response.code))
                 }
-                val body = response.body?.string() ?: return@withContext Result.failure(Exception("Empty body"))
+                val body = response.body?.string()
+                    ?: return@withContext Result.failure(OpenMeteoEmptyBodyException())
                 val parsed = json.decodeFromString<WeatherApiResponse>(body)
                 Log.d("WeatherApp", "OpenMeteo parsed successfully for lat=" + lat + ", lon=" + lon)
                 Result.success(parsed)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WeatherApp", "OpenMeteo exception: " + e.message, e)
             Result.failure(e)
@@ -74,12 +77,15 @@ class OpenMeteoClient {
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext Result.failure(Exception("HTTP " + response.code))
+                    return@withContext Result.failure(OpenMeteoHttpException(response.code))
                 }
-                val body = response.body?.string() ?: return@withContext Result.failure(Exception("Empty body"))
+                val body = response.body?.string()
+                    ?: return@withContext Result.failure(OpenMeteoEmptyBodyException())
                 val parsed = json.decodeFromString<GeocodingResponse>(body)
                 Result.success(parsed.results ?: emptyList())
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WeatherApp", "City search exception: " + e.message, e)
             Result.failure(e)

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -101,7 +102,7 @@ fun LootboxDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "🎁 Погодные Лутбоксы",
+                                text = "Погодные Лутбоксы",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -151,10 +152,11 @@ fun LootboxDialog(
                             Modifier.scale(scale)
                         }
 
-                        Text(
-                            text = if (lootboxState.isOpening) "✨🎰✨" else "🎁",
-                            fontSize = if (lootboxState.isOpening) 54.sp else 62.sp,
-                            modifier = boxModifier
+                        Icon(
+                            imageVector = if (lootboxState.isOpening) Icons.Default.Casino else Icons.Default.CardGiftcard,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD54F),
+                            modifier = boxModifier.size(if (lootboxState.isOpening) 54.dp else 62.dp)
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -189,10 +191,13 @@ fun LootboxDialog(
                             modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = reward.iconEmoji,
-                                fontSize = 36.sp,
-                                modifier = Modifier.padding(end = 12.dp)
+                            Icon(
+                                imageVector = Icons.Default.CardGiftcard,
+                                contentDescription = null,
+                                tint = Color(reward.rarity.colorHex),
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .size(36.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -225,7 +230,7 @@ fun LootboxDialog(
                                 if (reward.weatherForecastTomorrow != null) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "📅 Прогноз: ${reward.weatherForecastTomorrow}",
+                                        text = "Прогноз: ${reward.weatherForecastTomorrow}",
                                         color = Color(0xFFFFE082),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium
@@ -289,7 +294,12 @@ fun LootboxDialog(
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(item.iconEmoji, fontSize = 18.sp)
+                                Icon(
+                                    imageVector = Icons.Default.CardGiftcard,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(item.title, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
@@ -337,7 +347,7 @@ fun LootboxDialog(
                         Text("Крутим рулетку...", fontSize = 14.sp)
                     } else {
                         Text(
-                            text = "🎁 Открыть лутбокс БЕСПЛАТНО",
+                            text = "Открыть лутбокс БЕСПЛАТНО",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )

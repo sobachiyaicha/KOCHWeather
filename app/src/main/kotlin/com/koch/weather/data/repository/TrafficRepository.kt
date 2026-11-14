@@ -159,21 +159,21 @@ class TrafficRepository(
 
         val levelMatcher = levelPattern.matcher(xml)
         val score = if (levelMatcher.find()) {
-            levelMatcher.group(1).toIntOrNull()
+            levelMatcher.group(1)?.toIntOrNull()
         } else {
             null
         }
 
         val hintRuMatcher = hintRuPattern.matcher(xml)
-        val hint = if (hintRuMatcher.find()) {
-            hintRuMatcher.group(1).trim()
+        val hint: String? = if (hintRuMatcher.find()) {
+            hintRuMatcher.group(1)?.trim()
         } else {
             val hintGenMatcher = hintGenericPattern.matcher(xml)
-            if (hintGenMatcher.find()) hintGenMatcher.group(1).trim() else null
+            if (hintGenMatcher.find()) hintGenMatcher.group(1)?.trim() else null
         }
 
         val iconMatcher = iconPattern.matcher(xml)
-        val iconColor = if (iconMatcher.find()) iconMatcher.group(1).trim() else null
+        val iconColor = if (iconMatcher.find()) iconMatcher.group(1)?.trim() else null
 
         val description = when {
             hint != null && hint.isNotBlank() -> hint

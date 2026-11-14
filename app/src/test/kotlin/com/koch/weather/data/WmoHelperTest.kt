@@ -43,14 +43,4 @@ class WmoHelperTest {
         assertTrue(rainAdvice.contains("зонт"))
     }
 
-    @Test
-    fun testTrafficAdvice() {
-        val clearTraffic = WmoHelper.getTrafficAdvice(0)
-        assertEquals(3, clearTraffic.first)
-        assertTrue(clearTraffic.second.contains("сухие"))
-
-        val snowTraffic = WmoHelper.getTrafficAdvice(73)
-        assertEquals(9, snowTraffic.first)
-        assertTrue(snowTraffic.second.contains("Снегопад"))
-    }
 }

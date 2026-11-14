@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koch.weather.data.cache.WeatherCache
+import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.model.*
 import com.koch.weather.data.network.NetworkMonitor
 import com.koch.weather.data.repository.*
@@ -26,20 +27,25 @@ class MainScreenViewModel @JvmOverloads constructor(
     private val taxiRepository: TaxiRepository = TaxiRepository(),
     private val foodRepository: FoodRepository = FoodRepository(),
     private val flightRepository: FlightRepository = FlightRepository(),
-    private val aiFactsRepository: AiFactsRepository = AiFactsRepository()
+    private val aiFactsRepository: AiFactsRepository = AiFactsRepository(),
+    private val imageRepository: ImageRepository = ImageRepository()
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
         MainScreenUiState(
-            isLoading = false,
+            isLoading = true,
             cities = repository.defaultCities,
             selectedCity = repository.defaultCities.first(),
             selectedCityIndex = 0,
             currentCityIndex = 0,
-            weather = repository.getCachedWeatherFast(repository.defaultCities.first()),
+            // Никаких синтетических 5°/7° до первого реального ответа/кэша.
+            weather = null,
+            weatherState = WeatherDataState.LOADING,
+            isWeatherUnavailable = false,
             aiFact = aiFactsRepository.getDefaultFact(),
             foodState = FoodState(restaurants = foodRepository.getRestaurants()),
-            flightState = FlightState(offers = flightRepository.getFlightOffers())
+            flightState = FlightState(offers = flightRepository.getFlightOffers()),
+            imageUrls = imageRepository.getUrlsByCategory()
         )
     )
     val uiState: StateFlow<MainScreenUiState> = _uiState.asStateFlow()
@@ -56,7 +62,26 @@ class MainScreenViewModel @JvmOverloads constructor(
             var isFirstEmission = true
             networkMonitor.isOnline.collect { isOnline ->
                 val wasOffline = _uiState.value.isOffline
-                _uiState.update { it.copy(isOffline = !isOnline) }
+                _uiState.update { state ->
+                    if (!isOnline) {
+                        // Уже показанный реальный прогноз перестаёт быть «живым».
+                        val offlineWeather = state.weather?.copy(
+                            isOffline = true,
+                            dataSourceLabel = null
+                        )
+                        state.copy(
+                            isOffline = true,
+                            weather = offlineWeather,
+                            weatherState = if (offlineWeather != null) {
+                                WeatherDataState.CACHED
+                            } else {
+                                state.weatherState
+                            }
+                        )
+                    } else {
+                        state.copy(isOffline = false)
+                    }
+                }
 
                 if (!isFirstEmission && wasOffline && isOnline) {
                     refresh()
@@ -80,7 +105,12 @@ class MainScreenViewModel @JvmOverloads constructor(
         // Load unlocked themes from Lootbox / Cache
         viewModelScope.launch(Dispatchers.IO) {
             val unlocked = lootboxRepository.getUnlockedThemes()
-            _uiState.update { it.copy(availableThemes = unlocked) }
+            _uiState.update {
+                it.copy(
+                    availableThemes = unlocked,
+                    themeCatalog = ThemeCatalog.build(unlocked)
+                )
+            }
         }
 
         // Initialize cities and weather on IO thread
@@ -91,7 +121,10 @@ class MainScreenViewModel @JvmOverloads constructor(
             val initialIndex = initialCities.indexOfFirst { it.name.equals(targetCity.name, ignoreCase = true) }
                 .coerceAtLeast(0)
 
-            val cachedWeather = repository.getCachedWeatherFast(targetCity)
+            // Последний реальный прогноз из DataStore (не синтетика).
+            val cachedWeather = repository.getCachedWeather(targetCity)
+            val cachedDomain = cachedWeather?.data
+            val savedCities = repository.getSavedCitiesWeather(initialCities)
 
             _uiState.update {
                 it.copy(
@@ -99,7 +132,23 @@ class MainScreenViewModel @JvmOverloads constructor(
                     selectedCity = targetCity,
                     selectedCityIndex = initialIndex,
                     currentCityIndex = initialIndex,
-                    weather = cachedWeather
+                    weather = cachedDomain,
+                    weatherState = if (cachedDomain != null) {
+                        WeatherDataState.CACHED
+                    } else {
+                        WeatherDataState.LOADING
+                    },
+                    isWeatherUnavailable = false,
+                    isOffline = if (cachedDomain != null) true else it.isOffline,
+                    weatherLastUpdated = cachedDomain?.lastUpdated,
+                    weatherErrorMessage = null,
+                    weatherSource = cachedWeather?.source ?: WeatherSource.NONE,
+                    weatherAttributionRu = if (cachedWeather != null) {
+                        cachedAttribution(cachedWeather.source)
+                    } else {
+                        WeatherSource.NONE.attributionRu
+                    },
+                    savedCities = savedCities
                 )
             }
 
@@ -126,28 +175,45 @@ class MainScreenViewModel @JvmOverloads constructor(
     }
 
     /**
-     * Instant city switch by index (0ms from memory/cache), then quiet network refresh.
+     * Instant city switch by index: реальный прогноз из памяти/DataStore,
+     * затем тихое сетевое обновление. Синтетика не подставляется.
      */
     fun selectCity(index: Int) {
         val cities = _uiState.value.cities
         if (index !in cities.indices) return
         val targetCity = cities[index]
-
-        // 1. Instant cache hit (0ms)
         val cachedWeather = repository.getCachedWeatherFast(targetCity)
+            ?.copy(isOffline = true, dataSourceLabel = null)
 
-        // 2. Immediately update StateFlow (instant frame update, no blocking spinner)
         _uiState.update {
             it.copy(
                 selectedCity = targetCity,
                 selectedCityIndex = index,
                 currentCityIndex = index,
                 weather = cachedWeather,
-                isLoading = false
+                weatherState = if (cachedWeather != null) {
+                    WeatherDataState.CACHED
+                } else {
+                    WeatherDataState.LOADING
+                },
+                isWeatherUnavailable = false,
+                weatherErrorMessage = null,
+                weatherLastUpdated = cachedWeather?.lastUpdated,
+                weatherSource = if (cachedWeather != null) WeatherSource.CACHE else WeatherSource.NONE,
+                weatherAttributionRu = if (cachedWeather != null) {
+                    "Данные: сохранённый прогноз"
+                } else {
+                    WeatherSource.NONE.attributionRu
+                },
+                weatherSourceNote = null,
+                isLoading = true,
+                isRefreshing = true
             )
         }
 
-        // 3. Quiet network fetch in background
+        if (cachedWeather == null) {
+            preloadCachedWeather(targetCity)
+        }
         fetchWeatherQuietly(targetCity)
     }
 
@@ -170,12 +236,32 @@ class MainScreenViewModel @JvmOverloads constructor(
             selectCity(index)
         } else {
             val cachedWeather = repository.getCachedWeatherFast(city)
+                ?.copy(isOffline = true, dataSourceLabel = null)
             _uiState.update {
                 it.copy(
                     selectedCity = city,
                     weather = cachedWeather,
-                    isLoading = false
+                    weatherState = if (cachedWeather != null) {
+                        WeatherDataState.CACHED
+                    } else {
+                        WeatherDataState.LOADING
+                    },
+                    isWeatherUnavailable = false,
+                    weatherErrorMessage = null,
+                    weatherLastUpdated = cachedWeather?.lastUpdated,
+                    weatherSource = if (cachedWeather != null) WeatherSource.CACHE else WeatherSource.NONE,
+                    weatherAttributionRu = if (cachedWeather != null) {
+                        "Данные: сохранённый прогноз"
+                    } else {
+                        WeatherSource.NONE.attributionRu
+                    },
+                    weatherSourceNote = null,
+                    isLoading = true,
+                    isRefreshing = true
                 )
+            }
+            if (cachedWeather == null) {
+                preloadCachedWeather(city)
             }
             fetchWeatherQuietly(city)
         }
@@ -186,38 +272,141 @@ class MainScreenViewModel @JvmOverloads constructor(
         fetchWeatherQuietly(city)
     }
 
+    /** Явная кнопка «Повторить» на экране ошибки/офлайна. */
+    fun retryWeather() {
+        refresh()
+    }
+
+    /** Подгружает последний реальный прогноз из DataStore, пока идёт сеть. */
+    private fun preloadCachedWeather(city: CityLocation) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cached = repository.getCachedWeather(city) ?: return@launch
+            _uiState.update { state ->
+                if (state.selectedCity?.name == city.name && state.weather == null) {
+                    state.copy(
+                        weather = cached.data,
+                        weatherState = WeatherDataState.CACHED,
+                        isOffline = true,
+                        isWeatherUnavailable = false,
+                        weatherErrorMessage = null,
+                        weatherLastUpdated = cached.data.lastUpdated,
+                        weatherSource = cached.source,
+                        weatherAttributionRu = cachedAttribution(cached.source),
+                        weatherSourceNote = null
+                    )
+                } else {
+                    state
+                }
+            }
+        }
+    }
+
     private fun fetchWeatherQuietly(city: CityLocation) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             val isConnected = networkMonitor.isCurrentlyConnected()
-            try {
-                val freshData = repository.getWeatherData(city)
-                _uiState.update {
-                    if (it.selectedCity?.name == city.name) {
-                        it.copy(
-                            weather = freshData,
-                            isLoading = false,
-                            isOffline = freshData.isOffline || !isConnected,
-                            errorMessage = null
-                        )
-                    } else {
-                        it
-                    }
+            _uiState.update { state ->
+                if (state.selectedCity?.name == city.name) {
+                    state.copy(isRefreshing = true, isLoading = state.weather == null)
+                } else {
+                    state
                 }
+            }
+
+            val result = try {
+                repository.getWeatherData(city, isOnline = isConnected)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _uiState.update {
-                    if (it.selectedCity?.name == city.name) {
-                        it.copy(
-                            isLoading = false,
+                WeatherLoadResult.Unavailable(WeatherErrors.from(e))
+            }
+
+            _uiState.update { state ->
+                if (state.selectedCity?.name != city.name) {
+                    return@update state
+                }
+                when (result) {
+                    is WeatherLoadResult.Live -> state.copy(
+                        weather = result.data,
+                        weatherState = WeatherDataState.LIVE,
+                        isOffline = false,
+                        isWeatherUnavailable = false,
+                        weatherErrorMessage = null,
+                        weatherLastUpdated = result.data.lastUpdated,
+                        weatherSource = result.source,
+                        weatherAttributionRu = result.source.attributionRu,
+                        weatherSourceNote = result.fallbackNote,
+                        isLoading = false,
+                        isRefreshing = false
+                    )
+
+                    is WeatherLoadResult.Cached -> state.copy(
+                        weather = result.data,
+                        weatherState = WeatherDataState.CACHED,
+                        isOffline = true,
+                        isWeatherUnavailable = false,
+                        weatherErrorMessage = result.reason?.messageRu
+                            ?: "Нет связи. Показан сохранённый прогноз.",
+                        weatherLastUpdated = result.data.lastUpdated,
+                        weatherSource = result.source,
+                        weatherAttributionRu = cachedAttribution(result.source),
+                        weatherSourceNote = result.reason?.messageRu,
+                        isLoading = false,
+                        isRefreshing = false
+                    )
+
+                    is WeatherLoadResult.Unavailable -> {
+                        val failure = if (!isConnected) WeatherErrors.noNetwork() else result.failure
+                        // Уже показанный реальный прогноз не удаляем: помечаем офлайновым.
+                        val keptWeather = state.weather?.copy(
                             isOffline = true,
-                            errorMessage = e.message
+                            dataSourceLabel = null
                         )
-                    } else {
-                        it
+                        state.copy(
+                            weather = keptWeather,
+                            weatherState = if (keptWeather != null) {
+                                WeatherDataState.CACHED
+                            } else {
+                                WeatherDataState.UNAVAILABLE
+                            },
+                            isOffline = true,
+                            isWeatherUnavailable = keptWeather == null,
+                            weatherErrorMessage = failure.messageRu,
+                            weatherLastUpdated = keptWeather?.lastUpdated,
+                            weatherSource = if (keptWeather != null) {
+                                state.weatherSource
+                            } else {
+                                WeatherSource.NONE
+                            },
+                            weatherAttributionRu = if (keptWeather != null) {
+                                cachedAttribution(state.weatherSource)
+                            } else {
+                                WeatherSource.NONE.attributionRu
+                            },
+                            weatherSourceNote = failure.messageRu,
+                            isLoading = false,
+                            isRefreshing = false
+                        )
                     }
                 }
             }
+
+            val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
+            _uiState.update { it.copy(savedCities = savedCities) }
         }
+    }
+
+    /** Перечитать температуры сохранённых городов из памяти/DataStore (R13). */
+    fun refreshSavedCities() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedCities = repository.getSavedCitiesWeather(_uiState.value.cities)
+            _uiState.update { it.copy(savedCities = savedCities) }
+        }
+    }
+
+    private fun cachedAttribution(source: WeatherSource): String = when (source) {
+        WeatherSource.CACHE, WeatherSource.NONE -> "Данные: сохранённый прогноз"
+        else -> "Данные: ${source.displayNameRu} (сохранённый прогноз)"
     }
 
     // ------------------------------------------------------------------------
@@ -364,6 +553,8 @@ class MainScreenViewModel @JvmOverloads constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(lootboxState = it.lootboxState.copy(isOpening = true)) }
             delay(1200) // Spin animation delay
+            // Только реальный прогноз из уже полученных данных; иначе награда
+            // «прогноз на завтра» не выдаётся (см. LootboxRepository).
             val tomorrowDesc = _uiState.value.weather?.daily?.getOrNull(1)?.let {
                 "${WmoHelper.getDescriptionRu(it.weatherCode)}, днем ${it.maxTemp}°, ночью ${it.minTemp}°"
             }
@@ -375,6 +566,7 @@ class MainScreenViewModel @JvmOverloads constructor(
                 }
                 state.copy(
                     availableThemes = unlockedThemes,
+                    themeCatalog = ThemeCatalog.build(unlockedThemes),
                     currentTheme = newTheme ?: state.currentTheme,
                     lootboxState = state.lootboxState.copy(
                         isOpening = false,
@@ -410,7 +602,8 @@ class MainScreenViewModel @JvmOverloads constructor(
     fun orderTaxi() {
         val tariff = _uiState.value.taxiState.selectedTariff
         val dest = _uiState.value.taxiState.selectedDestination
-        val trafficScore = _uiState.value.weather?.trafficScore ?: 5
+        // null = «нет данных о пробках»; выдуманный балл не подставляем.
+        val trafficScore = _uiState.value.weather?.trafficScore
 
         taxiJob?.cancel()
         taxiJob = viewModelScope.launch(Dispatchers.IO) {
@@ -576,25 +769,60 @@ class MainScreenViewModel @JvmOverloads constructor(
     // City Search & Management
     // ------------------------------------------------------------------------
     fun searchCities(query: String) {
-        _uiState.update { it.copy(searchQuery = query) }
+        _uiState.update { it.copy(searchQuery = query, searchError = null) }
         searchJob?.cancel()
 
         if (query.trim().isEmpty()) {
-            _uiState.update { it.copy(searchResults = emptyList(), isSearching = false) }
+            _uiState.update {
+                it.copy(searchResults = emptyList(), isSearching = false, searchError = null)
+            }
             return
         }
 
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             delay(300) // Debounce typing
-            _uiState.update { it.copy(isSearching = true) }
-            val results = repository.searchCities(query.trim())
-            _uiState.update { it.copy(searchResults = results, isSearching = false) }
+            if (_uiState.value.searchQuery != query) return@launch
+            _uiState.update { it.copy(isSearching = true, searchError = null) }
+
+            val result = try {
+                repository.searchCities(query.trim())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CitySearchResult.Failure(WeatherErrors.from(e))
+            }
+
+            if (_uiState.value.searchQuery != query) return@launch
+            when (result) {
+                is CitySearchResult.Success -> _uiState.update {
+                    it.copy(
+                        searchResults = result.cities,
+                        isSearching = false,
+                        searchError = null
+                    )
+                }
+
+                is CitySearchResult.Failure -> _uiState.update {
+                    it.copy(
+                        searchResults = emptyList(),
+                        isSearching = false,
+                        searchError = result.failure.messageRu
+                    )
+                }
+            }
         }
     }
 
     fun clearSearch() {
         searchJob?.cancel()
-        _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                searchResults = emptyList(),
+                isSearching = false,
+                searchError = null
+            )
+        }
     }
 
     fun addCity(city: CityLocation) {
@@ -607,7 +835,11 @@ class MainScreenViewModel @JvmOverloads constructor(
         } else {
             currentCities.add(city)
             targetIndex = currentCities.lastIndex
-            viewModelScope.launch(Dispatchers.IO) { repository.saveCities(currentCities) }
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.saveCities(currentCities)
+                val saved = repository.getSavedCitiesWeather(currentCities)
+                _uiState.update { it.copy(savedCities = saved) }
+            }
         }
 
         _uiState.update {
@@ -619,6 +851,7 @@ class MainScreenViewModel @JvmOverloads constructor(
                 searchQuery = "",
                 searchResults = emptyList(),
                 isSearching = false,
+                searchError = null,
                 selectedTab = BottomTab.HOME
             )
         }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,7 +54,12 @@ fun UmbrellaShopDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "🌂", fontSize = 24.sp)
+                        Icon(
+                            imageVector = Icons.Default.BeachAccess,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.size(24.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Зонты KOCH Protect",
@@ -84,7 +90,12 @@ fun UmbrellaShopDialog(
                         modifier = Modifier.padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = "☂️", fontSize = 54.sp)
+                        Icon(
+                            imageVector = Icons.Default.BeachAccess,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(54.dp)
+                        )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Автоматический антиштормовой зонт",
@@ -180,7 +191,7 @@ fun UmbrellaShopDialog(
                 if (isPurchased) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Курьер уже бежит к вам сквозь дождь! 🏃💨",
+                        text = "Курьер уже бежит к вам сквозь дождь!",
                         color = Color(0xFFB9F6CA),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium

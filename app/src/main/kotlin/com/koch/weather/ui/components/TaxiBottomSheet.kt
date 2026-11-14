@@ -13,9 +13,14 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,14 +31,18 @@ import com.koch.weather.data.model.*
 @Composable
 fun TaxiBottomSheet(
     taxiState: TaxiState,
-    trafficScore: Int,
+    trafficScore: Int?,
     trafficAdvice: String,
+    city: CityLocation?,
     onSelectTariff: (TaxiTariffType) -> Unit,
     onSelectDestination: (TaxiDestination) -> Unit,
-    onOrderTaxi: () -> Unit,
     onCancelTaxi: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    var showLaunchConfirm by remember { mutableStateOf(false) }
+    var launchError by remember { mutableStateOf<String?>(null) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -75,13 +84,19 @@ fun TaxiBottomSheet(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "🚖 Такси «Сухой салон»",
+                                text = "Такси «Сухой салон»",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Пробки: $trafficScore/10 • $trafficAdvice",
+                                // Never invent a traffic score: when data is missing show the
+                                // honest advice only (bug from the device audit_03).
+                                text = if (trafficScore != null) {
+                                    "Пробки: $trafficScore/10 • $trafficAdvice"
+                                } else {
+                                    trafficAdvice
+                                },
                                 fontSize = 11.5.sp,
                                 color = Color(0xFFFFD54F)
                             )
@@ -186,7 +201,12 @@ fun TaxiBottomSheet(
                                     modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(tariff.iconEmoji, fontSize = 24.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.DirectionsCar,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(tariff.titleRu, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -217,8 +237,10 @@ fun TaxiBottomSheet(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Button(
-                        onClick = onOrderTaxi,
-                        enabled = !taxiState.isOrdering,
+                        onClick = {
+                            launchError = null
+                            showLaunchConfirm = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
@@ -234,9 +256,66 @@ fun TaxiBottomSheet(
                             fontWeight = FontWeight.Bold
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Заказ продолжится в приложении Яндекс Go",
+                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 10.5.sp
+                    )
+
+                    launchError?.let { message ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = message,
+                            color = Color(0xFFFF8A80),
+                            fontSize = 11.5.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (showLaunchConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLaunchConfirm = false },
+            containerColor = Color(0xFF1E232A),
+            titleContentColor = Color.White,
+            textContentColor = Color.White.copy(alpha = 0.85f),
+            title = { Text("Открыть Яндекс Go?") },
+            text = {
+                Text(
+                    "Маршрут откроется в приложении Яндекс Go. " +
+                        "Проверьте точки подачи и назначения."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLaunchConfirm = false
+                        val selectedCity = city
+                        if (selectedCity == null) {
+                            launchError = "Не удалось определить координаты города для маршрута."
+                        } else if (!taxiDeepLinkPlan(selectedCity, taxiState.selectedDestination)
+                                .openFirstAvailable(context)
+                        ) {
+                            launchError = "Не удалось открыть Яндекс Go. " +
+                                "Установите приложение или браузер и попробуйте снова."
+                        }
+                    }
+                ) {
+                    Text("Открыть", color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLaunchConfirm = false }) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.75f))
+                }
+            }
+        )
     }
 }
 
@@ -270,7 +349,12 @@ private fun ActiveRideView(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Text(ride.tariff.iconEmoji, fontSize = 48.sp)
+            Icon(
+                imageVector = Icons.Default.DirectionsCar,
+                contentDescription = null,
+                tint = Color(0xFFFFD54F),
+                modifier = Modifier.size(48.dp)
+            )
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(

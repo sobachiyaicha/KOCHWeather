@@ -112,7 +112,7 @@ fun GrassLockDialog(
                                 delay(1000)
                                 uploadStatus = "ИИ проверяет подлинность травы..."
                                 delay(1200)
-                                uploadStatus = "Трава подтверждена! 🌿"
+                                uploadStatus = "Трава подтверждена!"
                                 delay(600)
                                 onGrassUploaded()
                             }
@@ -140,7 +140,7 @@ fun GrassLockDialog(
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("🌱", fontSize = 34.sp)
+                            Icon(imageVector = Icons.Default.Eco, contentDescription = null, tint = Color(0xFF81C784), modifier = Modifier.size(34.dp))
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "Нажмите, чтобы сделать фото",
@@ -167,7 +167,7 @@ fun GrassLockDialog(
                             delay(1000)
                             uploadStatus = "ИИ проверяет подлинность травы..."
                             delay(1200)
-                            uploadStatus = "Трава подтверждена! 🌿"
+                            uploadStatus = "Трава подтверждена!"
                             delay(600)
                             onGrassUploaded()
                         }

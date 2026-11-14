@@ -26,7 +26,6 @@ data class LootReward(
     val subtitle: String,
     val type: LootRewardType,
     val rarity: LootRarity,
-    val iconEmoji: String,
     val unlockedThemeName: String? = null,
     val weatherForecastTomorrow: String? = null,
     val timestamp: Long = System.currentTimeMillis()
