@@ -72,14 +72,6 @@ fun KochSheet(
 ) {
     val colors = LocalKochColors.current
 
-    // Первый кадр листа — только каркас (скрим, поверхность, граббер, CTA). Тяжёлый контент
-    // (список, фото) появляется на следующем кадре: первый кадр листа перестаёт стоить 150–200 мс.
-    var contentReady by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        contentReady = true
-    }
-
     Dialog(
         onDismissRequest = { if (!blocking) onDismiss() },
         properties = DialogProperties(
@@ -165,12 +157,11 @@ fun KochSheet(
                         // Контент листа. Нижняя кромка обрезается не «в упор к CTA»:
                         // над футером лежит мягкая шторка-фейд, а у списка увеличен нижний
                         // отступ — обрезанный ряд читается как «можно скроллить», а не как брак.
-                        if (contentReady) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .fillMaxWidth()
-                            ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .fillMaxWidth()
+                        ) {
                                 if (lazyContent != null) {
                                     LazyColumn(
                                         modifier = Modifier.fillMaxWidth(),
@@ -207,7 +198,6 @@ fun KochSheet(
                                             )
                                     )
                                 }
-                            }
                         }
 
                         if (footer != null) {
