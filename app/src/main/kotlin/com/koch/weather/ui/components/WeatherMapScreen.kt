@@ -75,6 +75,7 @@ fun WeatherMapScreen(
     latitude: Double,
     longitude: Double,
     currentTemp: Int?,
+    conditionRu: String? = null,
     onClose: () -> Unit
 ) {
     BackHandler(onBack = onClose)
@@ -100,7 +101,7 @@ fun WeatherMapScreen(
     }
 
     // Смена города/погоды: двигаем уже созданный маркер и центрируем карту.
-    LaunchedEffect(latitude, longitude, cityName, currentTemp, mapReady) {
+    LaunchedEffect(latitude, longitude, cityName, currentTemp, conditionRu, mapReady) {
         val view = mapState.view ?: return@LaunchedEffect
         val point = GeoPoint(latitude, longitude)
         view.controller.setCenter(point)
@@ -108,10 +109,12 @@ fun WeatherMapScreen(
         if (marker != null) {
             marker.position = point
             marker.title = cityName
-            marker.snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
+            marker.snippet = markerSnippet(currentTemp, conditionRu)
         } else {
             view.overlays.removeAll { it is Marker }
-            view.overlays.add(buildMarker(view, point, cityName, currentTemp, pinColor))
+            view.overlays.add(
+                buildMarker(view, point, cityName, currentTemp, conditionRu, pinColor)
+            )
         }
         view.invalidate()
     }
@@ -153,7 +156,14 @@ fun WeatherMapScreen(
                         controller.setCenter(GeoPoint(latitude, longitude))
                     }
                     // Маркер — здесь же: не зависим от порядка «состояние → эффект».
-                    val marker = buildMarker(view, GeoPoint(latitude, longitude), cityName, currentTemp, pinColor)
+                    val marker = buildMarker(
+                        view,
+                        GeoPoint(latitude, longitude),
+                        cityName,
+                        currentTemp,
+                        conditionRu,
+                        pinColor
+                    )
                     view.overlays.add(marker)
                     view.invalidate()
                     mapState.view = view
@@ -292,18 +302,33 @@ private class MapStateHolder {
     var marker: Marker? = null
 }
 
+/** Подпись маркера: «2° · Облачно» либо честное «Нет данных». */
+private fun markerSnippet(currentTemp: Int?, conditionRu: String?): String = when {
+    currentTemp == null -> "Нет данных"
+    conditionRu.isNullOrBlank() -> "$currentTemp°"
+    else -> "$currentTemp° · $conditionRu"
+}
+
 private fun buildMarker(
     mapView: MapView,
     point: GeoPoint,
     cityName: String,
     currentTemp: Int?,
+    conditionRu: String?,
     color: Color
 ): Marker = Marker(mapView).apply {
     position = point
     title = cityName
-    snippet = currentTemp?.let { "$it°" } ?: "Нет данных"
+    snippet = markerSnippet(currentTemp, conditionRu)
     icon = pinDrawable(mapView.context, color)
     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+    // Тап по маркеру: центрируем и показываем info-window с городом и погодой.
+    setOnMarkerClickListener { clicked, view ->
+        view.controller.animateTo(clicked.position)
+        clicked.showInfoWindow()
+        view.invalidate()
+        true
+    }
 }
 
 /**

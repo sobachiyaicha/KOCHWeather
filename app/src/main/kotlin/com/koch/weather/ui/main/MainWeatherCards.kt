@@ -112,7 +112,9 @@ internal fun HourlyWeatherCard(
                 ConditionSegment.TRAFFIC -> "Дорожная ситуация"
             },
             style = KochType.caption,
-            color = colors.textPrimary.copy(alpha = 0.45f)
+            // 88 % белого + затемнённое фото-небо под стеклом: контраст ≥4.5:1.
+            // 45 % (как было) на светлом облаке не читались.
+            color = colors.textPrimary.copy(alpha = 0.88f)
         )
         Spacer(Modifier.height(KochSpace.s))
 

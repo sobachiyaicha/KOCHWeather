@@ -179,6 +179,7 @@ fun MainScreen(
                     latitude = mapCity.latitude,
                     longitude = mapCity.longitude,
                     currentTemp = uiState.weather?.currentTemp,
+                    conditionRu = uiState.weather?.conditionDescription,
                     onClose = { viewModel.setTab(BottomTab.HOME) }
                 )
             } else {

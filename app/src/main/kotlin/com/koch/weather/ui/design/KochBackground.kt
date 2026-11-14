@@ -66,16 +66,17 @@ fun KochSkyBackground(
             )
 
             if (photoLoaded) {
-                // Скрим поверх фото: 30 % сверху, 20 % в середине, 35 % снизу.
+                // Скрим поверх фото под белый текст: 40 % сверху, 30 % в середине, 48 % снизу.
+                // Раньше было 30/20/35 — подпись «Температура (°C)» не добирала контраст.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
                                 listOf(
+                                    Color(0x66000000),
                                     Color(0x4D000000),
-                                    Color(0x33000000),
-                                    Color(0x59000000)
+                                    Color(0x7A000000)
                                 )
                             )
                         )
