@@ -168,7 +168,7 @@ fun LootboxDialog(
             } else {
                 KochEmptyState(
                     icon = Icons.Default.CardGiftcard,
-                    title = "Вы еще не открывали сундуки сегодня.",
+                    title = "Вы ещё не открывали сундуки сегодня.",
                     subtitle = "Жмите кнопку ниже!"
                 )
             }

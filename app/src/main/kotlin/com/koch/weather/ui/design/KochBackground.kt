@@ -9,6 +9,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -36,7 +40,8 @@ import com.koch.weather.ui.theme.LocalKochColors
 fun KochSkyBackground(
     modifier: Modifier = Modifier,
     imageUrl: String? = null,
-    showClouds: Boolean = true
+    showClouds: Boolean = true,
+    onPhotoLoaded: ((Boolean) -> Unit)? = null
 ) {
     val colors = LocalKochColors.current
     val context = LocalContext.current
@@ -61,7 +66,9 @@ fun KochSkyBackground(
                 // Плейсхолдеров у AsyncImage нет намеренно: пока фото нет (или офлайн) —
                 // сквозь него виден градиент, а не серый бокс.
                 onState = { state ->
-                    photoLoaded = state is AsyncImagePainter.State.Success
+                    val loaded = state is AsyncImagePainter.State.Success
+                    photoLoaded = loaded
+                    onPhotoLoaded?.invoke(loaded)
                 }
             )
 
@@ -78,6 +85,18 @@ fun KochSkyBackground(
                                     Color(0x4D000000),
                                     Color(0x7A000000)
                                 )
+                            )
+                        )
+                )
+                // Отдельный верхний скрим под статус-бар: белые иконки читаются на любом фото.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0x73000000), Color(0x00000000))
                             )
                         )
                 )

@@ -13,3 +13,9 @@ fun formatByn(value: Double): String =
     } else {
         String.format(Locale.US, "%.2f", value)
     }
+
+/**
+ * Единый формат диапазона температур для шапки, списка городов и деталей дня:
+ * ровно один пробел после двоеточия — «Макс.: 4°, мин.: 2°».
+ */
+fun formatMaxMinRu(max: Int, min: Int): String = "Макс.: $max°, мин.: $min°"

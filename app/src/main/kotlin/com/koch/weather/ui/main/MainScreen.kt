@@ -391,10 +391,13 @@ internal fun MainScreenContent(
             !cloudVeilDismissed &&
             uiState.weather != null
 
-        // Статус-бар: тёмные иконки на светлом небе/закате и под облаками (там всегда светлый
-        // фон), светлые — на тёмных темах. Иначе «белым по белому».
+        // Есть ли фото-небо на фоне: от этого зависит цвет иконок статус-бара.
+        var skyPhotoLoaded by remember { mutableStateOf(false) }
+
+        // Статус-бар: над фото-небом ставим СВЕТЛЫЕ иконки + верхний скрим (контраст не зависит
+        // от фотографии); под облачной вуалью и на gradient-фолбэке — по яркости темы.
         val view = androidx.compose.ui.platform.LocalView.current
-        val useDarkStatusIcons = koch.bgTop.luminance() > 0.35f || veilVisible
+        val useDarkStatusIcons = veilVisible || (!skyPhotoLoaded && koch.bgTop.luminance() > 0.35f)
         LaunchedEffect(useDarkStatusIcons) {
             val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
             androidx.core.view.WindowCompat.getInsetsController(window, view)
@@ -454,7 +457,8 @@ internal fun MainScreenContent(
             }
             KochSkyBackground(
                 modifier = Modifier.matchParentSize(),
-                imageUrl = skyPhotoUrl
+                imageUrl = skyPhotoUrl,
+                onPhotoLoaded = { skyPhotoLoaded = it }
             )
 
             // Нижний бар — часть Scaffold, а не оверлей: контент физически не может уехать

@@ -64,6 +64,9 @@ fun CloudVeilOverlay(
     val eraseMarks = remember { ArrayList<Offset>(MAX_ERASE_MARKS) }
     var redrawVersion by remember { mutableIntStateOf(0) }
     var isCleared by remember { mutableStateOf(false) }
+    // Подсказка гаснет, как только начали стирать: иначе она остаётся поверх стёртой зоны
+    // и наезжает на капсулу (замечание визуального критика).
+    var hintVisible by remember { mutableStateOf(true) }
     val holePath = remember { Path() }
     val hintColor = Color(0xFF1F2A33)
 
@@ -94,6 +97,7 @@ fun CloudVeilOverlay(
 
                     detectDragGestures(
                         onDragStart = { start ->
+                            hintVisible = false
                             lastPoint = start
                             eraseMarks.add(start)
                             redrawVersion++
@@ -127,8 +131,14 @@ fun CloudVeilOverlay(
                                 onCleared()
                             }
                         },
-                        onDragEnd = { lastPoint = null },
-                        onDragCancel = { lastPoint = null }
+                        onDragEnd = {
+                            lastPoint = null
+                            if (!isCleared) hintVisible = true
+                        },
+                        onDragCancel = {
+                            lastPoint = null
+                            if (!isCleared) hintVisible = true
+                        }
                     )
                 }
         ) {
@@ -172,33 +182,36 @@ fun CloudVeilOverlay(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 40.dp, start = 32.dp, end = 32.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Default.TouchApp,
-                    contentDescription = null,
-                    tint = hintColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Прогоните облака пальцем,",
-                    style = KochType.titleSection,
-                    color = hintColor,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "чтобы увидеть погоду",
-                    style = KochType.titleSection,
-                    color = hintColor,
-                    textAlign = TextAlign.Center
-                )
+            // Подсказка видна только до первого касания: как только начали стирать — гаснет.
+            if (hintVisible) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 40.dp, start = 32.dp, end = 32.dp)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TouchApp,
+                        contentDescription = null,
+                        tint = hintColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Прогоните облака пальцем,",
+                        style = KochType.titleSection,
+                        color = hintColor,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "чтобы увидеть погоду",
+                        style = KochType.titleSection,
+                        color = hintColor,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

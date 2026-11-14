@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.DailyItem
 import com.koch.weather.data.model.WmoHelper
 import com.koch.weather.ui.design.KochCloseButton
+import com.koch.weather.ui.design.formatMaxMinRu
 import com.koch.weather.ui.design.KochPanel
 import com.koch.weather.ui.design.KochSheet
 import com.koch.weather.ui.design.KochTextButton
@@ -73,7 +74,7 @@ fun DailyDetailDialog(
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "Макс.: ${item.maxTemp}°, мин.: ${item.minTemp}°",
+                        text = formatMaxMinRu(item.maxTemp, item.minTemp),
                         style = KochType.sub,
                         color = colors.textSecondary
                     )

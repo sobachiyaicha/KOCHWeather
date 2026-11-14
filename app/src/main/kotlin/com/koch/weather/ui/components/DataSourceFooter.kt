@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.koch.weather.ui.theme.KochScrim
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
 import com.koch.weather.ui.theme.LocalKochColors
@@ -32,9 +33,10 @@ fun DataSourceFooter(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = KochSpace.l, vertical = KochSpace.s)
-            // Стеклянная подложка: на голубом небе белый 55 % давал 1.6:1.
+            // Тёмная подложка: на светлом градиенте «Списка/Поиска/Вида» белый текст без неё
+            // давал 2.14:1. На тёмной подложке — ≥4.5:1 на любой теме.
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(KochSpace.m))
-            .background(colors.textPrimary.copy(alpha = 0.10f))
+            .background(KochScrim)
             .padding(horizontal = KochSpace.m, vertical = KochSpace.s),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

@@ -231,7 +231,7 @@ internal fun ServicesGrid(
         ) {
             ServiceCard(
                 label = "Путешествия",
-                title = "Билеты в Дубай",
+                title = "Билеты в Дубай ›",
                 description = "Вы недавно смотрели погоду в Дубае, хотите приобрести билеты?",
                 icon = Icons.Default.Flight,
                 iconTint = colors.accent,

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.ui.design.KochCard
+import com.koch.weather.ui.design.formatMaxMinRu
 import com.koch.weather.ui.design.KochMaterial
 import com.koch.weather.ui.design.KochPrimaryButton
 import com.koch.weather.ui.design.topHighlightBrush
@@ -117,7 +118,7 @@ internal fun GoldenCapsuleHeader(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Макс.: ${weather.maxTemp}°, мин.: ${weather.minTemp}°",
+                                text = formatMaxMinRu(weather.maxTemp, weather.minTemp),
                                 style = KochType.caption,
                                 color = colors.textPrimary.copy(alpha = 0.85f),
                                 textAlign = TextAlign.End,

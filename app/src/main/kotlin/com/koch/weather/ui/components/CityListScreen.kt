@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.koch.weather.data.model.SavedCityWeather
 import com.koch.weather.ui.design.KochCard
+import com.koch.weather.ui.design.formatMaxMinRu
 import com.koch.weather.ui.design.KochEmptyState
 import com.koch.weather.ui.design.KochIconButton
 import com.koch.weather.ui.design.KochListRow
@@ -145,7 +146,7 @@ fun CityListScreen(
                                                 )
                                                 if (item.maxTempC != null && item.minTempC != null) {
                                                     Text(
-                                                        text = "Макс.: ${item.maxTempC}°, мин.: ${item.minTempC}°",
+                                                        text = formatMaxMinRu(item.maxTempC, item.minTempC),
                                                         style = KochType.caption,
                                                         color = colors.textTertiary,
                                                         textAlign = TextAlign.End,
