@@ -37,6 +37,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -378,28 +381,27 @@ internal fun TenDayForecastCard(
     val umbrellaIndex = remember(dailyList) {
         dailyList.indexOfFirst { it.dayLabel.startsWith("Пн") }.takeIf { it >= 0 } ?: 1
     }
+    // Строки готовим один раз: без пересчёта строк/индексов на каждом кадре скролла.
+    val rows = remember(dailyList) { dailyList.take(10) }
 
     KochCard(
         shape = KochShape.cardLg,
         padding = PaddingValues(horizontal = KochSpace.m, vertical = KochSpace.s)
     ) {
-        dailyList.take(10).forEachIndexed { index, item ->
+        rows.forEachIndexed { index, item ->
             DailyForecastRow(
                 item = item,
                 overallMin = overallMin,
                 overallMax = overallMax,
                 currentTemp = currentTemp,
+                // Разделитель рисуется в самой строке (на один composable меньше на кадр).
+                showDivider = index != umbrellaIndex && index < rows.lastIndex,
                 onClick = { onDayClick(item) }
             )
             if (index == umbrellaIndex) {
                 Spacer(Modifier.height(KochSpace.xs))
                 UmbrellaRow(onClick = onOpenUmbrellaShop)
                 Spacer(Modifier.height(KochSpace.xs))
-            } else if (index < dailyList.lastIndex) {
-                HorizontalDivider(
-                    color = colors.textPrimary.copy(alpha = 0.08f),
-                    thickness = 0.5.dp
-                )
             }
         }
     }
@@ -450,13 +452,25 @@ private fun DailyForecastRow(
     overallMin: Int,
     overallMax: Int,
     currentTemp: Int,
+    showDivider: Boolean,
     onClick: () -> Unit
 ) {
     val colors = LocalKochColors.current
+    val dividerColor = colors.textPrimary.copy(alpha = 0.08f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(KochRadius.input))
+            // Разделитель — линией в drawBehind: не плодим composable-элемент на каждую строку.
+            .drawBehind {
+                if (showDivider) {
+                    val h = 0.5.dp.toPx()
+                    drawRect(
+                        color = dividerColor,
+                        topLeft = Offset(0f, size.height - h),
+                        size = Size(size.width, h)
+                    )
+                }
+            }
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp, horizontal = KochSpace.xs),
         verticalAlignment = Alignment.CenterVertically

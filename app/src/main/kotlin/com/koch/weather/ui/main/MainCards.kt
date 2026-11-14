@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -226,7 +227,6 @@ internal fun ServicesGrid(
     val colors = LocalKochColors.current
     Column(verticalArrangement = Arrangement.spacedBy(KochSpace.m)) {
         Row(
-            modifier = Modifier.height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(KochSpace.m)
         ) {
             ServiceCard(
@@ -237,7 +237,7 @@ internal fun ServicesGrid(
                 iconTint = colors.accent,
                 showChevron = true,
                 onClick = onOpenFlight,
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
             )
             ServiceCard(
                 label = "Лутбоксы",
@@ -246,11 +246,10 @@ internal fun ServicesGrid(
                 iconTint = colors.accentPromo,
                 showChevron = true,
                 onClick = onOpenLootbox,
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
             )
         }
         Row(
-            modifier = Modifier.height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(KochSpace.m)
         ) {
             ServiceCard(
@@ -259,7 +258,7 @@ internal fun ServicesGrid(
                 iconTint = colors.accentPromo,
                 chip = "Куда едем?",
                 onClick = onOpenTaxi,
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
             )
             ServiceCard(
                 label = "Еда",
@@ -267,7 +266,7 @@ internal fun ServicesGrid(
                 iconTint = Color(0xFFFF8A65),
                 chip = "Что желаете?",
                 onClick = onOpenFood,
-                modifier = Modifier.weight(1f).fillMaxHeight()
+                modifier = Modifier.weight(1f).heightIn(min = 132.dp)
             )
         }
     }

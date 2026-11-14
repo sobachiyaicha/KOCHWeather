@@ -22,6 +22,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +71,14 @@ fun KochSheet(
     footer: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val colors = LocalKochColors.current
+
+    // Первый кадр листа — только каркас (скрим, поверхность, граббер, CTA). Тяжёлый контент
+    // (список, фото) появляется на следующем кадре: первый кадр листа перестаёт стоить 150–200 мс.
+    var contentReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        contentReady = true
+    }
 
     Dialog(
         onDismissRequest = { if (!blocking) onDismiss() },
@@ -152,46 +165,48 @@ fun KochSheet(
                         // Контент листа. Нижняя кромка обрезается не «в упор к CTA»:
                         // над футером лежит мягкая шторка-фейд, а у списка увеличен нижний
                         // отступ — обрезанный ряд читается как «можно скроллить», а не как брак.
-                        Box(
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .fillMaxWidth()
-                        ) {
-                            if (lazyContent != null) {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                        start = KochSpace.xl,
-                                        end = KochSpace.xl,
-                                        top = KochSpace.m,
-                                        bottom = KochSpace.x2l
-                                    ),
-                                    content = lazyContent
-                                )
-                            } else {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
-                                        .padding(horizontal = KochSpace.xl)
-                                        .padding(top = KochSpace.m, bottom = KochSpace.x2l)
-                                ) {
-                                    content()
+                        if (contentReady) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .fillMaxWidth()
+                            ) {
+                                if (lazyContent != null) {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                            start = KochSpace.xl,
+                                            end = KochSpace.xl,
+                                            top = KochSpace.m,
+                                            bottom = KochSpace.x2l
+                                        ),
+                                        content = lazyContent
+                                    )
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .verticalScroll(rememberScrollState())
+                                            .padding(horizontal = KochSpace.xl)
+                                            .padding(top = KochSpace.m, bottom = KochSpace.x2l)
+                                    ) {
+                                        content()
+                                    }
                                 }
-                            }
 
-                            if (footer != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .fillMaxWidth()
-                                        .height(KochSpace.x2l)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(Color.Transparent, colors.sheetSurface)
+                                if (footer != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .height(KochSpace.x2l)
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(Color.Transparent, colors.sheetSurface)
+                                                )
                                             )
-                                        )
-                                )
+                                    )
+                                }
                             }
                         }
 

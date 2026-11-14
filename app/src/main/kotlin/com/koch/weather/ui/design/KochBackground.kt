@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,7 +47,10 @@ fun KochSkyBackground(
     val colors = LocalKochColors.current
     val context = LocalContext.current
     val loader = remember(context) { wikimediaImageLoader(context) }
-    var photoLoaded by remember(imageUrl) { mutableStateOf(false) }
+    // Статус загрузки держим ПО URL: при смене темы уже загруженное фото не «мигает»
+    // градиентом и не пересоздаёт Canvas облаков.
+    val loadedByUrl = remember { mutableStateMapOf<String, Boolean>() }
+    val photoLoaded = imageUrl != null && loadedByUrl[imageUrl] == true
 
     Box(modifier = modifier.fillMaxSize().background(colors.gradient)) {
         // Облака — фолбэк: рисуем их, пока фото не загрузилось (в том числе офлайн).
@@ -67,7 +71,7 @@ fun KochSkyBackground(
                 // сквозь него виден градиент, а не серый бокс.
                 onState = { state ->
                     val loaded = state is AsyncImagePainter.State.Success
-                    photoLoaded = loaded
+                    loadedByUrl[imageUrl] = loaded
                     onPhotoLoaded?.invoke(loaded)
                 }
             )

@@ -104,6 +104,20 @@ fun MainScreen(
         }
     }
 
+    // Предзагрузка фото неба (три темы): при переключении оформления фон не ждёт сеть.
+    val preloadContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(uiState.skyBlueImageUrl, uiState.skySunsetImageUrl, uiState.skyNorthernImageUrl) {
+        val loader = com.koch.weather.ui.components.wikimediaImageLoader(preloadContext)
+        listOfNotNull(
+            uiState.skyBlueImageUrl,
+            uiState.skySunsetImageUrl,
+            uiState.skyNorthernImageUrl
+        ).forEach { url ->
+            loader.enqueue(
+                coil.request.ImageRequest.Builder(preloadContext).data(url).build()
+            )
+        }
+    }
     // Провайдер темы поднят на уровень MainScreen: листы и полноэкранные страницы открываются
     // из этого composable, а не из MainScreenContent, и обязаны видеть ту же палитру.
     ProvideKochColors(uiState.currentTheme) {
