@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,7 +18,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BeachAccess
@@ -28,19 +28,15 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Flight
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LaptopMac
 import androidx.compose.material.icons.filled.LocalTaxi
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -93,6 +89,9 @@ import com.koch.weather.ui.components.UmbrellaShopDialog
 import com.koch.weather.ui.components.WeatherIcon
 import com.koch.weather.ui.components.WeatherMapScreen
 import com.koch.weather.ui.components.RemotePhoto
+import com.koch.weather.ui.design.KochNavBar
+import com.koch.weather.ui.theme.LocalKochColors
+import com.koch.weather.ui.theme.ProvideKochColors
 import com.koch.weather.ui.theme.getThemePalette
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -283,12 +282,7 @@ fun MainScreen(
         ThemeRouletteDialog(
             currentTheme = uiState.currentTheme,
             availableThemes = uiState.availableThemes,
-            cityName = uiState.weather?.cityName ?: uiState.selectedCity?.name ?: "Город",
-            currentTemp = uiState.weather?.currentTemp,
-            iphoneImageUrl = uiState.imageUrls[ImageCategory.IPHONE]?.firstOrNull(),
-            onSelectTheme = { theme ->
-                viewModel.setTheme(theme)
-            },
+            onSelectTheme = { theme -> viewModel.setTheme(theme) },
             onDismiss = {
                 // Opened from the «Вид» screen: stay there after closing the roulette.
                 isThemeRouletteOpen = false
@@ -299,13 +293,11 @@ fun MainScreen(
     if (isPaywallOpen) {
         PaywallDialog(
             isPremiumPurchased = uiState.isPremiumPurchased,
-            onPurchase = {
-                viewModel.purchasePremium()
-                isPaywallOpen = false
-            },
-            onReset = {
-                viewModel.resetPremium()
-            },
+            isPending = uiState.isPremiumPurchasePending,
+            onRequestPurchase = { viewModel.requestPremiumPurchase() },
+            onConfirmPurchase = { viewModel.confirmPremiumPurchase() },
+            onCancelPending = { viewModel.cancelPremiumPurchase() },
+            onResetPremium = { viewModel.resetPremium() },
             onDismiss = { isPaywallOpen = false }
         )
     }
@@ -316,7 +308,8 @@ fun MainScreen(
                 isAdPromoOpen = false
                 isPaywallOpen = true
             },
-            onDismiss = { isAdPromoOpen = false }
+            onDismiss = { isAdPromoOpen = false },
+            imageUrl = uiState.imageUrls[ImageCategory.AD_LAPTOP]?.firstOrNull()
         )
     }
 
@@ -326,7 +319,8 @@ fun MainScreen(
             onSelectOffer = { viewModel.selectFlightOffer(it) },
             onSelectSeat = { viewModel.selectSeat(it) },
             onBookFlight = { viewModel.bookFlight(it) },
-            onDismiss = { viewModel.closeFlightSheet() }
+            onDismiss = { viewModel.closeFlightSheet() },
+            heroImageUrl = uiState.imageUrls[ImageCategory.TRAVEL_DUBAI]?.firstOrNull()
         )
     }
 
@@ -410,42 +404,65 @@ internal fun MainScreenContent(
 ) {
     val themeColors = getThemePalette(uiState.currentTheme)
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
+    var showDebugFps by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(brush = themeColors.gradientBrush)
-            .pointerInput(uiState.cities.size, uiState.selectedCityIndex) {
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { _, dragAmount ->
-                        dragAccumulator += dragAmount
-                    },
-                    onDragEnd = {
-                        if (dragAccumulator < -60f) {
-                            onNextCity()
-                        } else if (dragAccumulator > 60f) {
-                            onPrevCity()
-                        }
-                        dragAccumulator = 0f
-                    },
-                    onDragCancel = {
-                        dragAccumulator = 0f
-                    }
-                )
-            }
-    ) {
-        // High performance LazyColumn with stable keys.
-        // navigationBarsPadding + 96dp bottom contentPadding keep the last cards and the
-        // segments row fully above the floating bottom bar (bug from device audit_01/audit_02).
-        LazyColumn(
-            modifier = Modifier
+    ProvideKochColors(uiState.currentTheme) {
+        val koch = LocalKochColors.current
+
+        Box(
+            modifier = modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 14.dp),
-            contentPadding = PaddingValues(top = 6.dp, bottom = 96.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(brush = koch.gradient)
+                .pointerInput(uiState.cities.size, uiState.selectedCityIndex) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { _, dragAmount ->
+                            dragAccumulator += dragAmount
+                        },
+                        onDragEnd = {
+                            if (dragAccumulator < -60f) {
+                                onNextCity()
+                            } else if (dragAccumulator > 60f) {
+                                onPrevCity()
+                            }
+                            dragAccumulator = 0f
+                        },
+                        onDragCancel = {
+                            dragAccumulator = 0f
+                        }
+                    )
+                }
         ) {
+            // Нижний бар — часть Scaffold, а не оверлей: контент физически не может уехать
+            // под него (блокер №1 из аудита r2_02).
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    Box(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                    ) {
+                        KochNavBar(
+                            selectedTab = uiState.selectedTab,
+                            onTabSelected = onTabSelected
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                // High performance LazyColumn with stable keys.
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp),
+                    contentPadding = PaddingValues(
+                        top = 6.dp,
+                        bottom = innerPadding.calculateBottomPadding() + 8.dp
+                    ),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
             // Offline/cache banner is driven by the weather state, not by a bare flag:
             // CACHED -> saved forecast with its timestamp, UNAVAILABLE -> no data, LIVE -> none.
             val offlineBannerText: String? = when (uiState.weatherState) {
@@ -597,10 +614,19 @@ internal fun MainScreenContent(
                 // (MET Norway / Open-Meteo / cache), never hardcoded in the UI.
                 if (uiState.weatherAttributionRu.isNotBlank()) {
                     item(key = "data_source_footer") {
-                        DataSourceFooter(
-                            text = uiState.weatherAttributionRu,
-                            note = uiState.weatherSourceNote
-                        )
+                        // Долгое нажатие по футеру — скрытый debug-жест для FPS-метра.
+                        Box(
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onLongPress = { showDebugFps = !showDebugFps }
+                                )
+                            }
+                        ) {
+                            DataSourceFooter(
+                                text = uiState.weatherAttributionRu,
+                                note = uiState.weatherSourceNote
+                            )
+                        }
                     }
                 }
             } else if (uiState.isLoading) {
@@ -628,42 +654,40 @@ internal fun MainScreenContent(
                 }
                 if (uiState.weatherAttributionRu.isNotBlank()) {
                     item(key = "data_source_footer_empty") {
-                        DataSourceFooter(
-                            text = uiState.weatherAttributionRu,
-                            note = uiState.weatherSourceNote
-                        )
+                        Box(
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onLongPress = { showDebugFps = !showDebugFps }
+                                )
+                            }
+                        ) {
+                            DataSourceFooter(
+                                text = uiState.weatherAttributionRu,
+                                note = uiState.weatherSourceNote
+                            )
+                        }
                     }
                 }
             }
-        }
+                }
+            }
 
-        // Full-Size Bottom Navigation Bar (5 tabs: Главная, Карта, Вид, Список, Поиск)
-        FullSizeBottomBar(
-            selectedTab = uiState.selectedTab,
-            onTabSelected = onTabSelected,
-            barBackground = Color(0xF0151E28),
-            barBorder = Color(0x60FFFFFF),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 12.dp, start = 14.dp, end = 14.dp)
-        )
+            // Debug-only FPS meter: выключен по умолчанию, включается долгим нажатием по
+            // строке источника данных. В приёмочных скриншотах его быть не должно.
+            if (BuildConfig.DEBUG && showDebugFps) {
+                FpsOverlay(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .navigationBarsPadding()
+                        .padding(start = 16.dp, bottom = 96.dp)
+                )
+            }
 
-        // Debug-only FPS meter. Anchored just above the floating bar (not over the header,
-        // the offline banner or the cloud hint) and hidden until the first real measurement.
-        if (BuildConfig.DEBUG) {
-            FpsOverlay(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 14.dp, bottom = 92.dp)
-            )
-        }
-
-        // Full-screen cloud veil: dense clouds cover the whole screen until the user wipes
-        // them away with a finger (refs/cloud_swipe.png).
-        if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
-            CloudVeilOverlay(onCleared = onCloudsCleared)
+            // Full-screen cloud veil: dense clouds cover the whole screen until the user wipes
+            // them away with a finger (refs/cloud_swipe.png).
+            if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
+                CloudVeilOverlay(onCleared = onCloudsCleared)
+            }
         }
     }
 }
@@ -2042,108 +2066,6 @@ private fun DailyForecastRow(
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Start,
             modifier = Modifier.width(32.dp)
-        )
-    }
-}
-
-/**
- * 5-Tab High-Contrast Bottom Navigation Bar (refs/bottom_nav.png, refs/theme_copper.png)
- * Tabs: Главная, Карта, Вид, Список, Поиск
- */
-@Composable
-private fun FullSizeBottomBar(
-    selectedTab: BottomTab,
-    onTabSelected: (BottomTab) -> Unit,
-    barBackground: Color,
-    barBorder: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(64.dp),
-        shape = RoundedCornerShape(32.dp),
-        color = barBackground,
-        border = BorderStroke(1.2.dp, barBorder)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BottomTabItem(
-                label = "Главная",
-                icon = Icons.Default.Home,
-                isSelected = selectedTab == BottomTab.HOME,
-                onClick = { onTabSelected(BottomTab.HOME) }
-            )
-            BottomTabItem(
-                label = "Карта",
-                icon = Icons.Outlined.Map,
-                isSelected = selectedTab == BottomTab.MAP,
-                onClick = { onTabSelected(BottomTab.MAP) }
-            )
-            BottomTabItem(
-                label = "Вид",
-                icon = Icons.Default.Palette,
-                isSelected = selectedTab == BottomTab.THEMES,
-                onClick = { onTabSelected(BottomTab.THEMES) }
-            )
-            BottomTabItem(
-                label = "Список",
-                icon = Icons.AutoMirrored.Filled.FormatListBulleted,
-                isSelected = selectedTab == BottomTab.LIST,
-                onClick = { onTabSelected(BottomTab.LIST) }
-            )
-            BottomTabItem(
-                label = "Поиск",
-                icon = Icons.Default.Search,
-                isSelected = selectedTab == BottomTab.SEARCH,
-                onClick = { onTabSelected(BottomTab.SEARCH) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun BottomTabItem(
-    label: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(width = if (isSelected) 42.dp else 28.dp, height = 26.dp)
-                .clip(RoundedCornerShape(13.dp))
-                .background(if (isSelected) Color(0xFF1E88E5) else Color.Transparent),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(19.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        Text(
-            text = label,
-            fontSize = 10.5.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f)
         )
     }
 }

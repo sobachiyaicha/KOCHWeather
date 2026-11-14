@@ -1,17 +1,26 @@
 package com.koch.weather.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,15 +28,39 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import com.koch.weather.data.model.*
+import com.koch.weather.data.model.CityLocation
+import com.koch.weather.data.model.DefaultTaxiDestinations
+import com.koch.weather.data.model.TaxiDestination
+import com.koch.weather.data.model.TaxiRide
+import com.koch.weather.data.model.TaxiRideStatus
+import com.koch.weather.data.model.TaxiState
+import com.koch.weather.data.model.TaxiTariffType
+import com.koch.weather.ui.design.KochCard
+import com.koch.weather.ui.design.KochCloseButton
+import com.koch.weather.ui.design.KochConfirmSheet
+import com.koch.weather.ui.design.KochListRow
+import com.koch.weather.ui.design.KochMaterial
+import com.koch.weather.ui.design.KochPrimaryButton
+import com.koch.weather.ui.design.KochSection
+import com.koch.weather.ui.design.KochSheet
+import com.koch.weather.ui.design.KochTextButton
+import com.koch.weather.ui.design.formatByn
+import com.koch.weather.ui.design.formatRuAmount
+import com.koch.weather.ui.theme.KochBorderWidth
+import com.koch.weather.ui.theme.KochRadius
+import com.koch.weather.ui.theme.KochShape
+import com.koch.weather.ui.theme.KochSize
+import com.koch.weather.ui.theme.KochSpace
+import com.koch.weather.ui.theme.KochType
+import com.koch.weather.ui.theme.LocalKochColors
 
+/**
+ * Такси. Bottom-sheet по языку референса (refs/cards_taxi_food.png, 2:05):
+ * плотные строки, один синий акцент, капсула CTA; deep link в Яндекс Go не меняется.
+ */
 @Composable
 fun TaxiBottomSheet(
     taxiState: TaxiState,
@@ -39,370 +72,276 @@ fun TaxiBottomSheet(
     onCancelTaxi: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
+    val colors = LocalKochColors.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showLaunchConfirm by remember { mutableStateOf(false) }
     var launchError by remember { mutableStateOf<String?>(null) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF1E232A),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB300)),
-            modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.85f)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
+    val activeRide = taxiState.activeRide
+        ?.takeIf { it.status != TaxiRideStatus.COMPLETED }
+    val hasRide = activeRide != null
+
+    KochSheet(
+        onDismiss = onDismiss,
+        maxHeightFraction = 0.86f,
+        content = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.s),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFFFB300).copy(alpha = 0.25f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.DirectionsCar,
+                    contentDescription = null,
+                    tint = colors.accentPromo,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.width(KochSpace.m))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Такси «Сухой салон»",
+                        style = KochType.titleCard,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        // Честные данные: без ключа пробок цифры нет — только текст.
+                        text = if (trafficScore != null) {
+                            "Пробки: $trafficScore/10 · $trafficAdvice"
+                        } else {
+                            trafficAdvice
+                        },
+                        style = KochType.sub,
+                        color = if (trafficScore != null) colors.accentPromo else colors.textTertiary,
+                        maxLines = 2
+                    )
+                }
+                KochCloseButton(onClick = onDismiss)
+            }
+
+            if (activeRide != null) {
+                ActiveRideCard(ride = activeRide, modifier = Modifier.padding(top = KochSpace.l))
+            } else {
+                KochSection(title = "Куда едем?")
+                KochCard(padding = PaddingValues(vertical = KochSpace.xs)) {
+                    DefaultTaxiDestinations.items.forEachIndexed { index, destination ->
+                        KochListRow(
+                            title = destination.title,
+                            subtitle = destination.subtitle,
+                            selected = destination.id == taxiState.selectedDestination.id,
+                            showDivider = index != DefaultTaxiDestinations.items.lastIndex,
+                            onClick = { onSelectDestination(destination) },
+                            leading = {
                                 Icon(
-                                    imageVector = Icons.Default.DirectionsCar,
+                                    imageVector = Icons.Default.LocationOn,
                                     contentDescription = null,
-                                    tint = Color(0xFFFFC107),
-                                    modifier = Modifier.size(22.dp)
+                                    tint = if (destination.id == taxiState.selectedDestination.id) {
+                                        colors.accent
+                                    } else {
+                                        colors.textTertiary
+                                    },
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            trailing = {
+                                Text(
+                                    text = "${destination.distanceKm} км",
+                                    style = KochType.caption,
+                                    color = colors.textTertiary
                                 )
                             }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Такси «Сухой салон»",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                // Never invent a traffic score: when data is missing show the
-                                // honest advice only (bug from the device audit_03).
-                                text = if (trafficScore != null) {
-                                    "Пробки: $trafficScore/10 • $trafficAdvice"
-                                } else {
-                                    trafficAdvice
-                                },
-                                fontSize = 11.5.sp,
-                                color = Color(0xFFFFD54F)
-                            )
-                        }
-                    }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = Color.White.copy(alpha = 0.8f)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                val activeRide = taxiState.activeRide
-                if (activeRide != null && activeRide.status != TaxiRideStatus.COMPLETED) {
-                    // Active Ride Card
-                    ActiveRideView(
-                        ride = activeRide,
-                        onCancel = onCancelTaxi
+                KochSection(title = "Тариф поездки")
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
+                    contentPadding = PaddingValues(vertical = KochSpace.xs)
+                ) {
+                    items(TaxiTariffType.values().toList(), key = { it.name }) { tariff ->
+                        TariffCard(
+                            tariff = tariff,
+                            selected = tariff == taxiState.selectedTariff,
+                            onClick = { onSelectTariff(tariff) }
+                        )
+                    }
+                }
+            }
+        },
+        footer = {
+            Column {
+                if (hasRide) {
+                    KochTextButton(
+                        text = "Отменить заказ",
+                        onClick = onCancelTaxi,
+                        color = colors.accentDanger,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        item(key = "destinations_header") {
-                            Text(
-                                text = "Куда едем?",
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        items(DefaultTaxiDestinations.items, key = { it.id }) { dest ->
-                            val isSelected = dest.id == taxiState.selectedDestination.id
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected) Color(0xFF37474F) else Color(0x15FFFFFF),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 0.8.dp,
-                                    color = if (isSelected) Color(0xFFFFB300) else Color(0x20FFFFFF)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelectDestination(dest) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = if (isSelected) Color(0xFFFFB300) else Color.White.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(dest.title, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
-                                        Text(dest.subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
-                                    }
-                                    Text(
-                                        text = "${dest.distanceKm} км",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        item(key = "tariffs_header") {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Тариф поездки:",
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        items(TaxiTariffType.values(), key = { it.name }) { tariff ->
-                            val isSelected = tariff == taxiState.selectedTariff
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelected) Color(0xFF455A64) else Color(0x15FFFFFF),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 0.8.dp,
-                                    color = if (isSelected) Color(0xFFFFC107) else Color(0x20FFFFFF)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelectTariff(tariff) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.DirectionsCar,
-                                        contentDescription = null,
-                                        tint = if (isSelected) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(tariff.titleRu, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            "${tariff.carModel} • ~${tariff.etaMinutes} мин",
-                                            color = Color.White.copy(alpha = 0.65f),
-                                            fontSize = 11.5.sp
-                                        )
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "${tariff.basePriceRu} ₽",
-                                            color = Color(0xFFFFD54F),
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "${tariff.basePriceByn} BYN",
-                                            color = Color.White.copy(alpha = 0.6f),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
+                    KochPrimaryButton(
+                        text = "Вызвать ${taxiState.selectedTariff.titleRu} за " +
+                            "${formatRuAmount(taxiState.selectedTariff.basePriceRu)} ₽",
                         onClick = {
                             launchError = null
                             showLaunchConfirm = true
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFB300),
-                            contentColor = Color(0xFF1E232A)
-                        )
-                    ) {
-                        Text(
-                            text = "Вызвать ${taxiState.selectedTariff.titleRu} за ${taxiState.selectedTariff.basePriceRu} ₽ ›",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
+                        }
+                    )
+                    Spacer(Modifier.heightIn(min = KochSpace.s))
                     Text(
                         text = "Заказ продолжится в приложении Яндекс Go",
-                        color = Color.White.copy(alpha = 0.55f),
-                        fontSize = 10.5.sp
+                        style = KochType.caption,
+                        color = colors.textPrimary.copy(alpha = 0.45f)
                     )
-
                     launchError?.let { message ->
-                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = message,
-                            color = Color(0xFFFF8A80),
-                            fontSize = 11.5.sp,
-                            lineHeight = 15.sp
+                            style = KochType.sub,
+                            color = colors.accentDanger,
+                            modifier = Modifier.padding(top = KochSpace.s)
                         )
                     }
                 }
             }
         }
-    }
+    )
 
     if (showLaunchConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLaunchConfirm = false },
-            containerColor = Color(0xFF1E232A),
-            titleContentColor = Color.White,
-            textContentColor = Color.White.copy(alpha = 0.85f),
-            title = { Text("Открыть Яндекс Go?") },
-            text = {
-                Text(
-                    "Маршрут откроется в приложении Яндекс Go. " +
-                        "Проверьте точки подачи и назначения."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showLaunchConfirm = false
-                        val selectedCity = city
-                        if (selectedCity == null) {
-                            launchError = "Не удалось определить координаты города для маршрута."
-                        } else if (!taxiDeepLinkPlan(selectedCity, taxiState.selectedDestination)
-                                .openFirstAvailable(context)
-                        ) {
-                            launchError = "Не удалось открыть Яндекс Go. " +
-                                "Установите приложение или браузер и попробуйте снова."
-                        }
-                    }
+        KochConfirmSheet(
+            title = "Открыть Яндекс Go?",
+            message = "Маршрут откроется в приложении Яндекс Go. " +
+                "Проверьте точки подачи и назначения.",
+            confirmText = "Открыть",
+            dismissText = "Отмена",
+            onConfirm = {
+                showLaunchConfirm = false
+                val selectedCity = city
+                if (selectedCity == null) {
+                    launchError = "Не удалось определить координаты города для маршрута."
+                } else if (!taxiDeepLinkPlan(selectedCity, taxiState.selectedDestination)
+                        .openFirstAvailable(context)
                 ) {
-                    Text("Открыть", color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold)
+                    launchError = "Не удалось открыть Яндекс Go. " +
+                        "Установите приложение или браузер и попробуйте снова."
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showLaunchConfirm = false }) {
-                    Text("Отмена", color = Color.White.copy(alpha = 0.75f))
-                }
-            }
+            onDismiss = { showLaunchConfirm = false }
         )
     }
 }
 
 @Composable
-private fun ActiveRideView(
-    ride: TaxiRide,
-    onCancel: () -> Unit
+private fun TariffCard(
+    tariff: TaxiTariffType,
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xFF263238),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFFFB300)),
-        modifier = Modifier.fillMaxWidth()
+    val colors = LocalKochColors.current
+    Column(
+        modifier = Modifier
+            .width(104.dp)
+            .heightIn(min = 92.dp)
+            .clip(RoundedCornerShape(KochRadius.panel))
+            .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.surfaceAlt)
+            .then(
+                if (selected) {
+                    Modifier.border(
+                        width = KochBorderWidth.hairline,
+                        color = colors.accent.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(KochRadius.panel)
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .padding(KochSpace.m)
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0xFFFFB300).copy(alpha = 0.2f)
-            ) {
-                Text(
-                    text = ride.status.titleRu,
-                    color = Color(0xFFFFD54F),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
+        Text(
+            text = tariff.titleRu,
+            style = KochType.bodyStrong,
+            color = colors.textPrimary,
+            maxLines = 1
+        )
+        Text(
+            text = "~${tariff.etaMinutes} мин",
+            style = KochType.caption,
+            color = colors.textTertiary,
+            maxLines = 1
+        )
+        Spacer(Modifier.heightIn(min = KochSpace.s))
+        Text(
+            text = "${formatRuAmount(tariff.basePriceRu)} ₽",
+            style = KochType.numberPrice,
+            color = colors.textPrimary,
+            maxLines = 1
+        )
+        Text(
+            text = "${formatByn(tariff.basePriceByn)} BYN",
+            style = KochType.caption,
+            color = colors.textTertiary,
+            maxLines = 1
+        )
+    }
+}
 
-            Spacer(modifier = Modifier.height(14.dp))
-
+@Composable
+private fun ActiveRideCard(
+    ride: TaxiRide,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalKochColors.current
+    KochCard(modifier = modifier, material = KochMaterial.Solid) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Default.DirectionsCar,
                 contentDescription = null,
-                tint = Color(0xFFFFD54F),
-                modifier = Modifier.size(48.dp)
+                tint = colors.accentPromo,
+                modifier = Modifier.size(24.dp)
             )
-            Spacer(modifier = Modifier.height(6.dp))
-
+            Spacer(Modifier.width(KochSpace.s))
             Text(
-                text = "${ride.carModel} • ${ride.carPlate}",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+                text = ride.status.titleRu,
+                style = KochType.bodyStrong,
+                color = colors.accentPromo
             )
-
+        }
+        Spacer(Modifier.heightIn(min = KochSpace.m))
+        Text(
+            text = "${ride.carModel} · ${ride.carPlate}",
+            style = KochType.titleCard,
+            color = colors.textPrimary
+        )
+        Text(
+            text = "Водитель: ${ride.driverName}",
+            style = KochType.sub,
+            color = colors.textSecondary
+        )
+        Spacer(Modifier.heightIn(min = KochSpace.m))
+        Row(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "Водитель: ${ride.driverName} (4.9 ★)",
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp
+                text = "Пункт назначения",
+                style = KochType.caption,
+                color = colors.textTertiary,
+                modifier = Modifier.weight(1f)
             )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = Color(0x30FFFFFF))
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Пункт назначения:", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                Text(ride.destination.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Стоимость поездки:", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                Text("${ride.priceRu} ₽ / ${ride.priceByn} BYN", color = Color(0xFFFFD54F), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedButton(
-                onClick = onCancel,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF5350)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF5350))
-            ) {
-                Text("Отменить заказ", fontWeight = FontWeight.Bold)
-            }
+            Text(
+                text = ride.destination.title,
+                style = KochType.caption,
+                color = colors.textPrimary
+            )
+        }
+        Spacer(Modifier.heightIn(min = KochSpace.xs))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Стоимость",
+                style = KochType.caption,
+                color = colors.textTertiary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${formatRuAmount(ride.priceRu)} ₽ · ${formatByn(ride.priceByn)} BYN",
+                style = KochType.numberRow,
+                color = colors.textPrimary
+            )
         }
     }
 }

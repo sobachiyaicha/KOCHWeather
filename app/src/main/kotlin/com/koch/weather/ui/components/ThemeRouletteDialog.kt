@@ -1,432 +1,380 @@
 package com.koch.weather.ui.components
 
-import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.koch.weather.data.model.AppThemeMode
+import com.koch.weather.ui.design.KochPrimaryButton
+import com.koch.weather.ui.design.KochSheet
+import com.koch.weather.ui.design.KochSheetVariant
+import com.koch.weather.ui.design.KochChip
+import com.koch.weather.ui.theme.KochRadius
+import com.koch.weather.ui.theme.KochSpace
+import com.koch.weather.ui.theme.KochType
+import com.koch.weather.ui.theme.LocalKochColors
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+/**
+ * «Поздравляем!» / рулетка тем — инсет-лист по refs/congrats.png (1:24):
+ * светло-голубой градиент, две карточки «Оформление …» (сверху и снизу), телефон в центре,
+ * жёлтые ◀ ▶, капсула «Продолжить». Фиолетовый дизайн удалён.
+ *
+ * Закрытые темы не применяются: «Продолжить» активна только для темы из [availableThemes].
+ */
 @Composable
 fun ThemeRouletteDialog(
     currentTheme: AppThemeMode,
     availableThemes: Set<AppThemeMode>,
-    cityName: String = "Санкт-Петербург",
-    currentTemp: Int? = null,
-    iphoneImageUrl: String? = null,
     onSelectTheme: (AppThemeMode) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    var isSpinning by remember { mutableStateOf(false) }
-    var previewTheme by remember { mutableStateOf(currentTheme) }
+    val colors = LocalKochColors.current
     val allThemes = remember { AppThemeMode.values().toList() }
-    val currentIndex = allThemes.indexOf(previewTheme).coerceAtLeast(0)
+    val unlocked = remember(availableThemes) {
+        allThemes.filter { it in availableThemes }
+    }
+    var previewTheme by remember {
+        mutableStateOf(if (currentTheme in availableThemes) currentTheme else unlocked.firstOrNull() ?: currentTheme)
+    }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF1B1B26),
-            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF7E57C2)),
-            modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.85f)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+    // Автопрокрут как в видео: телефон «крутится» при открытии и останавливается на доступной теме.
+    LaunchedEffect(Unit) {
+        if (unlocked.isEmpty()) return@LaunchedEffect
+        repeat(7) { step ->
+            delay(80L + step * 20L)
+            previewTheme = unlocked[Random.nextInt(unlocked.size)]
+        }
+    }
+
+    val isPreviewUnlocked = previewTheme in availableThemes
+    val above = neighbourTheme(previewTheme, allThemes, -1)
+    val below = neighbourTheme(previewTheme, allThemes, +1)
+
+    KochSheet(
+        onDismiss = onDismiss,
+        variant = KochSheetVariant.FullScreenInset,
+        maxHeightFraction = 0.94f,
+        content = {
+            Text(
+                text = "Поздравляем!",
+                style = KochType.titleSheet,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.l)
+            )
+
+            ThemeTicket(
+                theme = above,
+                isUnlocked = above in availableThemes,
+                onClick = { previewTheme = above },
+                modifier = Modifier.padding(top = KochSpace.l)
+            )
+
+            Spacer(Modifier.height(KochSpace.m))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF7E57C2).copy(alpha = 0.25f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Palette,
-                                    contentDescription = null,
-                                    tint = Color(0xFFB39DDB),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Поздравляем!",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Рулетка тем 2025 — выберите стиль",
-                                fontSize = 11.5.sp,
-                                color = Color(0xFFD1C4E9)
-                            )
-                        }
-                    }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
+                YellowArrow(pointsRight = false) {
+                    previewTheme = neighbourTheme(previewTheme, allThemes, -1)
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                PhonePreview(
+                    theme = previewTheme,
+                    modifier = Modifier.weight(1f).padding(horizontal = KochSpace.s)
+                )
 
-                // 3D iPhone Presentation Showcase (Matching refs/congrats.png)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0xFF28253E), Color(0xFF151424))
-                            )
-                        )
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left arrow (neon yellow triangle refs/congrats.png)
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0x35000000),
-                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFD600)),
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clickable {
-                                    val prev = (currentIndex - 1 + allThemes.size) % allThemes.size
-                                    previewTheme = allThemes[prev]
-                                }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("◀", color = Color(0xFFFFD600), fontSize = 22.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
-
-                        // Central Phone Mockup
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            // Phone frame
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = Color(0xFF0F0F14),
-                                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFB39DDB)),
-                                modifier = Modifier
-                                    .width(135.dp)
-                                    .height(185.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(6.dp)
-                                ) {
-                                    // R17: real iPhone photo from Wikimedia + theme-colored
-                                    // scrim, so both the device and the chosen theme are visible.
-                                    RemotePhoto(
-                                        url = iphoneImageUrl,
-                                        contentDescription = "iPhone 16 Pro Max",
-                                        modifier = Modifier.fillMaxSize(),
-                                        shape = RoundedCornerShape(14.dp),
-                                        placeholderIcon = Icons.Default.Smartphone,
-                                        placeholderTint = Color.White.copy(alpha = 0.75f)
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    listOf(
-                                                        themeAccentColor(previewTheme).copy(alpha = 0.5f),
-                                                        Color(0x77000000)
-                                                    )
-                                                )
-                                            )
-                                    )
-
-                                    // Mini phone screen elements
-                                    Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        // Notch / Island
-                                        Box(
-                                            modifier = Modifier
-                                                .width(36.dp)
-                                                .height(7.dp)
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(Color.Black)
-                                        )
-
-                                        Spacer(modifier = Modifier.height(6.dp))
-
-                                        // Mini capsule
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(24.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0x55000000)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = cityName,
-                                                color = Color.White,
-                                                fontSize = 8.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                softWrap = false
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        // Mini temperature
-                                        Text(
-                                            text = currentTemp?.let { "$it°" } ?: "—",
-                                            color = Color.White,
-                                            fontSize = 24.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-
-                                        Spacer(modifier = Modifier.weight(1f))
-
-                                        // Mini card
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(38.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0x40000000))
-                                        )
-
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        // Mini nav
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(14.dp)
-                                                .clip(RoundedCornerShape(5.dp))
-                                                .background(Color(0x80000000))
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Text(
-                                text = previewTheme.titleRu,
-                                color = Color.White,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            val isUnlocked = availableThemes.contains(previewTheme)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(0.92f),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (isUnlocked) {
-                                    Text(
-                                        text = "Доступно",
-                                        color = Color(0xFFA5D6A7),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = Color(0xFFA5D6A7),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFFB74D),
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Открывается в лутбоксах",
-                                        color = Color(0xFFFFB74D),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                        }
-
-                        // Right arrow (neon yellow triangle refs/congrats.png)
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0x35000000),
-                            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFD600)),
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clickable {
-                                    val next = (currentIndex + 1) % allThemes.size
-                                    previewTheme = allThemes[next]
-                                }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("▶", color = Color(0xFFFFD600), fontSize = 22.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Bottom Theme Selection Row: real horizontal scroll (LazyRow) plus an end
-                // padding, so the last chip ("Изумрудный лес") can always be scrolled into view.
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 2.dp)
-                ) {
-                    items(allThemes, key = { it.name }) { theme ->
-                        val isCurrent = theme == currentTheme
-                        val isPreview = theme == previewTheme
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isPreview) Color(0xFF7E57C2) else Color(0x20FFFFFF),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (isCurrent) 1.5.dp else 0.8.dp,
-                                color = if (isCurrent) Color(0xFFFFD54F) else Color(0x25FFFFFF)
-                            ),
-                            modifier = Modifier.clickable { previewTheme = theme }
-                        ) {
-                            Text(
-                                text = theme.titleRu,
-                                color = Color.White,
-                                fontSize = 11.5.sp,
-                                fontWeight = if (isPreview) FontWeight.Bold else FontWeight.Normal,
-                                softWrap = false,
-                                maxLines = 1,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Actions: Roulette Spin & Apply
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            if (!isSpinning) {
-                                isSpinning = true
-                                coroutineScope.launch {
-                                    val spins = 12
-                                    for (i in 0 until spins) {
-                                        delay(80L + i * 15L)
-                                        previewTheme = allThemes[Random.nextInt(allThemes.size)]
-                                    }
-                                    isSpinning = false
-                                    onSelectTheme(previewTheme)
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFCE93D8)),
-                        border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFAB47BC))
-                    ) {
-                        Text(
-                            text = if (isSpinning) "Крутим..." else "Рулетка!",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.5.sp
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            onSelectTheme(previewTheme)
-                            onDismiss()
-                        },
-                        modifier = Modifier
-                            .weight(1.2f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF7E57C2),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text(
-                            text = "Продолжить ›",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                    }
+                YellowArrow(pointsRight = true) {
+                    previewTheme = neighbourTheme(previewTheme, allThemes, +1)
                 }
             }
+
+            Spacer(Modifier.height(KochSpace.m))
+
+            ThemeTicket(
+                theme = below,
+                isUnlocked = below in availableThemes,
+                onClick = { previewTheme = below }
+            )
+
+            Spacer(Modifier.height(KochSpace.s))
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
+                contentPadding = PaddingValues(vertical = 2.dp)
+            ) {
+                items(allThemes, key = { it.name }) { theme ->
+                    KochChip(
+                        text = theme.titleRu,
+                        selected = theme == previewTheme,
+                        locked = theme !in availableThemes,
+                        onClick = { previewTheme = theme }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(KochSpace.s))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isPreviewUnlocked) {
+                    Text(
+                        text = "Доступно",
+                        style = KochType.caption,
+                        color = colors.accentSuccess
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Открывается в лутбоксах",
+                        style = KochType.caption,
+                        color = Color.White.copy(alpha = 0.75f)
+                    )
+                }
+            }
+        },
+        footer = {
+            Column {
+                KochPrimaryButton(
+                    text = if (isPreviewUnlocked) "Продолжить" else "Тема закрыта",
+                    enabled = isPreviewUnlocked,
+                    onClick = {
+                        onSelectTheme(previewTheme)
+                        onDismiss()
+                    }
+                )
+                if (!isPreviewUnlocked) {
+                    Spacer(Modifier.height(KochSpace.s))
+                    Text(
+                        text = "Эту тему можно получить только в лутбоксах",
+                        style = KochType.caption,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    )
+}
+
+private fun neighbourTheme(
+    theme: AppThemeMode,
+    all: List<AppThemeMode>,
+    delta: Int
+): AppThemeMode {
+    val index = all.indexOf(theme).coerceAtLeast(0)
+    val next = (index + delta + all.size) % all.size
+    return all[next]
+}
+
+/** Карточка-«билет» с превью темы: подпись «Оформление …», замок у закрытой. */
+@Composable
+private fun ThemeTicket(
+    theme: AppThemeMode,
+    isUnlocked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(KochRadius.input)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 74.dp)
+            .clip(shape)
+            .background(themePreviewBrush(theme))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = KochSpace.l, vertical = KochSpace.m),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Оформление",
+                style = KochType.caption,
+                color = Color.White.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = theme.titleRu,
+                style = KochType.bodyStrong,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+        if (!isUnlocked) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "Тема закрыта",
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Телефон в центре — фронтальный мокап из Compose (не задняя крышка из Wikimedia):
+ * экран показывает саму тему — небо, «21°» и две карточки.
+ */
+@Composable
+private fun PhonePreview(
+    theme: AppThemeMode,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = modifier
+            .heightIn(max = 210.dp)
+            .clip(shape)
+            .background(Color(0xFF101418))
+            .padding(5.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(themePreviewBrush(theme))
+                .padding(KochSpace.s),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(34.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.Black.copy(alpha = 0.75f))
+            )
+            Spacer(Modifier.height(KochSpace.m))
+            Text(
+                text = theme.titleRu,
+                style = KochType.microCaps,
+                color = Color.White.copy(alpha = 0.8f),
+                maxLines = 1,
+                softWrap = false
+            )
+            Text(
+                text = "21°",
+                style = KochType.displayTemp.copy(fontSize = 34.sp, lineHeight = 36.sp),
+                color = Color.White.copy(alpha = 0.92f)
+            )
+            Spacer(Modifier.height(KochSpace.s))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.16f))
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(Color.White.copy(alpha = 0.75f))
+                    .padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Главная",
+                    style = KochType.tab,
+                    color = Color(0xFF20313D)
+                )
+            }
+        }
+    }
+}
+
+/** Жёлтый треугольник без круга и обводки (refs/congrats.png, цвет заморожен: #FFD600). */
+@Composable
+private fun YellowArrow(
+    pointsRight: Boolean,
+    onClick: () -> Unit
+) {
+    val yellow = Color(0xFFFFD600)
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(26.dp)) {
+            val path = Path().apply {
+                if (pointsRight) {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, size.height / 2f)
+                    lineTo(0f, size.height)
+                } else {
+                    moveTo(size.width, 0f)
+                    lineTo(0f, size.height / 2f)
+                    lineTo(size.width, size.height)
+                }
+                close()
+            }
+            drawPath(path = path, color = yellow)
         }
     }
 }

@@ -1,203 +1,172 @@
 package com.koch.weather.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BeachAccess
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import com.koch.weather.ui.design.KochCloseButton
+import com.koch.weather.ui.design.KochColorDot
+import com.koch.weather.ui.design.KochPanel
+import com.koch.weather.ui.design.KochPrimaryButton
+import com.koch.weather.ui.design.KochSheet
+import com.koch.weather.ui.design.KochTextButton
+import com.koch.weather.ui.theme.KochSpace
+import com.koch.weather.ui.theme.KochType
+import com.koch.weather.ui.theme.LocalKochColors
 
+/**
+ * Магазин зонтов. Тот же язык, что у остальных листов: карточка товара, три расцветки,
+ * цена и одна капсула. Локальное состояние покупки сохранено (бэкенда нет).
+ */
 @Composable
 fun UmbrellaShopDialog(
     onDismiss: () -> Unit
 ) {
+    val colors = LocalKochColors.current
     var selectedColorIndex by remember { mutableIntStateOf(0) }
     var isPurchased by remember { mutableStateOf(false) }
 
-    val colors = listOf(
-        "Классический чернейший" to Color(0xFF212121),
-        "Небесно-голубой" to Color(0xFF42A5F5),
-        "Золотой VIP" to Color(0xFFFFD54F)
-    )
+    val swatches = remember {
+        listOf(
+            Triple("Классический чёрный", "чёрный", Color(0xFF212121)),
+            Triple("Небесно-голубой", "голубой", Color(0xFF42A5F5)),
+            Triple("Золотой VIP", "золотой", Color(0xFFE9BF60))
+        )
+    }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF1E3A5F),
-            tonalElevation = 8.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(22.dp)
+    KochSheet(
+        onDismiss = onDismiss,
+        maxHeightFraction = 0.72f,
+        content = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = KochSpace.m),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header with close
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.BeachAccess,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Зонты KOCH Protect",
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Card preview
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0x33FFFFFF),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BeachAccess,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(54.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Автоматический антиштормовой зонт",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "12 карбоновых спиц, влагоотталкивающее покрытие Teflon",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Выберите расцветку:",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.85f)
+                Icon(
+                    imageVector = Icons.Default.BeachAccess,
+                    contentDescription = null,
+                    tint = colors.accentPromo,
+                    modifier = Modifier.size(24.dp)
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    colors.forEachIndexed { index, (name, color) ->
-                        val isSelected = index == selectedColorIndex
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) Color.White else Color(0x44FFFFFF),
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedColorIndex = index }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Price and action
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Специальная цена",
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.65f)
-                        )
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = "29.99 BYN",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00E676)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "649 ₽",
-                                fontSize = 14.sp,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = { isPurchased = true },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isPurchased) Color(0xFF4CAF50) else Color(0xFF29B6F6)
-                        )
-                    ) {
-                        Text(
-                            text = if (isPurchased) "Оформлено!" else "Купить",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                if (isPurchased) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                Spacer(Modifier.width(KochSpace.m))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Курьер уже бежит к вам сквозь дождь!",
-                        color = Color(0xFFB9F6CA),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        text = "Зонты KOCH Protect",
+                        style = KochType.titleCard,
+                        color = colors.textPrimary
+                    )
+                    Text(
+                        text = "Складной, антиштормовой",
+                        style = KochType.sub,
+                        color = colors.textTertiary
+                    )
+                }
+                KochCloseButton(onClick = onDismiss)
+            }
+
+            Spacer(Modifier.height(KochSpace.l))
+
+            KochPanel {
+                Text(
+                    text = "Автоматический антиштормовой зонт",
+                    style = KochType.bodyStrong,
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "12 карбоновых спиц, влагоотталкивающее покрытие Teflon",
+                    style = KochType.sub,
+                    color = colors.textTertiary
+                )
+                Spacer(Modifier.height(KochSpace.m))
+                Text(
+                    text = swatches[selectedColorIndex].first,
+                    style = KochType.caption,
+                    color = colors.textSecondary
+                )
+                Spacer(Modifier.height(KochSpace.s))
+                Row(horizontalArrangement = Arrangement.spacedBy(KochSpace.s)) {
+                    swatches.forEachIndexed { index, swatch ->
+                        KochColorDot(
+                            color = swatch.third,
+                            selected = index == selectedColorIndex,
+                            contentDescription = "Расцветка: ${swatch.second}",
+                            onClick = { selectedColorIndex = index }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(KochSpace.l))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Специальная цена",
+                        style = KochType.caption,
+                        color = colors.textTertiary
+                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "29.99 BYN",
+                            style = KochType.numberPrice,
+                            color = colors.textPrimary
+                        )
+                        Spacer(Modifier.width(KochSpace.s))
+                        Text(
+                            text = "649 ₽",
+                            style = KochType.caption,
+                            color = colors.textTertiary
+                        )
+                    }
+                }
+            }
+
+            if (isPurchased) {
+                Spacer(Modifier.height(KochSpace.m))
+                Text(
+                    text = "Курьер уже бежит к вам сквозь дождь!",
+                    style = KochType.caption,
+                    color = colors.accentSuccess
+                )
+            }
+        },
+        footer = {
+            Column {
+                if (isPurchased) {
+                    KochTextButton(
+                        text = "Закрыть",
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    KochPrimaryButton(
+                        text = "Купить за 29.99 BYN",
+                        onClick = { isPurchased = true }
                     )
                 }
             }
         }
-    }
+    )
 }

@@ -1,36 +1,23 @@
 package com.koch.weather.ui.theme
 
 import androidx.compose.material3.Typography
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 
-// Set of Material typography styles to start with
-val Typography =
-  Typography(
-    bodyLarge =
-      TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp,
-      )
-    /* Other default text styles to override
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
-    */
-  )
+/**
+ * Материальная типографика собирается из тех же токенов, что и экраны ([KochType]),
+ * чтобы `Text` без явного style не «врал» размерами и весами.
+ *
+ * Отдельных кеглей здесь нет: 8 размеров из [KochType] — единственный источник правды.
+ */
+val KochMaterialTypography = Typography(
+    displayLarge = KochType.displayTemp,
+    headlineLarge = KochType.titlePage,
+    headlineMedium = KochType.titleSheet,
+    titleLarge = KochType.titleCard,
+    titleMedium = KochType.titleSection,
+    bodyLarge = KochType.body,
+    bodyMedium = KochType.body,
+    bodySmall = KochType.sub,
+    labelLarge = KochType.button,
+    labelMedium = KochType.chip,
+    labelSmall = KochType.microCaps
+)

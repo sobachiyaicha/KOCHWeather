@@ -10,16 +10,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Debug-only FPS-метр.
+ *
+ * Показывается только когда родитель решил, что он нужен (См. MainScreen: `BuildConfig.DEBUG`
+ * + скрытый жест). Компактный, в левом нижнем углу над навбаром, не перекрывает чипы и баннеры.
+ */
 @Composable
 fun FpsOverlay(
     modifier: Modifier = Modifier
 ) {
     var fps by remember { mutableStateOf<Int?>(null) }
-    var fpsColor by remember { mutableStateOf(Color(0xFF4CAF50)) }
+    var fpsColor by remember { mutableStateOf(Color(0xFFA5D6A7)) }
 
     DisposableEffect(Unit) {
         var frameCount = 0
@@ -34,9 +39,9 @@ fun FpsOverlay(
                     val currentFps = (frameCount * 1_000_000_000L / elapsed).toInt()
                     fps = currentFps
                     fpsColor = when {
-                        currentFps >= 55 -> Color(0xFF4CAF50)
-                        currentFps >= 30 -> Color(0xFFFFD54F)
-                        else -> Color(0xFFEF5350)
+                        currentFps >= 55 -> Color(0xFFA5D6A7)
+                        currentFps >= 30 -> Color(0xFFFFE082)
+                        else -> Color(0xFFEF9A9A)
                     }
                     frameCount = 0
                     lastTimeNanos = frameTimeNanos
@@ -57,14 +62,13 @@ fun FpsOverlay(
 
     Box(
         modifier = modifier
-            .background(Color(0x99000000), shape = RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(Color(0x66000000), shape = RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
             text = "$measuredFps FPS",
-            color = fpsColor,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            color = fpsColor.copy(alpha = 0.85f),
+            fontSize = 9.sp,
             fontFamily = FontFamily.Monospace
         )
     }

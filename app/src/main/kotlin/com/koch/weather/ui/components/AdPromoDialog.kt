@@ -1,167 +1,126 @@
 package com.koch.weather.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LaptopMac
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.koch.weather.ui.design.KochCloseButton
+import com.koch.weather.ui.design.KochPrimaryButton
+import com.koch.weather.ui.design.KochSheet
+import com.koch.weather.ui.design.KochTextButton
+import com.koch.weather.ui.theme.KochRadius
+import com.koch.weather.ui.theme.KochSize
+import com.koch.weather.ui.theme.KochSpace
+import com.koch.weather.ui.theme.KochType
+import com.koch.weather.ui.theme.LocalKochColors
 
+/**
+ * Рекламный лист (refs/premium_ads.png, 1:57): фото-герой, метка «РЕКЛАМА»,
+ * заголовок и одна CTA в премиум. Никакой зелёной рамки и квадратной иконки.
+ */
 @Composable
 fun AdPromoDialog(
     onOpenPaywall: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    imageUrl: String? = null
 ) {
-    var isSubscribed by remember { mutableStateOf(false) }
+    val colors = LocalKochColors.current
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF14291D),
-            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF4CAF50)),
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .wrapContentHeight()
-        ) {
-            Column(
+    KochSheet(
+        onDismiss = onDismiss,
+        maxHeightFraction = 0.8f,
+        hero = {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .height(KochSize.hero)
             ) {
-                // Header with close
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0x354CAF50)
-                    ) {
-                        Text(
-                            text = "РЕКЛАМА",
-                            color = Color(0xFF81C784),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Laptop graphic
+                RemotePhoto(
+                    url = imageUrl,
+                    contentDescription = "Реклама: ноутбук",
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RectangleShape,
+                    placeholderIcon = Icons.Default.LaptopMac,
+                    placeholderTint = colors.textSecondary
+                )
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .fillMaxSize()
                         .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF2E7D32), Color(0xFF66BB6A))
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, colors.accentAdBottom.copy(alpha = 0.85f))
                             )
-                        ),
-                    contentAlignment = Alignment.Center
+                        )
+                )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(KochSpace.l)
+                        .background(
+                            colors.accentAdLabel.copy(alpha = 0.92f),
+                            RoundedCornerShape(KochRadius.badge)
+                        )
+                        .padding(horizontal = KochSpace.s, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.LaptopMac,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Дизайнеры больше не нужны!",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "Научим делать сайты и мобильные интерфейсы с помощью нейросетей за 15 минут без строчки кода.",
-                    fontSize = 12.5.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isSubscribed) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0x354CAF50),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Ссылка на интенсив отправлена! До встречи на вебинаре.",
-                            color = Color(0xFFA5D6A7),
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                } else {
-                    Button(
-                        onClick = { isSubscribed = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF388E3C),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text("Записаться на вебинар БЕСПЛАТНО", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                TextButton(onClick = {
-                    onDismiss()
-                    onOpenPaywall()
-                }) {
                     Text(
-                        text = "Устали от рекламы? Отключите в Премиум ›",
-                        color = Color(0xFF81D4FA),
-                        fontSize = 11.5.sp
+                        text = "РЕКЛАМА",
+                        style = KochType.microCaps,
+                        color = Color(0xFF1E3A12)
                     )
                 }
+                KochCloseButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(KochSpace.s)
+                )
+            }
+        },
+        content = {
+            Text(
+                text = "Дизайнеры больше не нужны!",
+                style = KochType.titleCard,
+                color = colors.textPrimary,
+                modifier = Modifier.padding(top = KochSpace.l)
+            )
+            Text(
+                text = "Научим делать сайты с помощью нейросетей за 15 минут",
+                style = KochType.body,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = KochSpace.xs)
+            )
+            Spacer(Modifier.height(KochSpace.xs))
+        },
+        footer = {
+            Column {
+                KochPrimaryButton(
+                    text = "Подписка Премиум · 5.99 BYN",
+                    onClick = onOpenPaywall
+                )
+                Spacer(Modifier.height(KochSpace.s))
+                KochTextButton(
+                    text = "Закрыть",
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
-    }
+    )
 }
