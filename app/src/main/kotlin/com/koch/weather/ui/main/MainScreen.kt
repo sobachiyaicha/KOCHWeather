@@ -377,6 +377,9 @@ internal fun MainScreenContent(
     val themeColors = getThemePalette(uiState.currentTheme)
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
     var showDebugFps by remember { mutableStateOf(false) }
+    // После стирания облаков — короткий кулдаун: хвост того же жеста (и следующие быстрые
+    // свайпы) не должен листать город (дефект run 8: 4 свайпа → Дубай).
+    var veilCooldownUntil by remember { mutableLongStateOf(0L) }
     // Позиция ленты не переживает уход с главной: возвращаемся всегда к шапке.
     val listState = remember { androidx.compose.foundation.lazy.LazyListState() }
 
@@ -406,22 +409,32 @@ internal fun MainScreenContent(
                     uiState.selectedCityIndex,
                     uiState.isCloudLocked,
                     uiState.isCloudsCleared,
-                    cloudVeilDismissed
+                    cloudVeilDismissed,
+                    veilCooldownUntil
                 ) {
                     // Пока облака не стёрты — жест принадлежит им: карусель городов НЕ листаем
                     // (дефект run 3: свайп стирания уводил на Дубай).
                     if (uiState.isCloudVeilVisible && !cloudVeilDismissed) {
                         return@pointerInput
                     }
+                    // Хвост того же жеста: пелена ушла на 1–2 свайпе, а палец продолжает
+                    // двигаться — эти drag'и тоже не должны листать город (дефект run 8).
+                    val pagerBlocked: () -> Boolean = {
+                        System.currentTimeMillis() < veilCooldownUntil
+                    }
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, dragAmount ->
-                            dragAccumulator += dragAmount
+                            if (!pagerBlocked()) {
+                                dragAccumulator += dragAmount
+                            }
                         },
                         onDragEnd = {
-                            if (dragAccumulator < -60f) {
-                                onNextCity()
-                            } else if (dragAccumulator > 60f) {
-                                onPrevCity()
+                            if (!pagerBlocked()) {
+                                if (dragAccumulator < -60f) {
+                                    onNextCity()
+                                } else if (dragAccumulator > 60f) {
+                                    onPrevCity()
+                                }
                             }
                             dragAccumulator = 0f
                         },
@@ -687,6 +700,8 @@ internal fun MainScreenContent(
                 }
                 CloudVeilOverlay(
                     onCleared = {
+                        // 1200 мс на «хвост» жеста и быстрые добивающие свайпы.
+                        veilCooldownUntil = System.currentTimeMillis() + 1200L
                         onCloudVeilDismissed()
                         onCloudsCleared()
                     },
