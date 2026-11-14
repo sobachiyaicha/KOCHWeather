@@ -1,27 +1,42 @@
-# ui-coder — тарифы такси без LazyRow (perf-qa P1)
+# ui-coder — тарифы такси: взвешенные карточки (R8, правка judge)
 
 **Дата:** 14.11.2026.
 
-`ui/components/TaxiBottomSheet.kt`: `LazyRow` с тремя тарифами заменён на обычный `Row`.
+## Ошибка в предыдущей правке
+Я считал доступную ширину как 393 − 40 = 353 dp. Фактически плотность 460 dpi даёт экран
+**375.7 dp**, значит content-width листа = 375.7 − 2×20 = **335.7 dp**. Три карточки по
+112 dp + 2 отступа по 8 dp = **352 dp > 335.7** — третий тариф («Ultima VIP») обрезался.
 
-**Было:**
+## Фикс (`ui/components/TaxiBottomSheet.kt`, только тарифы)
+Выбран вариант «карточки сами делят ширину» — без прокрутки и без фиксированных размеров:
+
 ```kotlin
-LazyRow(
-    horizontalArrangement = Arrangement.spacedBy(KochSpace.s),
-    contentPadding = PaddingValues(vertical = KochSpace.xs)
-) { items(TaxiTariffType.values().toList(), key = { it.name }) { … } }
+Row(horizontalArrangement = Arrangement.spacedBy(KochSpace.s)) {
+    TaxiTariffType.values().forEach { tariff ->
+        TariffCard(…, modifier = Modifier.weight(1f))
+    }
+}
 ```
-**Стало:**
-```kotlin
-Row(
-    modifier = Modifier.padding(vertical = KochSpace.xs),
-    horizontalArrangement = Arrangement.spacedBy(KochSpace.s)
-) { TaxiTariffType.values().forEach { tariff -> TariffCard(…) } }
-```
+- `TariffCard` получил параметр `modifier` и больше **не** задаёт `.width(112.dp)`;
+  ширина приходит от `weight(1f)`.
+- Внутри карточки: заголовок `maxLines = 2` (был), цена и BYN — `maxLines = 2`: на узких
+  экранах текст переносится, а не обрезается многоточием.
 
-Обоснование: 3 × 112 dp + 2 × 8 dp = **352 dp** при доступных 353 dp (393 − 2×20) — прокрутка не
-нужна; LazyRow добавлял контейнер прокрутки и ленивый measure в первом кадре листа.
-`KochCard` у маршрутов, `shadowElevation = 24 dp` и `contentReady`-отложенность не затрагивались.
+## Арифметика для 320–390 dp
+| Экран | content | 1 карточка | внутри (padding 12×2) | «Ultima VIP» |
+|---|---|---|---|---|
+| 375.7 dp (устройство) | 335.7 | 106.6 | 82.6 | одна строка или 2 — влезает |
+| 360 dp | 320 | 101.3 | 77.3 | влезает |
+| 320 dp | 280 | 88 | 64 | переносится «Ultima / VIP» — не обрезается |
 
-**Сборка:** `compileDebugKotlin` → **BUILD SUCCESSFUL in 8s**, 0 warnings, wall 8.6 s
-(`.local/build_tariff_row.txt`).
+Цена «1 450 ₽» при 64 dp внутренней ширины переносится на две строки (maxLines=2) — без
+многоточия.
+
+Не тронуты: маршруты (KochCard + KochListItem), `shadowElevation = 24 dp`, `contentReady`
+(он не возвращался).
+
+**Сборка:** `compileDebugKotlin` → **BUILD SUCCESSFUL in 8s** (wall 8.6 s), 0 warnings
+(`.local/build_tariff_fix.txt`).
+
+**Для judge:** нужен новый кадр шторки такси, где все три тарифа видны целиком (снять после
+разблокировки телефона).

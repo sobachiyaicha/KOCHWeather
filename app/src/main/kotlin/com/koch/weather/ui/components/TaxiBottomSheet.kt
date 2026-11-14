@@ -162,7 +162,10 @@ fun TaxiBottomSheet(
                         TariffCard(
                             tariff = tariff,
                             selected = tariff == taxiState.selectedTariff,
-                            onClick = { onSelectTariff(tariff) }
+                            onClick = { onSelectTariff(tariff) },
+                            // Делят доступную ширину поровну: на 375.7 dp это ≈106 dp на карточку,
+                            // на 320 dp — ≈88 dp; «Ultima VIP» переносится на две строки.
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -233,12 +236,14 @@ fun TaxiBottomSheet(
 private fun TariffCard(
     tariff: TaxiTariffType,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = LocalKochColors.current
     Column(
-        modifier = Modifier
-            .width(112.dp)
+        modifier = modifier
+            // Ширину задаёт родитель (weight): фиксированные 112 dp не влезали в 335.7 dp
+            // при плотности 460 dpi и обрезали третий тариф (R8, замечание judge).
             .heightIn(min = 92.dp)
             .clip(RoundedCornerShape(KochRadius.panel))
             .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.surfaceAlt)
@@ -273,13 +278,14 @@ private fun TariffCard(
             text = "${formatRuAmount(tariff.basePriceRu)} ₽",
             style = KochType.numberPrice,
             color = colors.textPrimary,
-            maxLines = 1
+            // На узких экранах (320 dp) цена переносится, а не обрезается многоточием.
+            maxLines = 2
         )
         Text(
             text = "${formatByn(tariff.basePriceByn)} BYN",
             style = KochType.caption,
             color = colors.textTertiary,
-            maxLines = 1
+            maxLines = 2
         )
     }
 }
