@@ -910,3 +910,48 @@ TCP-коннект встаёт (0.04–0.05 с), но TLS/ответ висят
 Для честного замера на этом устройстве нужен либо перезагруз телефона перед сессией (сбросить D-state треды дисплея), либо инструментальный профиль (Perfetto/Macrobenchmark), где loadavg не влияет. Порог loadavg < 2.5 на этом ядре, судя по поведению, недостижим.
 
 **logcat/скриншоты не снимались (не требовались). Приложение остановлено, сеть включена, состояние не менялось.**
+
+---
+
+# Run 12 (clean scroll + veil/hint) — BLOCKED: телефон заперт после ребута
+
+- Дата: 2026-11-14, 10:44–11:01 MSK. Сборка **`44bc6d6`** («perf(ui): replace tariff lazy row with plain row in taxi sheet»), benchmark APK 3 139 248 Б, собран 10:50:46, установлен `-r` в 10:52:46 (Success).
+
+## 1. Ребут и нагрузка — выполнено
+
+| Момент | load average (1 / 5 / 15 мин) |
+|---|---|
+| до ребута | **4.38 / 4.38 / 4.52** |
+| сразу после загрузки | **4.40 / 1.26 / 0.44** |
+| +2 минуты простоя | **4.33 / 2.44 / 1.00** |
+
+Ребут действительно сбросил D-state треды дисплея, которые давали ложный loadavg: 5- и 15-минутные средние упали с ~4.5 до 1.26 и 0.44. Одноминутное среднее всё равно подскакивает до ~4.3, то есть на этом ядре loadavg как метрика шума ненадёжен даже после чистой загрузки.
+
+## 2. БЛОКЕР: устройство осталось на защищённом экране блокировки
+
+После `adb reboot` телефон загрузился **запертым** (secure lock), и это блокирует всю работу:
+
+```
+dumpsys user:   State: RUNNING_LOCKED
+dumpsys window: secure=true, deviceLocked=1, isKeyguardShowing=true
+getprop:        ro.crypto.state=encrypted
+dumpsys trust:  deviceLocked=1, strongAuthRequired=0x1
+```
+
+Следствия:
+- **`/storage/emulated` не смонтирован** — `ls /storage/emulated/0` пусто, `screencap` отдаёт 0 байт («Error opening file: /sdcard/… No such file or directory»), `adb pull/push` в /sdcard не работают;
+- **приложение не запускается**: `am start -n com.koch.weather/.MainActivity` → `Error type 3: Activity class does not exist`; `monkey -p com.koch.weather …` → «No activities found to run»;
+- **`wm dismiss-keyguard` не помогает** — блокировка не «свайп», а с секретом (PIN/графический ключ), `input`-события её не снимают;
+- пакет при этом установлен корректно: `pm path com.koch.weather` → base.apk, `dumpsys package` видит `com.koch.weather/.MainActivity`, `versionName=1.0-benchmark`.
+
+Программно разблокировать нельзя. **Нужно физическое действие человека: ввести PIN/графический ключ на телефоне.** Больше ребутить не буду — ребут и создал блокировку.
+
+## 3. Что осталось не сделано (сразу после разблокировки, ~5 минут работы)
+
+1. **Чистый замер скролла**: `force-stop` → `am start` → пауза 5 с → `gfxinfo reset` → 7 свайпов (при <300 кадров — 10–12) → `gfxinfo` → `shots/perf_run12_scroll_clean.txt` + loadavg рядом.
+2. **Run 12**: `pm clear` → запуск → ожидание данных и вуали (до ~40 с) → `screenrecord` 6–8 с во время 3–4 свайпов → **8–10 кадров по PTS** (`shots/dynamics/r12_frame_01..10.png`) + `r12_clouds.mp4`; проверка, что подсказка «Прогоните облака пальцем…» не появляется поверх капсулы после первого касания и город остаётся Санкт-Петербург.
+3. Кадры `r12_01_list_blue`, `r12_02_carousel_after_pause`, `r12_03_veil_hint_first`.
+4. `logcat` → `shots/logcat_run12.txt`, проверка FATAL/ANR.
+5. Финал: force-stop, тема «Голубое небо», город СПб, premium=false.
+
+**Статус: BLOCKED (требуется разблокировка телефона человеком).** Ничего не выдумывал и старые кадры не подставлял.
