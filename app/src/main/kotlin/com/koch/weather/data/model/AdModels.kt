@@ -23,13 +23,19 @@ enum class AdMediaType {
  * @param type фото или видео
  * @param mediaRes `R.drawable.ad_*` для фото, `R.raw.ad_*` для видео
  * @param hasBuyLabel красная подпись «КУПИТЬ СЕЙЧАС!» под медиа
+ * @param videoWidth ширина кадра ролика в пикселях (0 — неизвестна); размер
+ *   известен заранее, чтобы выставить fit-матрицу `TextureView` **до** `play()`
+ *   и первый же кадр показать с letterbox, а не растянутым на весь экран
+ * @param videoHeight высота кадра ролика в пикселях (0 — неизвестна)
  */
 @Immutable
 data class AdCreative(
     val id: String,
     val type: AdMediaType,
     @param:AnyRes val mediaRes: Int,
-    val hasBuyLabel: Boolean = false
+    val hasBuyLabel: Boolean = false,
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0
 )
 
 /**
@@ -87,16 +93,30 @@ object AdCatalog {
         mediaRes = R.drawable.ad_son
     )
 
+    // Размеры кадров роликов (tkhd в MP4): известны заранее, поэтому движок
+    // вписывает кадр в экран ещё до `play()` — первого «растянутого» кадра нет.
+    /** Кадр `res/raw/ad_lion.mp4`. */
+    private const val LION_WIDTH = 360
+    private const val LION_HEIGHT = 480
+
+    /** Кадр `res/raw/ad_slippers.mp4`. */
+    private const val SLIPPERS_VIDEO_WIDTH = 360
+    private const val SLIPPERS_VIDEO_HEIGHT = 360
+
     val lion = AdCreative(
         id = "ad_lion",
         type = AdMediaType.VIDEO,
-        mediaRes = R.raw.ad_lion
+        mediaRes = R.raw.ad_lion,
+        videoWidth = LION_WIDTH,
+        videoHeight = LION_HEIGHT
     )
 
     val slippersVideo = AdCreative(
         id = "ad_slippers_video",
         type = AdMediaType.VIDEO,
-        mediaRes = R.raw.ad_slippers
+        mediaRes = R.raw.ad_slippers,
+        videoWidth = SLIPPERS_VIDEO_WIDTH,
+        videoHeight = SLIPPERS_VIDEO_HEIGHT
     )
 
     /** Пул полноэкранного поп-апа: ровно шесть креативов. */

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -45,7 +46,7 @@ import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.WeatherDataState
 import com.koch.weather.data.model.WeatherDomainData
 import com.koch.weather.data.model.defaultBackgroundRes
-import com.koch.weather.ui.components.AdPromoDialog
+import com.koch.weather.ui.components.AdPromoOverlay
 import com.koch.weather.ui.components.CityListScreen
 import com.koch.weather.ui.components.CitySearchScreen
 import com.koch.weather.ui.components.CloudVeilOverlay
@@ -174,6 +175,15 @@ fun MainScreen(
     val homeListState = remember { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
 
+    // Прогрев рекламного плеера на старте приложения, после первого кадра UI.
+    // ExoPlayer создаётся и получает первый ролик (`prepare()`) с уже привязанной
+    // постоянной поверхностью, поэтому 5-секундное ожидание кодека (realme/MTK,
+    // `AtlasService`) уходит в запуск приложения, а не в показ рекламы.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        viewModel.warmUpAdVideo()
+    }
+
     // «Список» must show fresh cached values every time the tab is opened.
     LaunchedEffect(uiState.selectedTab) {
         if (uiState.selectedTab == BottomTab.LIST) {
@@ -205,266 +215,277 @@ fun MainScreen(
             }
         }
 
-        // ОДИН Scaffold на весь MainScreen: навбар не пропадает ни на одной вкладке
-        // (item 3). Контент вкладки живёт внутри content, бар — в bottomBar.
-        Scaffold(
-            modifier = modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            bottomBar = {
-                Box(
-                    modifier = Modifier
-                        // D-1 (feature-qa, run 15): при `enableEdgeToEdge()` клавиатура —
-                        // оверлей над окном, `adjustResize` окно не сжимает. Навбар оставался
-                        // под IME: тап «в его зону» попадал в клавиатуру/поле и печатал
-                        // («Moscow,» на вкладке «Поиск»). Поднимаем бар над клавиатурой;
-                        // `union` берёт max(IME, навбар) — двойного отступа нет.
-                        .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                ) {
-                    KochNavBar(
-                        selectedTab = uiState.selectedTab,
-                        onTabSelected = onTabSelected
-                    )
-                }
-            }
-        ) { innerPadding ->
-            val bottomContentPadding = innerPadding.calculateBottomPadding()
-            when (uiState.selectedTab) {
-                BottomTab.HOME -> MainScreenContent(
-                    uiState = uiState,
-                    listState = homeListState,
-                    bottomContentPadding = bottomContentPadding,
-                    cloudVeilDismissed = cloudVeilDismissed,
-                    onCloudVeilDismissed = { cloudVeilDismissed = true },
-                    onRefresh = { viewModel.refresh() },
-                    onRetryWeather = { viewModel.retryWeather() },
-                    onSelectCityIndex = { viewModel.selectCityByIndex(it) },
-                    onSegmentSelected = { viewModel.setSegment(it) },
-                    onRatingChanged = { stars -> viewModel.rateWeather(stars) },
-                    onCloudsCleared = { viewModel.onCloudsCleared() },
-                    onRefreshAiFact = { viewModel.refreshAiFact() },
-                    onOpenPaywall = { isPaywallOpen = true },
-                    onOpenFlight = { viewModel.openFlightSheet() },
-                    onOpenLootbox = { isLootboxOpen = true },
-                    onOpenTaxi = { viewModel.openTaxiSheet() },
-                    onOpenFood = { viewModel.openFoodSheet() },
-                    onOpenCityPicker = {
-                        // Тап по шапке открывает полноэкранный «Список» — один язык вместо двух диалогов.
-                        viewModel.setTab(BottomTab.LIST)
-                    },
-                    onOpenUmbrellaShop = { viewModel.openUmbrellaShop() },
-                    onOpenGrassModal = { viewModel.setGrassModal(true) },
-                    onDayClick = { day -> selectedDayDetail = day },
-                    onNextCity = {
-                        if (uiState.cities.isNotEmpty()) {
-                            val nextIndex = (uiState.selectedCityIndex + 1) % uiState.cities.size
-                            viewModel.selectCityByIndex(nextIndex)
-                        }
-                    },
-                    onPrevCity = {
-                        if (uiState.cities.isNotEmpty()) {
-                            val prevIndex = if (uiState.selectedCityIndex - 1 < 0) {
-                                uiState.cities.size - 1
-                            } else {
-                                uiState.selectedCityIndex - 1
-                            }
-                            viewModel.selectCityByIndex(prevIndex)
-                        }
+        // Один Box на всё окно главного экрана: реклама рисуется оверлеем поверх
+        // контента в этом же окне (без Dialog) — постоянный TextureView и тёплый
+        // плеер переживают каждый показ, см. AdPromoOverlay / AdVideoEngine.
+        Box(modifier = Modifier.fillMaxSize()) {
+            // ОДИН Scaffold на весь MainScreen: навбар не пропадает ни на одной вкладке
+            // (item 3). Контент вкладки живёт внутри content, бар — в bottomBar.
+            Scaffold(
+                modifier = modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    Box(
+                        modifier = Modifier
+                            // D-1 (feature-qa, run 15): при `enableEdgeToEdge()` клавиатура —
+                            // оверлей над окном, `adjustResize` окно не сжимает. Навбар оставался
+                            // под IME: тап «в его зону» попадал в клавиатуру/поле и печатал
+                            // («Moscow,» на вкладке «Поиск»). Поднимаем бар над клавиатурой;
+                            // `union` берёт max(IME, навбар) — двойного отступа нет.
+                            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                    ) {
+                        KochNavBar(
+                            selectedTab = uiState.selectedTab,
+                            onTabSelected = onTabSelected
+                        )
                     }
-                )
+                }
+            ) { innerPadding ->
+                val bottomContentPadding = innerPadding.calculateBottomPadding()
+                when (uiState.selectedTab) {
+                    BottomTab.HOME -> MainScreenContent(
+                        uiState = uiState,
+                        listState = homeListState,
+                        bottomContentPadding = bottomContentPadding,
+                        cloudVeilDismissed = cloudVeilDismissed,
+                        onCloudVeilDismissed = { cloudVeilDismissed = true },
+                        onRefresh = { viewModel.refresh() },
+                        onRetryWeather = { viewModel.retryWeather() },
+                        onSelectCityIndex = { viewModel.selectCityByIndex(it) },
+                        onSegmentSelected = { viewModel.setSegment(it) },
+                        onRatingChanged = { stars -> viewModel.rateWeather(stars) },
+                        onCloudsCleared = { viewModel.onCloudsCleared() },
+                        onRefreshAiFact = { viewModel.refreshAiFact() },
+                        onOpenPaywall = { isPaywallOpen = true },
+                        onOpenFlight = { viewModel.openFlightSheet() },
+                        onOpenLootbox = { isLootboxOpen = true },
+                        onOpenTaxi = { viewModel.openTaxiSheet() },
+                        onOpenFood = { viewModel.openFoodSheet() },
+                        onOpenCityPicker = {
+                            // Тап по шапке открывает полноэкранный «Список» — один язык вместо двух диалогов.
+                            viewModel.setTab(BottomTab.LIST)
+                        },
+                        onOpenUmbrellaShop = { viewModel.openUmbrellaShop() },
+                        onOpenGrassModal = { viewModel.setGrassModal(true) },
+                        onDayClick = { day -> selectedDayDetail = day },
+                        onNextCity = {
+                            if (uiState.cities.isNotEmpty()) {
+                                val nextIndex = (uiState.selectedCityIndex + 1) % uiState.cities.size
+                                viewModel.selectCityByIndex(nextIndex)
+                            }
+                        },
+                        onPrevCity = {
+                            if (uiState.cities.isNotEmpty()) {
+                                val prevIndex = if (uiState.selectedCityIndex - 1 < 0) {
+                                    uiState.cities.size - 1
+                                } else {
+                                    uiState.selectedCityIndex - 1
+                                }
+                                viewModel.selectCityByIndex(prevIndex)
+                            }
+                        }
+                    )
 
-                BottomTab.MAP -> {
-                    val mapCity = uiState.selectedCity
-                        ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
-                        ?: uiState.cities.firstOrNull()
-                    TabBackground(background = themeColors.gradientBrush) {
-                        if (mapCity != null) {
-                            WeatherMapScreen(
-                                cityName = uiState.weather?.cityName ?: mapCity.name,
-                                latitude = mapCity.latitude,
-                                longitude = mapCity.longitude,
-                                currentTemp = uiState.weather?.currentTemp,
-                                conditionRu = uiState.weather?.conditionDescription,
-                                modifier = Modifier.padding(bottom = bottomContentPadding)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = bottomContentPadding),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "Нет данных о городе для карты",
-                                        color = Color.White,
-                                        fontSize = 15.sp
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = "Выберите город на вкладке «Главная»",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 13.sp
-                                    )
+                    BottomTab.MAP -> {
+                        val mapCity = uiState.selectedCity
+                            ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
+                            ?: uiState.cities.firstOrNull()
+                        TabBackground(background = themeColors.gradientBrush) {
+                            if (mapCity != null) {
+                                WeatherMapScreen(
+                                    cityName = uiState.weather?.cityName ?: mapCity.name,
+                                    latitude = mapCity.latitude,
+                                    longitude = mapCity.longitude,
+                                    currentTemp = uiState.weather?.currentTemp,
+                                    conditionRu = uiState.weather?.conditionDescription,
+                                    modifier = Modifier.padding(bottom = bottomContentPadding)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(bottom = bottomContentPadding),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = "Нет данных о городе для карты",
+                                            color = Color.White,
+                                            fontSize = 15.sp
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = "Выберите город на вкладке «Главная»",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 13.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                BottomTab.LIST -> TabBackground(background = themeColors.gradientBrush) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = bottomContentPadding)
-                    ) {
-                        CityListScreen(
-                            cities = uiState.savedCities,
-                            selectedCityName = uiState.selectedCity?.name,
-                            isLoading = uiState.isLoadingSavedCities,
-                            background = themeColors.gradientBrush,
-                            attribution = uiState.weatherAttributionRu,
-                            attributionNote = uiState.weatherSourceNote,
-                            onRefresh = { viewModel.refreshSavedCities() },
-                            onSelectCity = { savedCity -> viewModel.addCity(savedCity.city) },
-                            onAddCity = { viewModel.setTab(BottomTab.SEARCH) }
-                        )
+                    BottomTab.LIST -> TabBackground(background = themeColors.gradientBrush) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = bottomContentPadding)
+                        ) {
+                            CityListScreen(
+                                cities = uiState.savedCities,
+                                selectedCityName = uiState.selectedCity?.name,
+                                isLoading = uiState.isLoadingSavedCities,
+                                background = themeColors.gradientBrush,
+                                attribution = uiState.weatherAttributionRu,
+                                attributionNote = uiState.weatherSourceNote,
+                                onRefresh = { viewModel.refreshSavedCities() },
+                                onSelectCity = { savedCity -> viewModel.addCity(savedCity.city) },
+                                onAddCity = { viewModel.setTab(BottomTab.SEARCH) }
+                            )
+                        }
                     }
-                }
 
-                BottomTab.SEARCH -> TabBackground(background = themeColors.gradientBrush) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = bottomContentPadding)
-                    ) {
-                        CitySearchScreen(
-                            query = uiState.searchQuery,
-                            results = uiState.searchResults,
-                            savedCities = uiState.cities,
-                            isSearching = uiState.isSearching,
-                            errorMessage = uiState.searchError,
-                            background = themeColors.gradientBrush,
-                            onQueryChange = { viewModel.searchCities(it) },
-                            onSelectCity = { city -> viewModel.addCity(city) }
-                        )
+                    BottomTab.SEARCH -> TabBackground(background = themeColors.gradientBrush) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = bottomContentPadding)
+                        ) {
+                            CitySearchScreen(
+                                query = uiState.searchQuery,
+                                results = uiState.searchResults,
+                                savedCities = uiState.cities,
+                                isSearching = uiState.isSearching,
+                                errorMessage = uiState.searchError,
+                                background = themeColors.gradientBrush,
+                                onQueryChange = { viewModel.searchCities(it) },
+                                onSelectCity = { city -> viewModel.addCity(city) }
+                            )
+                        }
                     }
-                }
 
-                BottomTab.THEMES -> TabBackground(background = themeColors.gradientBrush) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = bottomContentPadding)
-                    ) {
-                        ThemeGalleryScreen(
-                            themes = uiState.themeCatalog,
-                            currentTheme = uiState.currentTheme,
-                            background = themeColors.gradientBrush,
-                            attribution = uiState.weatherAttributionRu,
-                            attributionNote = uiState.weatherSourceNote,
-                            onSelectTheme = { theme -> viewModel.setTheme(theme) }
-                        )
+                    BottomTab.THEMES -> TabBackground(background = themeColors.gradientBrush) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = bottomContentPadding)
+                        ) {
+                            ThemeGalleryScreen(
+                                themes = uiState.themeCatalog,
+                                currentTheme = uiState.currentTheme,
+                                background = themeColors.gradientBrush,
+                                attribution = uiState.weatherAttributionRu,
+                                attributionNote = uiState.weatherSourceNote,
+                                onSelectTheme = { theme -> viewModel.setTheme(theme) }
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Modals and Sheets
-        if (uiState.isUmbrellaShopOpen) {
-            UmbrellaShopDialog(
-                onDismiss = { viewModel.closeUmbrellaShop() }
-            )
-        }
+            // Modals and Sheets
+            if (uiState.isUmbrellaShopOpen) {
+                UmbrellaShopDialog(
+                    onDismiss = { viewModel.closeUmbrellaShop() }
+                )
+            }
 
-        if (isPaywallOpen) {
-            PaywallDialog(
-                isPremiumPurchased = uiState.isPremiumPurchased,
-                isPending = uiState.isPremiumPurchasePending,
-                offer = uiState.premiumOffer,
-                onRequestPurchase = { viewModel.requestPremiumPurchase() },
-                onConfirmPurchase = { viewModel.confirmPremiumPurchase() },
-                onCancelPending = { viewModel.cancelPremiumPurchase() },
-                onResetPremium = { viewModel.resetPremium() },
-                onDismiss = { isPaywallOpen = false }
-            )
-        }
+            if (isPaywallOpen) {
+                PaywallDialog(
+                    isPremiumPurchased = uiState.isPremiumPurchased,
+                    isPending = uiState.isPremiumPurchasePending,
+                    offer = uiState.premiumOffer,
+                    onRequestPurchase = { viewModel.requestPremiumPurchase() },
+                    onConfirmPurchase = { viewModel.confirmPremiumPurchase() },
+                    onCancelPending = { viewModel.cancelPremiumPurchase() },
+                    onResetPremium = { viewModel.resetPremium() },
+                    onDismiss = { isPaywallOpen = false }
+                )
+            }
 
-        // Реклама (ТЗ п. 4–5): полноэкранный поп-ап открывается только по событию
-        // «облака стёрты» — состояние готовит ViewModel, ручного вызова больше нет.
-        if (uiState.isAdPopupVisible) {
-            AdPromoDialog(
+            // Реклама (ТЗ п. 4–5): полноэкранный оверлей **в этом же окне** (без Dialog).
+            // Открывается только по событию «облака стёрты» — состояние готовит ViewModel.
+            // Оверлей композируется всегда: его постоянный TextureView и тёплый плеер
+            // переживают каждый показ, поэтому кодек не пересоздаётся и не меняет
+            // выходную поверхность (на realme/MTK это 5 с ожидания `AtlasService`).
+            // Скрытый оверлей при этом на весь экран, но с alpha = 0 и zIndex = -1:
+            // без фона и без clickable, поэтому тапы доходят до карточек и навбара.
+            // Размер постоянного TextureView не меняется никогда — иначе меняется
+            // буфер SurfaceTexture и кодек переконфигурируется (фриз ~5 с).
+            AdPromoOverlay(
                 creative = uiState.adCreative,
+                isVisible = uiState.isAdPopupVisible,
                 onDismiss = { viewModel.dismissAdPopup() }
             )
-        }
 
-        if (uiState.flightState.isSheetOpen) {
-            FlightBookingDialog(
-                flightState = uiState.flightState,
-                onSelectOffer = { viewModel.selectFlightOffer(it) },
-                onSelectSeat = { viewModel.selectSeat(it) },
-                onBookFlight = { viewModel.bookFlight(it) },
-                onDismiss = { viewModel.closeFlightSheet() },
-                heroImageUrl = uiState.imageUrls[ImageCategory.TRAVEL_DUBAI]?.firstOrNull()
-            )
-        }
+            if (uiState.flightState.isSheetOpen) {
+                FlightBookingDialog(
+                    flightState = uiState.flightState,
+                    onSelectOffer = { viewModel.selectFlightOffer(it) },
+                    onSelectSeat = { viewModel.selectSeat(it) },
+                    onBookFlight = { viewModel.bookFlight(it) },
+                    onDismiss = { viewModel.closeFlightSheet() },
+                    heroImageUrl = uiState.imageUrls[ImageCategory.TRAVEL_DUBAI]?.firstOrNull()
+                )
+            }
 
-        if (isLootboxOpen) {
-            LootboxDialog(
-                lootboxState = uiState.lootboxState,
-                availableThemes = uiState.availableThemes,
-                currentTheme = uiState.currentTheme,
-                onOpenLootbox = { viewModel.openLootbox() },
-                onApplyTheme = { theme -> viewModel.setTheme(theme) },
-                onGrantAdAttempt = { viewModel.grantAdAttempt() },
-                onDismiss = { isLootboxOpen = false }
-            )
-        }
+            if (isLootboxOpen) {
+                LootboxDialog(
+                    lootboxState = uiState.lootboxState,
+                    availableThemes = uiState.availableThemes,
+                    currentTheme = uiState.currentTheme,
+                    onOpenLootbox = { viewModel.openLootbox() },
+                    onApplyTheme = { theme -> viewModel.setTheme(theme) },
+                    onGrantAdAttempt = { viewModel.grantAdAttempt() },
+                    onDismiss = { isLootboxOpen = false }
+                )
+            }
 
-        if (uiState.taxiState.isSheetOpen) {
-            val taxiCity = uiState.selectedCity
-                ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
-            TaxiBottomSheet(
-                taxiState = uiState.taxiState,
-                trafficScore = uiState.weather?.trafficScore,
-                trafficAdvice = uiState.weather?.trafficAdvice?.takeIf { it.isNotBlank() }
-                    ?: "Нет данных о пробках",
-                city = taxiCity,
-                onSelectTariff = { viewModel.selectTaxiTariff(it) },
-                onSelectDestination = { viewModel.selectTaxiDestination(it) },
-                onCancelTaxi = { viewModel.cancelTaxi() },
-                onDismiss = { viewModel.closeTaxiSheet() }
-            )
-        }
+            if (uiState.taxiState.isSheetOpen) {
+                val taxiCity = uiState.selectedCity
+                    ?: uiState.cities.getOrNull(uiState.selectedCityIndex)
+                TaxiBottomSheet(
+                    taxiState = uiState.taxiState,
+                    trafficScore = uiState.weather?.trafficScore,
+                    trafficAdvice = uiState.weather?.trafficAdvice?.takeIf { it.isNotBlank() }
+                        ?: "Нет данных о пробках",
+                    city = taxiCity,
+                    onSelectTariff = { viewModel.selectTaxiTariff(it) },
+                    onSelectDestination = { viewModel.selectTaxiDestination(it) },
+                    onCancelTaxi = { viewModel.cancelTaxi() },
+                    onDismiss = { viewModel.closeTaxiSheet() }
+                )
+            }
 
-        if (uiState.foodState.isSheetOpen) {
-            FoodBottomSheet(
-                foodState = uiState.foodState,
-                photoUrls = uiState.imageUrls,
-                onSelectRestaurant = { viewModel.selectRestaurant(it) },
-                onAddToCart = { viewModel.addToCart(it) },
-                onRemoveFromCart = { viewModel.removeFromCart(it) },
-                onCancelOrder = { viewModel.cancelFoodOrder() },
-                onDismiss = { viewModel.closeFoodSheet() }
-            )
-        }
+            if (uiState.foodState.isSheetOpen) {
+                FoodBottomSheet(
+                    foodState = uiState.foodState,
+                    photoUrls = uiState.imageUrls,
+                    onSelectRestaurant = { viewModel.selectRestaurant(it) },
+                    onAddToCart = { viewModel.addToCart(it) },
+                    onRemoveFromCart = { viewModel.removeFromCart(it) },
+                    onCancelOrder = { viewModel.cancelFoodOrder() },
+                    onDismiss = { viewModel.closeFoodSheet() }
+                )
+            }
 
-        if (uiState.isGrassModalOpen) {
-            GrassLockDialog(
-                onGrassUploaded = { viewModel.onGrassUploaded() },
-                onDismiss = { viewModel.setGrassModal(false) }
-            )
-        }
+            if (uiState.isGrassModalOpen) {
+                GrassLockDialog(
+                    onGrassUploaded = { viewModel.onGrassUploaded() },
+                    onDismiss = { viewModel.setGrassModal(false) }
+                )
+            }
 
-        selectedDayDetail?.let { day ->
-            DailyDetailDialog(
-                item = day,
-                cityName = uiState.weather?.cityName ?: uiState.selectedCity?.name ?: "Город",
-                windSpeedMps = uiState.weather?.windSpeed,
-                onDismiss = { selectedDayDetail = null }
-            )
+            selectedDayDetail?.let { day ->
+                DailyDetailDialog(
+                    item = day,
+                    cityName = uiState.weather?.cityName ?: uiState.selectedCity?.name ?: "Город",
+                    windSpeedMps = uiState.weather?.windSpeed,
+                    onDismiss = { selectedDayDetail = null }
+                )
+            }
         }
     }
 }

@@ -79,6 +79,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var adPopupJob: Job? = null
     private var adBannerJob: Job? = null
 
+    /**
+     * Прогрев рекламного плеера запускается ровно один раз на процесс: повторный
+     * вызов (пересоздание Activity, рекомпозиция) не должен дёргать кодек.
+     */
+    private var adWarmUpStarted = false
+
     // Первый кадр не ждёт ни DataStore, ни сети: только лёгкое начальное состояние.
     private val _uiState = MutableStateFlow(
         MainScreenUiState(
@@ -625,10 +631,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
-        // Экран уходит насовсем: подготовленный, но так и не показанный ролик
-        // не должен держать кодек вечно. Плеер паркуется тёплым и освобождается
-        // движком через 60 с простоя (или в MainActivity.onDestroy(isFinishing)).
-        AdVideoEngine.parkCurrent()
+        // Экран уходит насовсем: ролик ставим на паузу. Сам плеер и постоянная
+        // поверхность живут до MainActivity.onDestroy(isFinishing) — освобождение
+        // стоит многосекундного teardown кодека на realme/MTK.
+        AdVideoEngine.pause()
         super.onCleared()
     }
 
@@ -850,6 +856,36 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Прогрев рекламного плеера на старте приложения (вызывается один раз из
+     * `MainScreen` после первого кадра UI).
+     *
+     * Движок создаёт `ExoPlayer`, ставит первый рекламный ролик, делает
+     * `prepare()` и привязывает его к постоянному `TextureView` оверлея.
+     * Кодек конфигурируется сразу при запуске: на realme RMX3151 (Android 12,
+     * MediaTek) `CCodec` при инициализации кодека/смене поверхности ждёт
+     * несуществующий `AtlasService` ~5 с, и эти секунды уходят в старт
+     * приложения, а не в показ рекламы.
+     *
+     * Всё, что может быть дорогим, — в IO-корутине; сам движок зовётся на main
+     * (ExoPlayer обязан жить на своём application-потоке).
+     */
+    fun warmUpAdVideo() {
+        if (adWarmUpStarted) return
+        adWarmUpStarted = true
+        viewModelScope.launch(Dispatchers.IO) {
+            // Первый показ в жизни пользователя — «лев» (видео); если каталог
+            // когда-нибудь начнёт с фото, прогреваем первый доступный ролик.
+            val video = runCatching { adRepository.firstShowCreative() }.getOrNull()
+                ?.takeIf { it.type == AdMediaType.VIDEO }
+                ?: AdCatalog.popupVideoCreatives.firstOrNull()
+                ?: return@launch
+            withContext(Dispatchers.Main) {
+                AdVideoEngine.warmUp(getApplication(), video)
+            }
+        }
+    }
+
+    /**
      * Полноэкранный рекламный поп-ап (ТЗ п. 4–5).
      *
      * Вызывается только по событию «облака стёрты» ([onCloudsCleared]).
@@ -877,11 +913,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 // Запоминаем показанное: следующий выбор исключит этот id.
                 lastAdPopupCreativeId = creative.id
-                // Предзагрузка ДО показа поп-апа: ExoPlayer создаётся и готовит ролик,
-                // пока isAdPopupVisible ещё false. Диалог получит уже подготовленный
-                // плеер и сразу вызовет play() — первый кадр появляется без 5–10 с
-                // чёрного экрана (жалоба OPPO/realme). Фото-креатив просто снимает
-                // подготовленный видеоплеер.
+                // Предзагрузка ДО показа оверлея: тот же тёплый ExoPlayer получает
+                // ролик и `prepare()` (новый плеер не создаётся), пока
+                // isAdPopupVisible ещё false. Оверлей затем только `seekTo(0)` +
+                // `play()` на постоянной поверхности — первого кадра не ждём.
                 withContext(Dispatchers.Main) {
                     AdVideoEngine.prepare(getApplication(), creative)
                 }
@@ -905,7 +940,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     /**
      * Закрытие поп-апа: крестик, системный back или автозакрытие после конца видео.
      *
-     * После снятия полноэкранного диалога возвращаем ротацию баннера — она была
+     * После снятия полноэкранного оверлея возвращаем ротацию баннера — она была
      * остановлена на время показа, чтобы главный экран не перерисовывался
      * (Crossfade) под открытым поп-апом. Повторный вызов не плодит таймеры:
      * [startAdBannerRotation] сначала отменяет предыдущую корутину.
@@ -916,9 +951,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (wasVisible) {
             resumeAdBannerRotation()
         } else {
-            // Поп-ап закрыли, не показав: плеер не освобождаем — паркуем тёплым,
-            // чтобы следующая реклама стартовала без инициализации кодека.
-            AdVideoEngine.parkCurrent()
+            // Поп-ап закрыли, не показав: плеер не освобождаем — пауза, поверхность
+            // и кодек остаются тёплыми для следующего показа.
+            AdVideoEngine.pause()
         }
     }
 

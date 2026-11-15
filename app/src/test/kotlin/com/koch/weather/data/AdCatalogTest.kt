@@ -73,6 +73,27 @@ class AdCatalogTest {
         assertEquals(AdMediaType.VIDEO, repository.firstShowCreative().type)
     }
 
+    /**
+     * Размер кадра ролика известен заранее (tkhd в MP4): движок ставит
+     * fit-матрицу до `play()`, поэтому первый кадр не растягивается.
+     */
+    @Test
+    fun videoCreatives_carryKnownFrameSize() {
+        assertEquals(360 to 480, AdCatalog.lion.videoWidth to AdCatalog.lion.videoHeight)
+        assertEquals(
+            360 to 360,
+            AdCatalog.slippersVideo.videoWidth to AdCatalog.slippersVideo.videoHeight
+        )
+        assertTrue(
+            "у каждого ролика должен быть известен размер кадра",
+            AdCatalog.popupVideoCreatives.all { it.videoWidth > 0 && it.videoHeight > 0 }
+        )
+        // У фото размер кадра не задаётся: его рисует `Image` по аспекту.
+        assertTrue(
+            AdCatalog.popupPhotoCreatives.all { it.videoWidth == 0 && it.videoHeight == 0 }
+        )
+    }
+
     @Test
     fun rotation_isDeterministic() {
         val creatives = repository.getCreatives()
