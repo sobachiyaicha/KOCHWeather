@@ -10,6 +10,10 @@ import com.koch.weather.R
  * телефона; фото с размытием 4 px и лёгким зерном, без затемнения). Читаемость
  * белого текста даёт скрим в `KochBackground`.
  *
+ * Для темы по умолчанию главная берёт отдельный кадр без блюра — см.
+ * [defaultBackgroundRes]; сам [backgroundRes] не меняется, потому что от него
+ * зависят витрина тем и другие превью.
+ *
  * Раньше фоном служили сетевые превью Wikimedia шириной 500 px, растянутые на
  * 1080 px, — отсюда «фон в очень низком разрешении». Сетевые фото остаются в
  * [ImageCatalog] для рекламы и витрин, но фон темы берётся только из этого
@@ -27,6 +31,18 @@ val AppThemeMode.backgroundRes: Int?
         AppThemeMode.CYBERPUNK -> R.drawable.theme_cyberpunk
         AppThemeMode.BLOODY_SUNSET -> R.drawable.theme_bloody_sunset
         AppThemeMode.AURORA_BOREALIS -> R.drawable.theme_aurora_borealis
+    }
+
+/**
+ * Фон ГЛАВНОЙ для темы по умолчанию (TZ: «фон без блюра»): `theme_default.jpg`,
+ * 1080×2323, исходный кадр без размытия. Остальные темы остаются на своём
+ * блюр-фоне из [backgroundRes]. Скрим и `ContentScale.Crop` рисует
+ * `KochSkyBackground`, поэтому фон ничего не перекрывает и не меняет затемнение.
+ */
+val AppThemeMode.defaultBackgroundRes: Int?
+    @DrawableRes get() = when (this) {
+        AppThemeMode.BLUE_SKY -> R.drawable.theme_default
+        else -> backgroundRes
     }
 
 /** Резкое превью темы (540×960) для карточек и мокапов; фон главной размыт отдельно. */

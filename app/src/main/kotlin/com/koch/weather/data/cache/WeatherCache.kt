@@ -47,6 +47,9 @@ class WeatherCache(private val context: Context) {
     private val KEY_CLOUDS_CLEARED = booleanPreferencesKey("clouds_cleared")
     private val KEY_LOOTBOX_HISTORY = stringPreferencesKey("lootbox_history_json")
 
+    /** Первый в жизни пользователя рекламный поп-ап уже показан (ТЗ: обязательно «лев»). */
+    private val KEY_FIRST_AD_SHOWN = booleanPreferencesKey("first_ad_shown")
+
     private fun cityKey(cityName: String) =
         stringPreferencesKey("weather_${cityName.trim().lowercase(Locale.ROOT).replace(" ", "_")}")
 
@@ -122,6 +125,28 @@ class WeatherCache(private val context: Context) {
         try {
             context.dataStore.edit { prefs ->
                 prefs[KEY_CLOUDS_CLEARED] = cleared
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Флаг «первый рекламный поп-ап в жизни пользователя показан».
+     * Пока false — поп-ап обязан открыть `ad_lion` (ролик «лев в очках»).
+     * Ошибка DataStore трактуется как «ещё не показывали»: лучше показать лева
+     * повторно, чем сломать требование первого показа.
+     */
+    suspend fun isFirstAdShown(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.data.map { prefs -> prefs[KEY_FIRST_AD_SHOWN] ?: false }.first()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun setFirstAdShown(shown: Boolean = true) = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.edit { prefs ->
+                prefs[KEY_FIRST_AD_SHOWN] = shown
             }
         } catch (_: Exception) {}
     }

@@ -1,80 +1,68 @@
 package com.koch.weather.data
 
-import com.koch.weather.data.model.CityLocation
-import com.koch.weather.data.model.DefaultCities
 import com.koch.weather.data.model.FactOfDayPolicy
-import com.koch.weather.data.repository.AiFactsRepository
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 /**
- * D5 с устройства: «А знали ли вы…» не должен меняться между перезапусками
- * в один день. Сид факта — постоянный гео-город + день года; восстановленный
- * «последний открытый город» на него не влияет.
+ * Факт дня больше не детерминирован по городу и дню года: при каждом запуске
+ * приложения выбирается новый индекс, а в рамках сессии он живёт в состоянии
+ * (`MainScreenUiState.aiFactIndex`) и при рекомпозиции не меняется.
  */
 class FactOfDayPolicyTest {
 
-    private val repository = AiFactsRepository()
+    private val size = 20
 
     @Test
-    fun twoStartsWithSameCitiesAndDay_giveSameFact() {
-        val day = 318
-        val firstStart = repository.getFactForDay(
-            FactOfDayPolicy.anchorCityName(DefaultCities.cities),
-            day
-        )
-        val secondStart = AiFactsRepository().getFactForDay(
-            FactOfDayPolicy.anchorCityName(DefaultCities.cities),
-            day
-        )
-
-        assertEquals(firstStart, secondStart)
+    fun initialIndex_isWithinFactsRange() {
+        repeat(200) {
+            val index = FactOfDayPolicy.initialIndex(size)
+            assertTrue("Индекс вне диапазона: $index", index in 0 until size)
+        }
     }
 
     @Test
-    fun restoredLastOpenedCity_doesNotChangeFactOfDay() {
-        val day = 318
-        val straight = repository.getFactForDay(
-            FactOfDayPolicy.anchorCityName(DefaultCities.cities),
-            day
-        )
-        // Второй старт: DataStore восстановил список, последним открывали Казань.
-        val restored = listOf(
-            DefaultCities.cities[3],
-            DefaultCities.cities[2],
-            DefaultCities.cities[0],
-            DefaultCities.cities[1]
-        )
-        val afterRestart = repository.getFactForDay(
-            FactOfDayPolicy.anchorCityName(restored),
-            day
-        )
-
-        assertEquals(straight, afterRestart)
+    fun initialIndex_variesBetweenStarts() {
+        // 100 «перезапусков»: всегда один и тот же факт — это уже не новое
+        // поведение (детерминизм по дню убран).
+        val indices = (1..100).map { FactOfDayPolicy.initialIndex(size) }.toSet()
+        assertTrue("Факт должен меняться между запусками, получено: $indices", indices.size > 1)
     }
 
     @Test
-    fun anchorIgnoresListOrderAndSelectedCity() {
-        assertEquals(
-            DefaultCities.GEO_CITY_NAME,
-            FactOfDayPolicy.anchorCityName(DefaultCities.cities.reversed())
-        )
-        assertEquals(
-            DefaultCities.GEO_CITY_NAME,
-            FactOfDayPolicy.anchorCityName(DefaultCities.cities, fallback = "Москва")
-        )
+    fun initialIndex_handlesEmptyAndSingleFactLists() {
+        assertEquals(0, FactOfDayPolicy.initialIndex(0))
+        assertEquals(0, FactOfDayPolicy.initialIndex(1))
     }
 
     @Test
-    fun anchorUsesFirstCityWhenGeoFlagIsMissing() {
-        val kazan = CityLocation("Казань", 55.7963, 49.1088, "Россия", "Татарстан")
-
-        assertEquals("Казань", FactOfDayPolicy.anchorCityName(listOf(kazan)))
+    fun nextIndex_neverRepeatsCurrent() {
+        (0 until size).forEach { current ->
+            repeat(50) {
+                assertNotEquals(current, FactOfDayPolicy.nextIndex(current, size))
+            }
+        }
     }
 
     @Test
-    fun anchorFallsBackToGeoNameForEmptyList() {
-        assertEquals(DefaultCities.GEO_CITY_NAME, FactOfDayPolicy.anchorCityName(emptyList()))
-        assertEquals("Москва", FactOfDayPolicy.anchorCityName(emptyList(), fallback = "Москва"))
+    fun nextIndex_isWithinRangeAndNormalizesCurrent() {
+        repeat(200) {
+            val index = FactOfDayPolicy.nextIndex(currentIndex = 57, size = size)
+            assertTrue("Индекс вне диапазона: $index", index in 0 until size)
+            // 57 mod 20 == 17: «другой факт» не должен вернуть тот же индекс.
+            assertNotEquals(17, index)
+        }
+        assertEquals(0, FactOfDayPolicy.nextIndex(0, 1))
+        assertEquals(0, FactOfDayPolicy.nextIndex(-3, 1))
+    }
+
+    @Test
+    fun nextIndex_dependsOnlyOnRandomSeed() {
+        val first = FactOfDayPolicy.nextIndex(currentIndex = 5, size = size, random = Random(42))
+        val second = FactOfDayPolicy.nextIndex(currentIndex = 5, size = size, random = Random(42))
+        assertEquals(first, second)
     }
 }

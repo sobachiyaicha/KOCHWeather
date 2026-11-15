@@ -7,11 +7,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.viewModelScope
+import com.koch.weather.R
 import com.koch.weather.data.cache.WeatherCache
 import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.model.*
 import com.koch.weather.data.network.NetworkMonitor
 import com.koch.weather.data.repository.*
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,7 +21,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Тяжёлые зависимости создаются лениво и инициализируются в IO-корутине.
@@ -50,8 +54,25 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val imageRepository: ImageRepository by lazy { ImageRepository() }
     private val adRepository: AdRepository by lazy { AdRepository() }
 
-    /** Сколько раз за сессию открывали рекламный лист: ротация креативов. */
-    private var adOpenCount: Int = 0
+    /** Сколько поп-апов уже показано за сессию: ротация креативов из пула. */
+    private var adShowSequence: Int = 0
+
+    /** Ротация баннера главной: индекс фото1/фото2, растёт по таймеру. */
+    private var adBannerSequence: Int = 0
+
+    /**
+     * Счётчик нажатий «Другой факт» за сессию. Живёт только в памяти ViewModel:
+     * при перезапуске приложения снова 0 и кнопка «Другой факт» возвращается.
+     */
+    private var anotherFactTapCount: Int = 0
+
+    /**
+     * Замок на время подготовки поп-апа: чтение флага `first_ad_shown` идёт в IO,
+     * поэтому два быстрых события «облака стёрты» не должны поставить два поп-апа.
+     */
+    private val adPopupGuard = AtomicBoolean(false)
+    private var adPopupJob: Job? = null
+    private var adBannerJob: Job? = null
 
     // Первый кадр не ждёт ни DataStore, ни сети: только лёгкое начальное состояние.
     private val _uiState = MutableStateFlow(
@@ -72,10 +93,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var foodJob: Job? = null
     private var cloudTimerJob: Job? = null
     private var savedCitiesJob: Job? = null
-
-    /** День года, для которого сейчас показан детерминированный факт дня. */
-    @Volatile
-    private var aiFactDayOfYear: Int = 0
 
     private val processLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
@@ -157,17 +174,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val prefs = cache.getUiPreferences()
             val restoredTheme = ThemeRestorePolicy.resolve(prefs.themeId, unlocked)
             _uiState.update { state ->
-                // Вуаль показывается один раз за запуск приложения: сохранённый
-                // в DataStore флаг не скрывает её при старте. После стирания в
-                // текущей сессии она больше не появляется, при следующем
-                // запуске — снова.
-                val cloudsCleared = state.isCloudsCleared
+                // Флаги вуали здесь не трогаем: цикл задаёт таймер ниже, а
+                // сохранённый в DataStore флаг «стёрто» не выключает его навсегда.
                 state.copy(
                     availableThemes = unlocked,
                     themeCatalog = ThemeCatalog.build(unlocked),
-                    currentTheme = restoredTheme ?: state.currentTheme,
-                    isCloudsCleared = cloudsCleared,
-                    isCloudLocked = if (cloudsCleared) false else state.isCloudLocked
+                    currentTheme = restoredTheme ?: state.currentTheme
                 )
             }
             startCloudLockTimer()
@@ -198,16 +210,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
             val restaurants = foodRepository.getRestaurants()
             val flightOffers = flightRepository.getFlightOffers()
-            val today = dayOfYear()
-            // D5: сид — гео-город + день, а не восстановленный «последний открытый»
-            // город. Иначе перезапуск в тот же день показывал другой факт.
-            val fact = aiFactsRepository.getFactForDay(
-                FactOfDayPolicy.anchorCityName(initialCities),
-                today
-            )
-            aiFactDayOfYear = today
+            // Факт не привязан к городу и дню года: индекс выбирается заново на
+            // каждый запуск приложения и живёт в состоянии до конца сессии.
+            val factIndex = FactOfDayPolicy.initialIndex(aiFactsRepository.getFactCount())
             val imageUrls = imageRepository.getUrlsByCategory()
-            val adCreative = adRepository.creativeFor(today, adOpenCount)
             // История дропов переживает перезапуск: отдаём её в state и не теряем счётчик.
             val lootboxHistory = lootboxRepository.getHistory()
 
@@ -238,12 +244,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     isLoadingSavedCities = false,
                     foodState = it.foodState.copy(restaurants = restaurants),
                     flightState = it.flightState.copy(offers = flightOffers),
-                    aiFact = fact,
+                    aiFact = aiFactsRepository.getFactAt(factIndex),
+                    aiFactIndex = factIndex,
                     imageUrls = imageUrls,
-                    adCreative = adCreative,
-                    adImageUrl = adCreative.imageCategory?.let { category ->
-                        imageUrls[category]?.firstOrNull()
-                    },
+                    // Креативы поп-апа и баннера живут в default-состоянии (фото1);
+                    // выбор «льва» на первый показ делает requestAdPopup().
                     lootboxState = it.lootboxState.copy(
                         history = lootboxHistory,
                         totalOpened = lootboxHistory.size
@@ -255,21 +260,33 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             fetchWeatherQuietly(targetCity)
         }
 
+        // Баннер главной ротируется между фото1 и фото2 всё время жизни экрана.
+        startAdBannerRotation()
     }
 
-    private fun startCloudLockTimer() {
+    /**
+     * Цикл облачной вуали: первый показ — через [CLOUD_FIRST_SHOW_DELAY_MS] после
+     * запуска, дальше после каждого стирания — снова через случайные
+     * [CLOUD_RETURN_MIN_DELAY_MS]..[CLOUD_RETURN_MAX_DELAY_MS]. Флаг «стёрто» больше
+     * не выключает вуаль навсегда: таймер сбрасывает его и ставит
+     * `isCloudLocked = true`.
+     *
+     * Таймер всегда один: новый запуск отменяет предыдущий, корутина живёт в
+     * viewModelScope и умирает вместе с ViewModel (утечки нет).
+     */
+    private fun startCloudLockTimer(delayMs: Long = CLOUD_FIRST_SHOW_DELAY_MS) {
         cloudTimerJob?.cancel()
         cloudTimerJob = viewModelScope.launch(Dispatchers.IO) {
-            delay(4_000)
+            delay(delayMs)
             _uiState.update { state ->
-                if (!state.isCloudsCleared) {
-                    state.copy(isCloudLocked = true)
-                } else {
-                    state
-                }
+                state.copy(isCloudLocked = true, isCloudsCleared = false)
             }
         }
     }
+
+    /** Задержка возврата вуали после стирания: 20–30 с включительно. */
+    private fun cloudReturnDelayMs(): Long =
+        Random.nextLong(CLOUD_RETURN_MIN_DELAY_MS, CLOUD_RETURN_MAX_DELAY_MS + 1)
 
     /**
      * Instant city switch by index: реальный прогноз из памяти/DataStore,
@@ -405,7 +422,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val wasForeground = _uiState.value.isAppForeground
         _uiState.update { it.copy(isAppForeground = true) }
         if (wasForeground) return
-        refreshAiFactForNewDayIfNeeded()
         val state = _uiState.value
         val needsRetry = state.weather == null ||
             state.weatherState == WeatherDataState.UNAVAILABLE ||
@@ -667,10 +683,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch(Dispatchers.IO) {
             cache.setCloudsCleared(true)
         }
+        // Вуаль возвращается не «один раз за запуск»: после каждого стирания
+        // снова показываем её через случайные 20–30 с.
+        startCloudLockTimer(cloudReturnDelayMs())
     }
 
     /** Явный сброс (например, тестовая кнопка): снова показать вуаль. */
     fun lockClouds() {
+        // Вуаль уже на экране — запланированный возврат больше не нужен.
+        cloudTimerJob?.cancel()
         _uiState.update { it.copy(isCloudLocked = true, isCloudsCleared = false) }
         viewModelScope.launch(Dispatchers.IO) {
             cache.setCloudsCleared(false)
@@ -679,6 +700,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun onCloudsCleared() {
         unlockClouds()
+        // Полноэкранная реклама показывается по событию «облака стёрты»,
+        // а не по ручному вызову из UI: один поп-ап на одно стирание.
+        requestAdPopup()
     }
 
     // ------------------------------------------------------------------------
@@ -814,19 +838,63 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Открытие рекламного листа: креатив переключается по счётчику открытий,
-     * чтобы «всегда одна и та же реклама» не воспроизводилась (item 9).
+     * Полноэкранный рекламный поп-ап (ТЗ п. 4–5).
+     *
+     * Вызывается только по событию «облака стёрты» ([onCloudsCleared]).
+     * Первый показ в жизни пользователя — обязательно ролик `ad_lion`:
+     * флаг `first_ad_shown` в DataStore выставляется сразу после выбора,
+     * поэтому повторно лев «первым» не выйдет даже после force-stop.
+     * Дальше креатив ротируется по пулу детерминированно.
+     *
+     * Замок [adPopupGuard] и проверка `isAdPopupVisible` дают ровно один
+     * поп-ап на одно стирание: два события подряд не наложат два диалога.
      */
-    fun openAdPromo() {
-        adOpenCount += 1
-        val creative = adRepository.creativeFor(dayOfYear(), adOpenCount)
-        _uiState.update { state ->
-            state.copy(
-                adCreative = creative,
-                adImageUrl = creative.imageCategory?.let { category ->
-                    state.imageUrls[category]?.firstOrNull()
+    fun requestAdPopup() {
+        if (_uiState.value.isAdPopupVisible) return
+        if (!adPopupGuard.compareAndSet(false, true)) return
+        adPopupJob?.cancel()
+        adPopupJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val firstShown = cache.isFirstAdShown()
+                val creative = if (firstShown) {
+                    adShowSequence += 1
+                    adRepository.creativeFor(adShowSequence)
+                } else {
+                    cache.setFirstAdShown(true)
+                    adRepository.firstShowCreative()
                 }
-            )
+                _uiState.update { state ->
+                    state.copy(adCreative = creative, isAdPopupVisible = true)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // DataStore недоступен: реклама не должна ронять главный экран.
+            } finally {
+                adPopupGuard.set(false)
+            }
+        }
+    }
+
+    /** Крестик поп-апа: единственный способ закрыть рекламу (автозакрытия нет). */
+    fun dismissAdPopup() {
+        _uiState.update { it.copy(isAdPopupVisible = false) }
+    }
+
+    /**
+     * Баннер главной ротируется между фото1 и фото2 (ТЗ п. 3). Таймер один,
+     * живёт в `viewModelScope`: уход с главной и пересоздание композиции
+     * не плодят таймеры, а повторный запуск стартует с фото1.
+     */
+    private fun startAdBannerRotation() {
+        adBannerJob?.cancel()
+        adBannerJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(AD_BANNER_ROTATION_MS)
+                adBannerSequence += 1
+                val creative = adRepository.bannerCreativeFor(adBannerSequence)
+                _uiState.update { state -> state.copy(adBannerCreative = creative) }
+            }
         }
     }
 
@@ -834,29 +902,35 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // AI Facts
     // ------------------------------------------------------------------------
     /**
-     * Другой факт: единственный способ сменить факт внутри дня. Детерминированный
-     * факт дня (город + день года) возвращается при следующем старте/новом дне.
+     * «Другой факт».
+     *
+     * 1-е нажатие — как раньше, новый текстовый факт. 2-е, 3-е и 4-е нажатие
+     * показывают картинку-совет `advice_1` → `advice_2` → `advice_3` вместо текста;
+     * после 4-го нажатия кнопка «Другой факт» скрывается до перезапуска приложения
+     * ([anotherFactTapCount] живёт в памяти VM, в DataStore не пишется).
      */
     fun refreshAiFact() {
-        aiFactDayOfYear = dayOfYear()
-        viewModelScope.launch(Dispatchers.IO) {
-            val fact = aiFactsRepository.getNextFact(_uiState.value.aiFact)
-            _uiState.update { it.copy(aiFact = fact) }
-        }
-    }
-
-    /**
-     * D5: на новом календарном дне (после возврата из фона) факт пересчитывается
-     * детерминированно от гео-города и нового дня. Смена города факт не меняет.
-     */
-    private fun refreshAiFactForNewDayIfNeeded() {
-        val today = dayOfYear()
-        if (aiFactDayOfYear == 0 || aiFactDayOfYear == today) return
-        aiFactDayOfYear = today
-        val cityName = FactOfDayPolicy.anchorCityName(_uiState.value.cities)
-        viewModelScope.launch(Dispatchers.IO) {
-            val fact = aiFactsRepository.getFactForDay(cityName, today)
-            _uiState.update { it.copy(aiFact = fact) }
+        val tap = anotherFactTapCount + 1
+        anotherFactTapCount = tap
+        _uiState.update { state ->
+            when {
+                tap in 2..4 -> state.copy(
+                    aiFactImageRes = ANOTHER_FACT_IMAGES[tap - 2],
+                    isAnotherFactAvailable = tap < 4
+                )
+                // Кнопка уже скрыта — защита от повторных вызовов через тап по блоку.
+                tap > 4 -> state
+                else -> {
+                    val nextIndex = FactOfDayPolicy.nextIndex(
+                        currentIndex = state.aiFactIndex,
+                        size = aiFactsRepository.getFactCount()
+                    )
+                    state.copy(
+                        aiFactIndex = nextIndex,
+                        aiFact = aiFactsRepository.getFactAt(nextIndex)
+                    )
+                }
+            }
         }
     }
 
@@ -1245,9 +1319,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     // ------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------
-    private fun dayOfYear(): Int =
-        java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
-
     /**
      * Пересчёт цен/времени такси под конкретный маршрут и честные пробки.
      * trafficScore == null — данных нет, наценки нет.
@@ -1270,5 +1341,29 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setCongratsModal(open: Boolean) {
         _uiState.update { it.copy(isCongratsModalOpen = open) }
+    }
+
+    private companion object {
+        /**
+         * Картинки «Другого факта»: i-я картинка показывается на (i + 2)-м нажатии
+         * (2-е → advice_1, 3-е → advice_2, 4-е → advice_3).
+         */
+        val ANOTHER_FACT_IMAGES = intArrayOf(
+            R.drawable.advice_1,
+            R.drawable.advice_2,
+            R.drawable.advice_3
+        )
+
+        /** Первый показ облачной вуали после запуска приложения. */
+        const val CLOUD_FIRST_SHOW_DELAY_MS = 4_000L
+
+        /** Нижняя граница возврата вуали после стирания. */
+        const val CLOUD_RETURN_MIN_DELAY_MS = 20_000L
+
+        /** Верхняя граница возврата вуали после стирания. */
+        const val CLOUD_RETURN_MAX_DELAY_MS = 30_000L
+
+        /** Период ротации баннера главной: фото1 ↔ фото2. */
+        const val AD_BANNER_ROTATION_MS = 8_000L
     }
 }

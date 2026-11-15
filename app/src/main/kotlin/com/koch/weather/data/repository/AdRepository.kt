@@ -4,18 +4,22 @@ import com.koch.weather.data.model.AdCatalog
 import com.koch.weather.data.model.AdCreative
 
 /**
- * Реклама (item 9 фазы 5): 4 креатива и детерминированная ротация.
+ * Реклама (ТЗ «реклама»): пул из шести медиа-креативов и детерминированная ротация.
  *
- * Один и тот же креатив не должен висеть всегда: номер зависит от дня года и
- * числа открытий рекламного листа — `creatives[(dayOfYear + openCount) % size]`.
- * Без Random: после перезапуска в тот же день показывается тот же креатив.
+ * Баннер главного экрана ротируется только между фото1/фото2 ([bannerCreativeFor]),
+ * полноэкранный поп-ап — по всему пулу ([creativeFor]). Первый в жизни показ
+ * закреплён за «львом» ([firstShowCreative]) и запоминается в DataStore
+ * (`first_ad_shown`), поэтому решается на уровне ViewModel.
  */
 class AdRepository {
 
     fun getCreatives(): List<AdCreative> = AdCatalog.creatives
 
-    fun creativeFor(dayOfYear: Int, openCount: Int = 0): AdCreative =
-        AdCatalog.creativeFor(dayOfYear, openCount)
-
     fun count(): Int = AdCatalog.creatives.size
+
+    fun firstShowCreative(): AdCreative = AdCatalog.firstShowCreative()
+
+    fun creativeFor(sequence: Int): AdCreative = AdCatalog.creativeFor(sequence)
+
+    fun bannerCreativeFor(sequence: Int): AdCreative = AdCatalog.bannerCreativeFor(sequence)
 }

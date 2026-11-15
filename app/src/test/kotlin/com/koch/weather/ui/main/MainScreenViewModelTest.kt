@@ -292,7 +292,9 @@ class MainScreenViewModelTest {
         val state = MainScreenUiState()
         assertNotNull(state.adCreative)
         assertEquals(AdCatalog.creatives.first(), state.adCreative)
-        assertNull(state.adImageUrl)
+        // Баннер стартует с фото1 и не открывает поп-ап сам по себе (ТЗ п. 3/5).
+        assertEquals(AdCatalog.bannerCreatives.first(), state.adBannerCreative)
+        assertFalse(state.isAdPopupVisible)
         assertFalse(state.isSelectedCityCurrentLocation)
         assertTrue(state.lootboxState.history.isEmpty())
         assertEquals(0, state.lootboxState.lastRewardSeq)

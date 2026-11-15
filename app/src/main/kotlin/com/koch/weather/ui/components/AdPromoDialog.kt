@@ -1,212 +1,448 @@
 package com.koch.weather.ui.components
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.widget.VideoView
+import androidx.activity.compose.BackHandler
+import androidx.annotation.AnyRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.LaptopMac
-import androidx.compose.material.icons.filled.LocalMall
-import androidx.compose.material.icons.filled.PhoneIphone
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.koch.weather.data.model.AdAction
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.koch.weather.data.model.AdCatalog
 import com.koch.weather.data.model.AdCreative
-import com.koch.weather.data.model.ImageCategory
-import com.koch.weather.data.model.PremiumOffer
-import com.koch.weather.ui.design.KochCloseButton
-import com.koch.weather.ui.design.KochPrimaryButton
-import com.koch.weather.ui.design.KochSheet
-import com.koch.weather.ui.design.KochTextButton
-import com.koch.weather.ui.theme.KochRadius
-import com.koch.weather.ui.theme.KochSize
+import com.koch.weather.data.model.AdMediaType
+import com.koch.weather.ui.theme.AdBuyRed
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
-import com.koch.weather.ui.theme.LocalKochColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
+/** Фото: крестик доступен через 3 секунды после открытия поп-апа (ТЗ п. 4). */
+private const val CLOSE_DELAY_PHOTO_MS = 3_000L
+
+/** Видео: крестик доступен через 5 секунд (ТЗ п. 4). */
+private const val CLOSE_DELAY_VIDEO_MS = 5_000L
+
+/** Подпись «КУПИТЬ СЕЙЧАС!» не появляется раньше 300 мс после медиа (ТЗ п. 2). */
+private const val BUY_LABEL_DELAY_MS = 300L
+
+/** Запасной аспект, пока реальные размеры медиа не прочитаны (3:4 — как у «льва»). */
+private const val DEFAULT_MEDIA_ASPECT = 3f / 4f
+
+/** Размер крестика: 44 dp — комфортная цель для пальца. */
+private val CloseButtonSize = 44.dp
 
 /**
- * Рекламный лист (item 9 фазы 5). Рисует реальный креатив из `uiState.adCreative`:
- * бренд, заголовок, текст и CTA-кнопку с её собственным действием
- * ([AdAction.PAYWALL]/[AdAction.LOOTBOX]/[AdAction.UMBRELLA_SHOP]/[AdAction.FOOD]).
+ * Полноэкранный рекламный поп-ап (ТЗ «реклама», п. 4).
  *
- * Под CTA — обязательная строка `disclaimerRu` («Реклама. …») и вторичная ссылка
- * на премиум с ценой, периодом и объяснением, что входит: «Отключить рекламу —
- * Премиум 179 ₽/год» + «Без рекламы и все темы оформления сразу». Кнопки «Подписка
- * Премиум» без пояснения больше нет.
+ * Показывает креатив из пула [AdCatalog] без надписей и текста: медиа по центру,
+ * без обрезки (`ContentScale.Fit`). Единственные элементы интерфейса —
+ * подпись «КУПИТЬ СЕЙЧАС!» у трёх фото ([AdCreative.hasBuyLabel]) и крестик,
+ * который появляется через 3 с для фото и через 5 с для видео.
+ *
+ * Автозакрытия нет: диалог живёт, пока пользователь не нажмёт крестик.
+ * Видео-ролик проигрывается целиком через `VideoView`/`MediaPlayer`: без контролов,
+ * без паузы и перемотки, со звуком; по окончании остаётся последний кадр.
  */
 @Composable
 fun AdPromoDialog(
     creative: AdCreative,
-    imageUrl: String?,
-    onAction: (AdAction) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val colors = LocalKochColors.current
-    // Цена/период берутся из единого источника (PremiumOffer), а не хардкодятся в UI.
-    val offer = remember { PremiumOffer() }
-
-    KochSheet(
-        onDismiss = onDismiss,
-        maxHeightFraction = 0.88f,
-        hero = {
-            Box(
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            // Никакого автозакрытия: ни «назад», ни тап мимо не закрывают рекламу.
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            // Фон тянем под системные бары: чёрный поп-ап без светлых полос сверху/снизу.
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // Системный «назад» не закрывает рекламу и не роняет активити:
+            // единственный выход — крестик (ТЗ п. 4: никакого автозакрытия).
+            BackHandler(enabled = true) { }
+            AdMediaFrame(
+                creative = creative,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(KochSize.hero)
-            ) {
-                if (imageUrl != null) {
-                    RemotePhoto(
-                        url = imageUrl,
-                        contentDescription = "Реклама: ${creative.brandRu}",
-                        modifier = Modifier.fillMaxSize(),
-                        shape = RectangleShape,
-                        placeholderIcon = adIconFor(creative.imageCategory),
-                        placeholderTint = colors.textSecondary
-                    )
+                    .fillMaxSize()
+                    .padding(horizontal = KochSpace.xl, vertical = KochSpace.x3l)
+            )
+            AdCloseButton(
+                creativeId = creative.id,
+                // Фото — 3 с, видео — 5 с; раньше крестика нет.
+                visibleAfterMs = if (creative.type == AdMediaType.VIDEO) {
+                    CLOSE_DELAY_VIDEO_MS
                 } else {
-                    // Креатив без фото (зонты): честная плашка с иконкой, а не серый бокс.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(colors.accentAdTop, colors.accentAdBottom)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = adIconFor(creative.imageCategory),
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.85f),
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // M7: зелёный градиент бренда поверх фото давал креативу зелёный
-                        // каст (кадр r14_08). Теперь нейтральный чёрный скрим 40 % —
-                        // фото показывает свой цвет, текст и метка «РЕКЛАМА» читаются.
-                        .background(Color.Black.copy(alpha = 0.40f))
+                    CLOSE_DELAY_PHOTO_MS
+                },
+                onDismiss = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(KochSpace.l)
+            )
+        }
+    }
+}
+
+/**
+ * Медиа поп-апа: укладывается в экран по `Fit` (никакой обрезки), по центру.
+ * Под медиа — подпись «КУПИТЬ СЕЙЧАС!» у трёх фото; у видео и «сына» надписей нет.
+ */
+@Composable
+private fun AdMediaFrame(creative: AdCreative, modifier: Modifier = Modifier) {
+    val aspect = rememberMediaAspect(creative)
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // weight(fill = false) отдаёт медиа всю высоту за вычетом подписи,
+        // поэтому «Fit» считается от реального свободного места, а не от экрана.
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+            contentAlignment = Alignment.Center
+        ) {
+            val fitted = fitInside(maxWidth, maxHeight, aspect)
+            when (creative.type) {
+                AdMediaType.PHOTO -> Image(
+                    painter = painterResource(id = creative.mediaRes),
+                    contentDescription = "Реклама",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(fitted.width, fitted.height)
                 )
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(KochSpace.l)
-                        .background(
-                            colors.accentAdLabel.copy(alpha = 0.92f),
-                            RoundedCornerShape(KochRadius.badge)
-                        )
-                        .padding(horizontal = KochSpace.s, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "РЕКЛАМА",
-                        style = KochType.microCaps,
-                        color = Color(0xFF1E3A12)
-                    )
-                }
-                KochCloseButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(KochSpace.s)
+
+                AdMediaType.VIDEO -> AdVideoPlayer(
+                    videoRes = creative.mediaRes,
+                    modifier = Modifier.size(fitted.width, fitted.height)
                 )
             }
-        },
-        content = {
-            Text(
-                text = creative.brandRu,
-                style = KochType.microCaps,
-                color = colors.accentPromo,
-                modifier = Modifier.padding(top = KochSpace.l)
-            )
-            Text(
-                text = creative.headline,
-                style = KochType.titleCard,
-                color = colors.textPrimary
-            )
-            Text(
-                text = creative.body,
-                style = KochType.body,
-                color = colors.textSecondary,
-                modifier = Modifier.padding(top = KochSpace.xs)
-            )
+        }
+        if (creative.hasBuyLabel) {
             Spacer(Modifier.height(KochSpace.m))
-            HorizontalDivider(color = colors.textPrimary.copy(alpha = 0.08f), thickness = 0.5.dp)
-            Text(
-                text = creative.disclaimerRu,
-                style = KochType.sub,
-                color = colors.textTertiary,
-                modifier = Modifier.padding(top = KochSpace.s)
-            )
-        },
-        footer = {
-            Column {
-                KochPrimaryButton(
-                    text = creative.ctaLabel,
-                    onClick = { onAction(creative.action) }
-                )
-                Spacer(Modifier.height(KochSpace.s))
-                KochTextButton(
-                    text = "Отключить рекламу — Премиум ${offer.priceLabel}/${offer.periodRu}",
-                    color = colors.accentPromo,
-                    onClick = { onAction(AdAction.PAYWALL) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Без рекламы и все темы оформления сразу",
-                    style = KochType.sub,
-                    color = colors.textTertiary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(KochSpace.xs))
-                KochTextButton(
-                    text = "Закрыть",
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            BuyNowLabel(creativeId = creative.id)
+        }
+    }
+}
+
+/** Размер «Fit»-рамки для медиа с известным аспектом внутри [maxWidth] × [maxHeight]. */
+private data class FittedSize(val width: Dp, val height: Dp)
+
+private fun fitInside(maxWidth: Dp, maxHeight: Dp, aspect: Float): FittedSize {
+    if (!aspect.isFinite() || aspect <= 0f) return FittedSize(maxWidth, maxHeight)
+    val heightFromWidth = maxWidth / aspect
+    return if (heightFromWidth <= maxHeight) {
+        FittedSize(maxWidth, heightFromWidth)
+    } else {
+        FittedSize(maxHeight * aspect, maxHeight)
+    }
+}
+
+/**
+ * Реальный аспект медиа (ширина / высота). Читается в IO: заголовок JPEG и
+ * метаданные MP4 — без декодирования полного кадра. До ответа — [DEFAULT_MEDIA_ASPECT];
+ * при ошибке остаётся он же, поэтому поп-ап не «прыгает» и не ломается.
+ */
+@Composable
+private fun rememberMediaAspect(creative: AdCreative): Float {
+    val context = LocalContext.current
+    val aspect by produceState(
+        initialValue = DEFAULT_MEDIA_ASPECT,
+        key1 = creative.id
+    ) {
+        value = withContext(Dispatchers.IO) {
+            when (creative.type) {
+                AdMediaType.PHOTO -> readPhotoAspect(context, creative.mediaRes)
+                AdMediaType.VIDEO -> readVideoAspect(context, creative.mediaRes)
+            } ?: DEFAULT_MEDIA_ASPECT
+        }
+    }
+    return aspect
+}
+
+private fun readPhotoAspect(context: Context, @AnyRes resId: Int): Float? {
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeResource(context.resources, resId, options)
+    return if (options.outWidth > 0 && options.outHeight > 0) {
+        options.outWidth.toFloat() / options.outHeight
+    } else {
+        null
+    }
+}
+
+private fun readVideoAspect(context: Context, @AnyRes resId: Int): Float? {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, resourceUri(context, resId))
+        val width = retriever.extractMetadata(
+            MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+        )?.toFloatOrNull()
+        val height = retriever.extractMetadata(
+            MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+        )?.toFloatOrNull()
+        if (width != null && height != null && width > 0f && height > 0f) width / height else null
+    } catch (_: Exception) {
+        null
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+private fun resourceUri(context: Context, @AnyRes resId: Int): Uri =
+    Uri.parse("android.resource://${context.packageName}/$resId")
+
+/**
+ * Ролик рекламы: `VideoView` без контролов и жестов.
+ *
+ * Жизненный цикл: при уходе приложения в фон — пауза, при возврате — продолжение
+ * с того же места (звук не глушим); плеер освобождается в `DisposableEffect`
+ * при закрытии поп-апа. По окончании ролик не перезапускается и не очищается —
+ * на экране остаётся последний кадр, крестик к этому моменту уже доступен.
+ */
+@Composable
+private fun AdVideoPlayer(@AnyRes videoRes: Int, modifier: Modifier = Modifier) {
+    val player = remember(videoRes) { AdVideoSession(videoRes) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    AndroidView(
+        factory = { context -> player.obtainView(context) },
+        modifier = modifier,
+        onRelease = { player.release() }
+    )
+
+    DisposableEffect(lifecycleOwner, player) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> player.pause()
+                Lifecycle.Event.ON_START -> player.resume()
+                else -> Unit
             }
+        }
+        // Локальный lifecycle ловит уход в фон, если диалог получает собственный
+        // lifecycle-owner; ProcessLifecycleOwner — гарантированный дубль на Home/звонок.
+        lifecycleOwner.lifecycle.addObserver(observer)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+            player.release()
+        }
+    }
+}
+
+/**
+ * Сессия проигрывания одного ролика. Отдельный класс, чтобы `VideoView` переживал
+ * рекомпозиции и создавался/освобождался ровно один раз на поп-ап.
+ */
+private class AdVideoSession(@param:AnyRes private val videoRes: Int) {
+
+    private var videoView: VideoView? = null
+    private var isCompleted = false
+    private var isReleased = false
+
+    fun obtainView(context: Context): VideoView {
+        videoView?.let { existing ->
+            if (!isReleased) return existing
+        }
+        val view = VideoView(context).apply {
+            // Никаких контролов: панель не ставим, пауза/перемотка жестами не нужны.
+            setMediaController(null)
+            setOnTouchListener { _, _ -> true }
+            setOnPreparedListener { mediaPlayer ->
+                mediaPlayer.isLooping = false
+                // Звук не глушим: ролик звучит как в оригинале.
+                mediaPlayer.setVolume(1f, 1f)
+                mediaPlayer.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                        .build()
+                )
+                start()
+            }
+            setOnCompletionListener {
+                // Последний кадр остаётся на экране: поверхность не очищаем.
+                isCompleted = true
+            }
+            setOnErrorListener { _, _, _ -> true }
+            setVideoURI(resourceUri(context, videoRes))
+        }
+        videoView = view
+        isCompleted = false
+        isReleased = false
+        return view
+    }
+
+    /** Пауза при уходе в фон: ролик не должен звучать из кармана. */
+    fun pause() {
+        val view = videoView ?: return
+        if (!isCompleted && view.isPlaying) view.pause()
+    }
+
+    /** Возврат из фона: продолжаем с того же места, но не перезапускаем законченный ролик. */
+    fun resume() {
+        val view = videoView ?: return
+        if (!isCompleted && !view.isPlaying) view.start()
+    }
+
+    /** Освобождение плеера (закрытие поп-апа/выход из композиции). Идемпотентно. */
+    fun release() {
+        if (isReleased) return
+        isReleased = true
+        videoView?.let { view ->
+            view.setOnPreparedListener(null)
+            view.setOnCompletionListener(null)
+            view.setOnErrorListener(null)
+            view.stopPlayback()
+        }
+        videoView = null
+    }
+}
+
+/**
+ * Красная подпись «КУПИТЬ СЕЙЧАС!» (ТЗ п. 2): жирная, подчёркнутая, снизу от медиа.
+ * Появляется не раньше 300 мс после медиа и слегка пружинисто впрыгивает
+ * в кадр — `spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)`
+ * по `translationY` и `alpha`.
+ */
+@Composable
+private fun BuyNowLabel(creativeId: String) {
+    var isShown by remember(creativeId) { mutableStateOf(false) }
+    LaunchedEffect(creativeId) {
+        delay(BUY_LABEL_DELAY_MS)
+        isShown = true
+    }
+    val translationY by animateDpAsState(
+        targetValue = if (isShown) 0.dp else 28.dp,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "buy_label_translation"
+    )
+    val labelAlpha by animateFloatAsState(
+        targetValue = if (isShown) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.55f,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "buy_label_alpha"
+    )
+    Text(
+        text = AdCatalog.BUY_LABEL_RU,
+        style = KochType.titleSheet,
+        color = AdBuyRed,
+        textDecoration = TextDecoration.Underline,
+        modifier = Modifier.graphicsLayer {
+            this.translationY = translationY.toPx()
+            // Пружина по alpha даёт перелёт > 1 — альфа обязана остаться в [0, 1].
+            this.alpha = labelAlpha.coerceIn(0f, 1f)
         }
     )
 }
 
-/** Иконка креатива по категории фото: без фото карточка не выглядит пустой. */
-internal fun adIconFor(category: ImageCategory?): ImageVector = when (category) {
-    ImageCategory.AD_LAPTOP -> Icons.Default.LaptopMac
-    ImageCategory.IPHONE, ImageCategory.IPHONE_FRONT -> Icons.Default.PhoneIphone
-    ImageCategory.FOOD,
-    ImageCategory.FOOD_FRIES,
-    ImageCategory.FOOD_NUGGETS,
-    ImageCategory.FOOD_PIROSHKI,
-    ImageCategory.FOOD_HOTDOG,
-    ImageCategory.FOOD_COFFEE -> Icons.Default.Fastfood
-    ImageCategory.TRAVEL_DUBAI -> Icons.Default.LocalMall
-    ImageCategory.SKY_BLUE,
-    ImageCategory.SKY_SUNSET,
-    ImageCategory.SKY_NORTHERN -> Icons.Default.CardGiftcard
-    null -> Icons.Default.LocalMall
+/**
+ * Крестик поп-апа в правом верхнем углу. Появляется через [visibleAfterMs]
+ * (3 с фото / 5 с видео), после чего остаётся до конца показа.
+ */
+@Composable
+private fun AdCloseButton(
+    creativeId: String,
+    visibleAfterMs: Long,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isVisible by remember(creativeId) { mutableStateOf(false) }
+    LaunchedEffect(creativeId) {
+        delay(visibleAfterMs)
+        isVisible = true
+    }
+    AnimatedVisibility(
+        visible = isVisible,
+        modifier = modifier,
+        enter = fadeIn(animationSpec = tween(durationMillis = 220)) +
+            scaleIn(animationSpec = tween(durationMillis = 220), initialScale = 0.8f)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(CloseButtonSize)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.55f))
+                .border(0.8.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                .clickable(role = Role.Button, onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Закрыть рекламу",
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
 }
