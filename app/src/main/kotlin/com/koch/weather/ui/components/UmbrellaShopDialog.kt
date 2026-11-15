@@ -196,15 +196,7 @@ fun UmbrellaShopDialog(
     )
 }
 
-/**
- * Размер кадра ролика известен заранее (`res/raw/umbrella_face.mp4` — 640×500),
- * поэтому fit-матрица `TextureView` выставляется до первого кадра: декод не
- * успевает показать растянутый кадр до `onVideoSizeChanged`.
- */
-private const val UMBRELLA_VIDEO_WIDTH = 640
-private const val UMBRELLA_VIDEO_HEIGHT = 500
-
-/** Пропорции ролика: исходник 640×500 = 1.28 : 1, бокс без чёрных полей. */
+/** Пропорции ролика: исходник 1280×1000 = 1.28 : 1, бокс без чёрных полей. */
 private const val UMBRELLA_VIDEO_ASPECT = 1.28f
 
 /**
@@ -218,7 +210,7 @@ private const val UMBRELLA_VIDEO_ASPECT = 1.28f
  * `TextureView`, а не `VideoView`: `SurfaceView` внутри `VideoView` рисуется отдельным
  * слоем поверх окна и не обрезается скруглением Compose — углы ролика остались бы
  * прямыми. `TextureView` — обычный View, поэтому `clip(RoundedCornerShape)` работает.
- * Бокс повторяет пропорции исходника (640×500, 1.28 : 1), поэтому кадр заполняет его
+ * Бокс повторяет пропорции исходника (1280×1000, 1.28 : 1), поэтому кадр заполняет его
  * целиком без чёрных полей и без обрезки (`Fit`).
  */
 @Composable
@@ -259,10 +251,8 @@ private class UmbrellaVideoController(private val context: Context) {
 
     private var player: MediaPlayer? = null
     private var surface: Surface? = null
-
-    /** Размер кадра известен заранее: матрица `Fit` готова до первого кадра. */
-    private var videoWidth = UMBRELLA_VIDEO_WIDTH
-    private var videoHeight = UMBRELLA_VIDEO_HEIGHT
+    private var videoWidth = 0
+    private var videoHeight = 0
     private var isPrepared = false
     private var isForeground = true
     private var isReleased = false
@@ -343,9 +333,6 @@ private class UmbrellaVideoController(private val context: Context) {
                 true
             }
             mp.prepareAsync()
-            // Матрицу `Fit` ставим сразу, не дожидаясь onVideoSizeChanged:
-            // размер кадра известен заранее, растянутого первого кадра нет.
-            fitToView()
         }.onFailure { stop() }
     }
 
@@ -402,8 +389,7 @@ private class UmbrellaVideoController(private val context: Context) {
         player = null
         surface?.let { runCatching { it.release() } }
         surface = null
-        // Размер кадра — константа файла, он не «сбрасывается» вместе с плеером.
-        videoWidth = UMBRELLA_VIDEO_WIDTH
-        videoHeight = UMBRELLA_VIDEO_HEIGHT
+        videoWidth = 0
+        videoHeight = 0
     }
 }

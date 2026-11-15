@@ -112,10 +112,6 @@ dependencies {
   implementation(libs.osmdroid.android)
   implementation(libs.coil.compose)
 
-  // Video ads: AndroidX Media3 ExoPlayer (preload + non-blocking release).
-  implementation(libs.androidx.media3.exoplayer)
-  implementation(libs.androidx.media3.ui)
-
   // Local tests
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
