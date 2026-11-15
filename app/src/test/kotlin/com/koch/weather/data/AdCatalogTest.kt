@@ -5,8 +5,10 @@ import com.koch.weather.data.model.AdMediaType
 import com.koch.weather.data.model.EmojiTextGuard
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.repository.AdRepository
+import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -92,5 +94,40 @@ class AdCatalogTest {
         assertEquals(AdCatalog.creatives.first(), state.adCreative)
         assertEquals(AdCatalog.bannerCreatives.first(), state.adBannerCreative)
         assertFalse(state.isAdPopupVisible)
+    }
+
+    @Test
+    fun popupCreative_isHalfVideoHalfPhoto() {
+        // Детерминированный Random с фиксированным seed: доля видео около 50 %.
+        val random = Random(2026)
+        val draws = (1..400).map { repository.popupCreative(lastShownId = null, random = random) }
+        val videos = draws.count { it.type == AdMediaType.VIDEO }
+        assertEquals(400, draws.size)
+        assertTrue("видео $videos из 400 — ожидали около половины", videos in 140..260)
+        // Каждый креатив выпал хотя бы раз: пул не «залипает» на паре значений.
+        assertEquals(6, draws.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun popupCreative_neverRepeatsPreviousCreative() {
+        val random = Random(7)
+        var previous = repository.popupCreative(random = random)
+        repeat(200) {
+            val next = repository.popupCreative(lastShownId = previous.id, random = random)
+            assertNotEquals(previous.id, next.id)
+            assertNotNull(AdCatalog.byId(next.id))
+            previous = next
+        }
+    }
+
+    @Test
+    fun popupCreative_neverReturnsLastShownId() {
+        // Любой последний креатив исключается из выбора при любом seed.
+        AdCatalog.creatives.forEach { last ->
+            repeat(200) { seed ->
+                val next = AdCatalog.popupCreative(lastShownId = last.id, random = Random(seed))
+                assertNotEquals("после ${last.id} выпал он же", last.id, next.id)
+            }
+        }
     }
 }

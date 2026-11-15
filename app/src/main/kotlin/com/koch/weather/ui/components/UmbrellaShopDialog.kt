@@ -3,6 +3,7 @@ package com.koch.weather.ui.components
 import android.content.Context
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.view.Surface
 import android.view.TextureView
@@ -78,7 +79,7 @@ fun UmbrellaShopDialog(
         content = {
             // Ролик открывается заново при каждом показе листа: композиция листа
             // создаётся с нуля, а MediaPlayer освобождается в DisposableEffect.
-            // Ширина листа, пропорции исходника (1280×1000), скругление, без звука.
+            // Ширина листа, пропорции исходника (1280×1000), скругление.
             UmbrellaShopVideo(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -201,7 +202,7 @@ private const val UMBRELLA_VIDEO_ASPECT = 1.28f
 /**
  * Ролик магазина зонтов (`res/raw/umbrella_face.mp4`).
  *
- * Играет сразу при открытии листа, зациклен, без звука, контролов, паузы и перемотки.
+ * Играет сразу при открытии листа, зациклен, со звуком, без контролов, паузы и перемотки.
  * На уход приложения в фон — `pause()`, на возврат — `start()`. `DisposableEffect`
  * освобождает `MediaPlayer`/`Surface` при закрытии листа, поэтому повторное открытие
  * каждый раз создаёт новый плеер и ролик начинается сначала.
@@ -316,8 +317,14 @@ private class UmbrellaVideoController(private val context: Context) {
             mp.setOnPreparedListener { prepared ->
                 if (isReleased || player !== prepared) return@setOnPreparedListener
                 isPrepared = true
-                // Без звука: ролик декоративный и не должен перебивать приложение.
-                prepared.setVolume(0f, 0f)
+                // Звук ролика: полная громкость, медиа-поток как у фильма.
+                prepared.setVolume(1f, 1f)
+                prepared.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                        .build()
+                )
                 if (isForeground) prepared.start()
             }
             mp.setOnErrorListener { _, _, _ ->

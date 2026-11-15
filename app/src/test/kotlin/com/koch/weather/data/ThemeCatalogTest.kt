@@ -19,13 +19,27 @@ class ThemeCatalogTest {
         assertEquals(ThemeCatalog.DEFAULT_UNLOCKED, unlocked)
         assertEquals(4, unlocked.size)
 
-        val forest = catalog.first { it.theme == AppThemeMode.FOREST }
-        assertTrue(forest.isUnlocked)
-        assertFalse(forest.isLootboxExclusive)
+        val aurora = catalog.first { it.theme == AppThemeMode.AURORA_BOREALIS }
+        assertTrue(aurora.isUnlocked)
+        assertFalse(aurora.isLootboxExclusive)
 
         val cyberpunk = catalog.first { it.theme == AppThemeMode.CYBERPUNK }
         assertFalse(cyberpunk.isUnlocked)
         assertTrue(cyberpunk.isLootboxExclusive)
+    }
+
+    @Test
+    fun forestTheme_isRemovedEntirely() {
+        assertTrue(AppThemeMode.values().none { it.name == "FOREST" })
+        assertEquals(
+            setOf(
+                AppThemeMode.BLUE_SKY,
+                AppThemeMode.COPPER_SUNSET,
+                AppThemeMode.MARS,
+                AppThemeMode.AURORA_BOREALIS
+            ),
+            ThemeCatalog.DEFAULT_UNLOCKED
+        )
     }
 
     @Test

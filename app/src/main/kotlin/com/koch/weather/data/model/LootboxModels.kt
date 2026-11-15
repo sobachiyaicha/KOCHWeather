@@ -56,8 +56,8 @@ data class LootboxState(
     val unlockedThemes: Set<AppThemeMode> = setOf(
         AppThemeMode.BLUE_SKY,
         AppThemeMode.COPPER_SUNSET,
-        AppThemeMode.FOREST,
-        AppThemeMode.MARS
+        AppThemeMode.MARS,
+        AppThemeMode.AURORA_BOREALIS
     )
 ) {
     /** Применяет выпавшую награду: история до 20, счётчик открытий и seq растут. */

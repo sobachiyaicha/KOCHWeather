@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,9 +97,12 @@ private val CloseButtonSize = 44.dp
  * подпись «КУПИТЬ СЕЙЧАС!» у трёх фото ([AdCreative.hasBuyLabel]) и крестик,
  * который появляется через 3 с для фото и через 5 с для видео.
  *
- * Автозакрытия нет: диалог живёт, пока пользователь не нажмёт крестик.
+ * Автозакрытие — только для видео: когда ролик доиграл до конца, поп-ап
+ * закрывается тем же колбэком, что и крестик ([onDismiss]). Если ролик короче
+ * задержки крестика, диалог закрывается раньше, и крестик уже не нужен.
+ * Фото не закрывается само: пользователь жмёт крестик.
  * Видео-ролик проигрывается целиком через `VideoView`/`MediaPlayer`: без контролов,
- * без паузы и перемотки, со звуком; по окончании остаётся последний кадр.
+ * без паузы и перемотки, со звуком.
  */
 @Composable
 fun AdPromoDialog(
@@ -109,7 +113,8 @@ fun AdPromoDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            // Никакого автозакрытия: ни «назад», ни тап мимо не закрывают рекламу.
+            // Закрыть рекламу можно только крестиком (или концом видео-ролика):
+            // системный «назад» и тап мимо диалог не закрывают.
             dismissOnBackPress = false,
             dismissOnClickOutside = false,
             // Фон тянем под системные бары: чёрный поп-ап без светлых полос сверху/снизу.
@@ -122,10 +127,12 @@ fun AdPromoDialog(
                 .background(Color.Black)
         ) {
             // Системный «назад» не закрывает рекламу и не роняет активити:
-            // единственный выход — крестик (ТЗ п. 4: никакого автозакрытия).
+            // выход — крестик или автозакрытие после конца видео.
             BackHandler(enabled = true) { }
             AdMediaFrame(
                 creative = creative,
+                // Видео доиграло — закрываем поп-ап тем же колбэком, что и крестик.
+                onVideoEnded = onDismiss,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = KochSpace.xl, vertical = KochSpace.x3l)
@@ -151,9 +158,14 @@ fun AdPromoDialog(
 /**
  * Медиа поп-апа: укладывается в экран по `Fit` (никакой обрезки), по центру.
  * Под медиа — подпись «КУПИТЬ СЕЙЧАС!» у трёх фото; у видео и «сына» надписей нет.
+ * [onVideoEnded] вызывается, когда ролик доиграл до конца (фото его не зовёт).
  */
 @Composable
-private fun AdMediaFrame(creative: AdCreative, modifier: Modifier = Modifier) {
+private fun AdMediaFrame(
+    creative: AdCreative,
+    onVideoEnded: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val aspect = rememberMediaAspect(creative)
     Column(
         modifier = modifier,
@@ -179,6 +191,7 @@ private fun AdMediaFrame(creative: AdCreative, modifier: Modifier = Modifier) {
 
                 AdMediaType.VIDEO -> AdVideoPlayer(
                     videoRes = creative.mediaRes,
+                    onEnded = onVideoEnded,
                     modifier = Modifier.size(fitted.width, fitted.height)
                 )
             }
@@ -261,12 +274,21 @@ private fun resourceUri(context: Context, @AnyRes resId: Int): Uri =
  *
  * Жизненный цикл: при уходе приложения в фон — пауза, при возврате — продолжение
  * с того же места (звук не глушим); плеер освобождается в `DisposableEffect`
- * при закрытии поп-апа. По окончании ролик не перезапускается и не очищается —
- * на экране остаётся последний кадр, крестик к этому моменту уже доступен.
+ * при закрытии поп-апа. Когда ролик доиграл до конца, вызывается [onEnded] —
+ * поп-ап закрывается сам; повторного запуска нет.
  */
 @Composable
-private fun AdVideoPlayer(@AnyRes videoRes: Int, modifier: Modifier = Modifier) {
-    val player = remember(videoRes) { AdVideoSession(videoRes) }
+private fun AdVideoPlayer(
+    @AnyRes videoRes: Int,
+    onEnded: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Сессия создаётся один раз на ролик, а колбэк всегда читается актуальный:
+    // смена лямбды между рекомпозициями не пересоздаёт плеер.
+    val currentOnEnded = rememberUpdatedState(onEnded)
+    val player = remember(videoRes) {
+        AdVideoSession(videoRes) { currentOnEnded.value() }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     AndroidView(
@@ -298,8 +320,14 @@ private fun AdVideoPlayer(@AnyRes videoRes: Int, modifier: Modifier = Modifier) 
 /**
  * Сессия проигрывания одного ролика. Отдельный класс, чтобы `VideoView` переживал
  * рекомпозиции и создавался/освобождался ровно один раз на поп-ап.
+ *
+ * [onEnded] зовётся один раз, когда ролик доиграл до конца: поп-ап закрывается.
+ * После [release] колбэк не срабатывает — слушатели снимаются.
  */
-private class AdVideoSession(@param:AnyRes private val videoRes: Int) {
+private class AdVideoSession(
+    @param:AnyRes private val videoRes: Int,
+    private val onEnded: () -> Unit
+) {
 
     private var videoView: VideoView? = null
     private var isCompleted = false
@@ -326,8 +354,10 @@ private class AdVideoSession(@param:AnyRes private val videoRes: Int) {
                 start()
             }
             setOnCompletionListener {
-                // Последний кадр остаётся на экране: поверхность не очищаем.
+                if (isReleased) return@setOnCompletionListener
+                // Ролик доиграл: поп-ап закрывается сам (для фото автозакрытия нет).
                 isCompleted = true
+                onEnded()
             }
             setOnErrorListener { _, _, _ -> true }
             setVideoURI(resourceUri(context, videoRes))

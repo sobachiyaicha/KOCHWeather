@@ -3,6 +3,7 @@ package com.koch.weather.data.model
 import androidx.annotation.AnyRes
 import androidx.compose.runtime.Immutable
 import com.koch.weather.R
+import kotlin.random.Random
 
 /** Тип медиа в рекламном креативе: фото рисуем через `Image`, ролик — через `VideoView`. */
 enum class AdMediaType {
@@ -37,13 +38,21 @@ data class AdCreative(
  * - фото: `ad_photo1`, `ad_photo2`, `ad_slippers` (с подписью), `ad_son` (без подписи);
  * - видео: `ad_lion` (первый показ в жизни пользователя), `ad_slippers_video`.
  *
- * Ротация детерминированная: один и тот же вход даёт один и тот же креатив,
- * никакого `Random` — результат воспроизводим между запусками.
+ * Выбор креатива поп-апа случайный, но воспроизводимый в тестах: тип медиа
+ * (видео/фото) решает `Random`, который передаётся параметром ([popupCreative]).
+ * Один и тот же креатив не показывается два раза подряд — последний id
+ * исключается из выбора.
  */
 object AdCatalog {
 
     /** Красная подпись под тремя фото (ТЗ п. 2). */
     const val BUY_LABEL_RU = "КУПИТЬ СЕЙЧАС!"
+
+    /** Шанс видео-креатива в поп-апе: 50 % видео / 50 % фото. */
+    const val POPUP_VIDEO_CHANCE_PERCENT = 50
+
+    /** Верхняя граница для стохастических бросков в процентах. */
+    private const val PERCENT_MAX = 100
 
     /** Крупная белая надпись на зелёной плашке баннера (ТЗ п. 3). */
     const val BANNER_DISCOUNT_RU = "СКИДКА 50%"
@@ -103,8 +112,40 @@ object AdCatalog {
     /** Баннер главного экрана — только фото1/фото2 (ТЗ п. 3). */
     val bannerCreatives: List<AdCreative> = listOf(photo1, photo2)
 
+    /** Видео-креативы поп-апа: `ad_lion`, `ad_slippers_video`. */
+    val popupVideoCreatives: List<AdCreative> =
+        creatives.filter { it.type == AdMediaType.VIDEO }
+
+    /** Фото-креативы поп-апа: фото1, фото2, тапки, сын. */
+    val popupPhotoCreatives: List<AdCreative> =
+        creatives.filter { it.type == AdMediaType.PHOTO }
+
     /** Первый в жизни пользователя поп-ап — обязательно «лев в очках». */
     fun firstShowCreative(): AdCreative = lion
+
+    /**
+     * Креатив полноэкранного поп-апа после стирания облаков.
+     *
+     * С вероятностью [POPUP_VIDEO_CHANCE_PERCENT] % берётся видео-креатив,
+     * иначе фото. Креатив [lastShownId] (последний показанный) исключается
+     * из пула, поэтому один и тот же ролик/фото не идёт два раза подряд.
+     * [random] инжектится параметром — как в [FactOfDayPolicy] — чтобы тесты
+     * получали детерминированный выбор без глобального состояния.
+     *
+     * Пул из одного креатива: повтор неизбежен, поэтому возвращается он же,
+     * а не падение/пустой результат.
+     */
+    fun popupCreative(
+        lastShownId: String? = null,
+        random: Random = Random.Default
+    ): AdCreative {
+        val video = random.nextInt(PERCENT_MAX) < POPUP_VIDEO_CHANCE_PERCENT
+        // Пустой пул типа (каталог без роликов) — не повод падать: берём весь пул.
+        val pool = (if (video) popupVideoCreatives else popupPhotoCreatives).ifEmpty { creatives }
+        val candidates = pool.filterNot { it.id == lastShownId }
+        val resolved = candidates.ifEmpty { pool }
+        return resolved[random.nextInt(resolved.size)]
+    }
 
     /** Ротация поп-апа: без `Random`, одинаковый вход — одинаковый креатив. */
     fun creativeFor(sequence: Int): AdCreative = creatives[sequence.mod(creatives.size)]

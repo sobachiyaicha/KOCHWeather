@@ -181,7 +181,6 @@ data class CityWeatherSummary(
 enum class AppThemeMode(val titleRu: String) {
     BLUE_SKY("Голубое небо"),
     COPPER_SUNSET("Медный закат"),
-    FOREST("Изумрудный лес"),
     MARS("Планета Марс"),
     CYBERPUNK("Неоновый киберпанк"),
     BLOODY_SUNSET("Кровавый закат"),

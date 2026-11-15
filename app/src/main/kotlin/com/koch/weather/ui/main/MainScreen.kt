@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.koch.weather.BuildConfig
-import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.BottomTab
 import com.koch.weather.data.model.ConditionSegment
 import com.koch.weather.data.model.DailyItem
@@ -75,10 +74,10 @@ import java.util.Locale
 private fun formatWeatherTime(epochMillis: Long, formatter: SimpleDateFormat): String =
     formatter.format(Date(epochMillis))
 
-/** Порядок блоков ленты: стабильные списки, не пересоздаются на каждую рекомпозицию. */
-private val CleanFeedOrder: List<String> = listOf(
-    "services_grid", "hourly_card", "daily_card", "ai_fact_block", "premium_banner", "ad_banner"
-)
+/**
+ * Порядок блоков ленты: один и тот же для ВСЕХ тем (как в «Северном сиянии»).
+ * Стабильный список, не пересоздаётся на каждую рекомпозицию.
+ */
 private val PromoFeedOrder: List<String> = listOf(
     "ai_fact_block", "premium_banner", "ad_banner", "services_grid", "hourly_card", "daily_card"
 )
@@ -736,10 +735,9 @@ internal fun MainScreenContent(
                         Spacer(modifier = Modifier.height(KochSpace.m))
                     }
 
-                    // Голубая тема — порядок clean_main/bottom_nav: погода сразу под шапкой.
-                    // Остальные темы — «перегруженный» порядок theme_copper/f_063: промо сверху.
-                    val cleanOrder = uiState.currentTheme == AppThemeMode.BLUE_SKY
-                    val feedOrder = if (cleanOrder) CleanFeedOrder else PromoFeedOrder
+                    // Единый порядок ленты для всех тем (TZ): промо сверху, погода ниже.
+                    // Отдельного «чистого» порядка для голубой темы больше нет.
+                    val feedOrder = PromoFeedOrder
 
                     feedOrder.forEach { key ->
                         if (key == "ad_banner" && !uiState.showAds) return@forEach

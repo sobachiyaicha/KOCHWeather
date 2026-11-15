@@ -54,8 +54,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val imageRepository: ImageRepository by lazy { ImageRepository() }
     private val adRepository: AdRepository by lazy { AdRepository() }
 
-    /** Сколько поп-апов уже показано за сессию: ротация креативов из пула. */
-    private var adShowSequence: Int = 0
+    /**
+     * Id последнего показанного креатива поп-апа. Живёт в памяти ViewModel:
+     * нужен только чтобы один и тот же креатив не выпал два раза подряд.
+     */
+    private var lastAdPopupCreativeId: String? = null
 
     /** Ротация баннера главной: индекс фото1/фото2, растёт по таймеру. */
     private var adBannerSequence: Int = 0
@@ -844,7 +847,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
      * Первый показ в жизни пользователя — обязательно ролик `ad_lion`:
      * флаг `first_ad_shown` в DataStore выставляется сразу после выбора,
      * поэтому повторно лев «первым» не выйдет даже после force-stop.
-     * Дальше креатив ротируется по пулу детерминированно.
+     * Дальше креатив выбирается случайно: 50 % видео / 50 % фото, и последний
+     * показанный id исключается — один и тот же креатив не идёт два раза подряд.
      *
      * Замок [adPopupGuard] и проверка `isAdPopupVisible` дают ровно один
      * поп-ап на одно стирание: два события подряд не наложат два диалога.
@@ -857,12 +861,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 val firstShown = cache.isFirstAdShown()
                 val creative = if (firstShown) {
-                    adShowSequence += 1
-                    adRepository.creativeFor(adShowSequence)
+                    adRepository.popupCreative(lastShownId = lastAdPopupCreativeId)
                 } else {
                     cache.setFirstAdShown(true)
                     adRepository.firstShowCreative()
                 }
+                // Запоминаем показанное: следующий выбор исключит этот id.
+                lastAdPopupCreativeId = creative.id
                 _uiState.update { state ->
                     state.copy(adCreative = creative, isAdPopupVisible = true)
                 }
@@ -876,7 +881,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Крестик поп-апа: единственный способ закрыть рекламу (автозакрытия нет). */
+    /** Закрытие поп-апа: крестик или автозакрытие после конца видео. */
     fun dismissAdPopup() {
         _uiState.update { it.copy(isAdPopupVisible = false) }
     }

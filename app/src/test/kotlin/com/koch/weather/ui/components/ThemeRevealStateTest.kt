@@ -14,11 +14,11 @@ import org.junit.Test
  */
 class ThemeRevealStateTest {
 
-    private val available = listOf(AppThemeMode.BLUE_SKY, AppThemeMode.FOREST)
+    private val available = listOf(AppThemeMode.BLUE_SKY, AppThemeMode.AURORA_BOREALIS)
 
     @Test
     fun arrowsCycleOnlyAvailableThemes() {
-        val state = ThemeRevealState(available, AppThemeMode.FOREST)
+        val state = ThemeRevealState(available, AppThemeMode.AURORA_BOREALIS)
 
         repeat(6) {
             state.step(+1)
@@ -50,8 +50,8 @@ class ThemeRevealStateTest {
     @Test
     fun neighboursAreAvailableThemesEvenWhenThereAreTwo() {
         val state = ThemeRevealState(available, AppThemeMode.BLUE_SKY)
-        assertEquals(AppThemeMode.FOREST, state.below)
-        assertEquals(AppThemeMode.FOREST, state.above)
+        assertEquals(AppThemeMode.AURORA_BOREALIS, state.below)
+        assertEquals(AppThemeMode.AURORA_BOREALIS, state.above)
     }
 
     @Test
@@ -65,7 +65,7 @@ class ThemeRevealStateTest {
     @Test
     fun selectAnyDroppedTheme() {
         val state = ThemeRevealState(available, AppThemeMode.BLUE_SKY)
-        state.select(AppThemeMode.FOREST)
-        assertEquals(AppThemeMode.FOREST, state.preview)
+        state.select(AppThemeMode.AURORA_BOREALIS)
+        assertEquals(AppThemeMode.AURORA_BOREALIS, state.preview)
     }
 }
