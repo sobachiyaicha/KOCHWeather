@@ -418,6 +418,7 @@ fun MainScreen(
                 currentTheme = uiState.currentTheme,
                 onOpenLootbox = { viewModel.openLootbox() },
                 onApplyTheme = { theme -> viewModel.setTheme(theme) },
+                onGrantAdAttempt = { viewModel.grantAdAttempt() },
                 onDismiss = { isLootboxOpen = false }
             )
         }

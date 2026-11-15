@@ -278,7 +278,7 @@ private fun resourceUri(context: Context, @AnyRes resId: Int): Uri =
  * поп-ап закрывается сам; повторного запуска нет.
  */
 @Composable
-private fun AdVideoPlayer(
+internal fun AdVideoPlayer(
     @AnyRes videoRes: Int,
     onEnded: () -> Unit,
     modifier: Modifier = Modifier

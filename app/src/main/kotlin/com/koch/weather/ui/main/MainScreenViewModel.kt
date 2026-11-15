@@ -219,6 +219,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val imageUrls = imageRepository.getUrlsByCategory()
             // История дропов переживает перезапуск: отдаём её в state и не теряем счётчик.
             val lootboxHistory = lootboxRepository.getHistory()
+            // Потраченные попытки тоже персистятся: лимит не сбрасывается рестартом.
+            val lootboxAttemptsUsed = lootboxRepository.getAttemptsUsed()
 
             _uiState.update {
                 it.copy(
@@ -254,7 +256,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     // выбор «льва» на первый показ делает requestAdPopup().
                     lootboxState = it.lootboxState.copy(
                         history = lootboxHistory,
-                        totalOpened = lootboxHistory.size
+                        totalOpened = lootboxHistory.size,
+                        attemptsUsed = lootboxAttemptsUsed
                     )
                 )
             }
@@ -963,6 +966,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 val tomorrow = daily?.getOrNull(1) ?: daily?.getOrNull(0)
                 val reward = lootboxRepository.openLootbox(tomorrow)
                 val unlockedThemes = lootboxRepository.getUnlockedThemes()
+                // Счётчик попыток — из репозитория: додеп вернул попытку, реклама
+                // добавляла её отдельным методом, а списание уже персистнуто.
+                val attemptsUsed = lootboxRepository.getAttemptsUsed()
                 _uiState.update { state ->
                     state.copy(
                         // Дроп только разблокирует тему. currentTheme не трогаем:
@@ -970,7 +976,19 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                         availableThemes = unlockedThemes,
                         themeCatalog = ThemeCatalog.build(unlockedThemes),
                         // seq растёт на каждый дроп: UI ловит один «выстрел» анимации.
-                        lootboxState = state.lootboxState.withDrop(reward, unlockedThemes)
+                        // null = попытки исчерпаны: приз не выдаём, но «замок» отпускаем,
+                        // а attemptsLeft в состоянии станет 0 — по нему UI показывает
+                        // «Попытки закончились».
+                        lootboxState = if (reward == null) {
+                            state.lootboxState.copy(
+                                isOpening = false,
+                                attemptsUsed = attemptsUsed
+                            )
+                        } else {
+                            state.lootboxState
+                                .withDrop(reward, unlockedThemes)
+                                .copy(attemptsUsed = attemptsUsed)
+                        }
                     )
                 }
             } finally {
@@ -980,6 +998,23 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     if (!state.lootboxState.isOpening) state
                     else state.copy(lootboxState = state.lootboxState.copy(isOpening = false))
                 }
+            }
+        }
+    }
+
+    /**
+     * Кнопка «+1 попытка за рекламу»: начисление персистентное (DataStore),
+     * верхняя граница бонусов — в [LootboxAttemptsPolicy]. Сценарий призов
+     * не сдвигается: индекс следующего дропа считается по истории.
+     */
+    fun grantAdAttempt() {
+        viewModelScope.launch(Dispatchers.IO) {
+            lootboxRepository.grantAdAttempt()
+            val attemptsUsed = lootboxRepository.getAttemptsUsed()
+            _uiState.update { state ->
+                state.copy(
+                    lootboxState = state.lootboxState.copy(attemptsUsed = attemptsUsed)
+                )
             }
         }
     }

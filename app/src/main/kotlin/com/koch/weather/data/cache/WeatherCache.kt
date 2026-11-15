@@ -3,6 +3,7 @@ package com.koch.weather.data.cache
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -46,6 +47,9 @@ class WeatherCache(private val context: Context) {
     private val KEY_CURRENT_THEME = stringPreferencesKey("current_theme")
     private val KEY_CLOUDS_CLEARED = booleanPreferencesKey("clouds_cleared")
     private val KEY_LOOTBOX_HISTORY = stringPreferencesKey("lootbox_history_json")
+
+    /** Сколько бесплатных попыток лутбокса потрачено (лимит — 5 на пользователя). */
+    private val KEY_LOOTBOX_ATTEMPTS_USED = intPreferencesKey("lootbox_attempts_used")
 
     /** Первый в жизни пользователя рекламный поп-ап уже показан (ТЗ: обязательно «лев»). */
     private val KEY_FIRST_AD_SHOWN = booleanPreferencesKey("first_ad_shown")
@@ -267,6 +271,32 @@ class WeatherCache(private val context: Context) {
             context.dataStore.data.map { prefs -> prefs[KEY_LOOTBOX_HISTORY] }.first()
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * Счётчик потраченных бесплатных попыток лутбокса. Отдельный ключ, чтобы
+     * лимит переживал перезапуск и не зависел от длины истории (она обрезается).
+     * Отрицательное значение — бонусные попытки (додеп/реклама): контракт
+     * `attemptsLeft = freeAttemptsTotal - attemptsUsed` от этого только растёт,
+     * поэтому нижнюю границу здесь не отрезаем, только верхнюю по типу Int.
+     */
+    suspend fun saveLootboxAttemptsUsed(count: Int) = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.edit { prefs ->
+                prefs[KEY_LOOTBOX_ATTEMPTS_USED] = count
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** 0 = попыток ещё не тратили или DataStore недоступен (безопасный дефолт). */
+    suspend fun getLootboxAttemptsUsed(): Int = withContext(Dispatchers.IO) {
+        try {
+            context.dataStore.data
+                .map { prefs -> prefs[KEY_LOOTBOX_ATTEMPTS_USED] ?: 0 }
+                .first()
+        } catch (_: Exception) {
+            0
         }
     }
 }
