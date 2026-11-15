@@ -181,7 +181,6 @@ data class CityWeatherSummary(
 enum class AppThemeMode(val titleRu: String) {
     BLUE_SKY("Голубое небо"),
     COPPER_SUNSET("Медный закат"),
-    FOREST("Изумрудный лес"),
     MARS("Планета Марс"),
     CYBERPUNK("Неоновый киберпанк"),
     BLOODY_SUNSET("Кровавый закат"),
@@ -338,13 +337,25 @@ data class MainScreenUiState(
     val premiumOffer: PremiumOffer = PremiumOffer(),
     val showAds: Boolean = true,
 
-    /** Реклама: креатив дня, выбран детерминированно из [AdCatalog]. */
+    /** Реклама: креатив полноэкранного поп-апа из медиа-пула [AdCatalog]. */
     val adCreative: AdCreative = AdCatalog.creatives.first(),
-    /** Фото для рекламного листа; null — рисуем иконку категории. */
-    val adImageUrl: String? = null,
+    /** Баннер главного экрана: только фото1/фото2, ротация задаётся ViewModel. */
+    val adBannerCreative: AdCreative = AdCatalog.bannerCreatives.first(),
+    /**
+     * Один полноэкранный рекламный поп-ап на одно стирание облаков (ТЗ п. 5).
+     * Показывается поверх главной, закрывается только крестиком.
+     */
+    val isAdPopupVisible: Boolean = false,
 
-    // AI Facts
+    // AI Facts: текст выбирается по индексу сессии, поэтому факт не «прыгает»
+    // при рекомпозиции, а каждый запуск приложения даёт новый.
     val aiFact: String = "Чтобы точно узнать погоду, нужно посмотреть в окно",
+    val aiFactIndex: Int = 0,
+    // «Другой факт» после 2–4-го нажатия показывает картинку-совет вместо текста.
+    // Resource id лежит в состоянии (не DataStore): при перезапуске снова текст.
+    val aiFactImageRes: Int? = null,
+    /** false после 4-го нажатия: кнопка «Другой факт» скрыта до перезапуска приложения. */
+    val isAnotherFactAvailable: Boolean = true,
 
     // Services state (2x2 Grid + Modals)
     val lootboxState: LootboxState = LootboxState(),

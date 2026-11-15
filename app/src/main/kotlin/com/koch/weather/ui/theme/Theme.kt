@@ -187,9 +187,6 @@ fun kochColors(mode: AppThemeMode): KochColors = KochColorsCache.getOrPut(mode) 
     when (mode) {
         AppThemeMode.BLUE_SKY -> SkyBlue
         AppThemeMode.COPPER_SUNSET -> CopperSunset
-        AppThemeMode.FOREST -> derived(
-            Color(0xFF1B3B2B), Color(0xFF2C5E43), Color(0xFF427A5B), Color(0xFF162D21)
-        )
         AppThemeMode.MARS -> derived(
             Color(0xFF4A1A12), Color(0xFF7A2D20), Color(0xFFA84230), Color(0xFF33120C)
         )

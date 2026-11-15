@@ -168,7 +168,7 @@ private fun ShowroomContent(
     Spacer(Modifier.height(KochSpace.m))
 
     PremiumFeature("Полное отключение всех рекламных баннеров")
-    PremiumFeature("Разблокировка всех тем оформления (Лес, Марс)")
+    PremiumFeature("Разблокировка всех тем оформления (Киберпанк, Кровавый закат)")
     PremiumFeature("Мгновенный разгон облаков пальцем")
     PremiumFeature("Иммунитет к блокировке «Пора на улицу»")
 

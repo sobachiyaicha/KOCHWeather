@@ -1,15 +1,14 @@
 package com.koch.weather.data.repository
 
-import com.koch.weather.data.model.ClothingAdvisor
 import kotlin.random.Random
 
 /**
  * Факты и «совет дня» (item 12 фазы 5).
  *
- * Факт по умолчанию выбирается детерминированно по городу и дню года — при
- * рекомпозиции текст не «дёргается». Кнопка «Другой факт» берёт случайный,
- * но гарантированно не текущий: раньше список ходил по кругу и повторял
- * только что показанное.
+ * Факт больше не привязан к городу и дню года: индекс выбирается один раз на
+ * запуск приложения ([com.koch.weather.data.model.FactOfDayPolicy.initialIndex])
+ * и хранится в состоянии UI, поэтому рекомпозиция его не дёргает, а перезапуск
+ * приложения — меняет. Кнопка «Другой факт» берёт индекс, отличный от текущего.
  */
 class AiFactsRepository {
 
@@ -40,26 +39,11 @@ class AiFactsRepository {
 
     fun getRandomFact(): String = facts[Random.nextInt(facts.size)]
 
-    /**
-     * Детерминированный факт дня: один и тот же город + день года дают один
-     * и тот же факт при любом числе перезапусков. Сид не зависит от времени
-     * суток и от [Random]; другой факт в течение дня даёт только
-     * `MainScreenViewModel.refreshAiFact()`.
-     */
-    fun getFactForDay(cityName: String?, dayOfYear: Int): String {
-        val seed = ClothingAdvisor.seedFor(cityName.orEmpty(), dayOfYear)
-        return facts[seed.mod(facts.size)]
-    }
+    /** Факт по индексу из состояния; индекс нормализуется по размеру списка. */
+    fun getFactAt(index: Int): String = facts[index.mod(facts.size)]
 
-    /** Факт дня без привязки к городу. */
-    fun getFactForDay(dayOfYear: Int): String = getFactForDay(null, dayOfYear)
-
-    /** Следующий факт: гарантированно не равен текущему. */
-    fun getNextFact(current: String): String {
-        if (facts.size <= 1) return facts.first()
-        val pool = facts.filter { it != current }
-        return pool[Random.nextInt(pool.size)]
-    }
+    /** Сколько фактов есть: верхняя граница для выбора индекса. */
+    fun getFactCount(): Int = facts.size
 
     fun getAllFacts(): List<String> = facts
 }

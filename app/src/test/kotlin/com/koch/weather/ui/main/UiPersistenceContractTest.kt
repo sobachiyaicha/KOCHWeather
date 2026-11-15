@@ -51,7 +51,9 @@ class UiPersistenceContractTest {
         assertTrue(locked.isCloudVeilVisible)
 
         val cleared = initial.copy(isCloudLocked = true, isCloudsCleared = true)
-        assertFalse("После очистки вуаль не возвращается", cleared.isCloudVeilVisible)
+        // После стирания оверлей скрыт, но не навсегда: таймер VM вернёт вуаль,
+        // снова выставив isCloudsCleared = false.
+        assertFalse("При isCloudsCleared=true оверлей скрыт", cleared.isCloudVeilVisible)
 
         val restoredAfterRestart = initial.copy(
             isCloudLocked = false,

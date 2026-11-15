@@ -5,18 +5,31 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.activity.compose.BackHandler
+import androidx.annotation.AnyRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,16 +41,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhoneIphone
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,29 +70,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.koch.weather.R
 import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.LootRarity
 import com.koch.weather.data.model.LootReward
 import com.koch.weather.data.model.LootRewardType
+import com.koch.weather.data.model.LootboxAttemptsPolicy
 import com.koch.weather.data.model.LootboxState
 import com.koch.weather.data.model.ThemePreferenceCodec
 import com.koch.weather.data.model.WmoHelper
-import com.koch.weather.ui.design.KochCard
-import com.koch.weather.ui.design.KochEmptyState
-import com.koch.weather.ui.design.KochMaterial
-import com.koch.weather.ui.design.KochPrimaryButton
 import com.koch.weather.ui.design.KochSheet
 import com.koch.weather.ui.design.KochSheetVariant
 import com.koch.weather.ui.design.KochTextButton
@@ -81,7 +105,6 @@ import com.koch.weather.ui.theme.KochRadius
 import com.koch.weather.ui.theme.KochShape
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
-import com.koch.weather.ui.theme.LocalKochColors
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -89,21 +112,40 @@ import kotlinx.coroutines.withContext
 import kotlin.math.sin
 import kotlin.random.Random
 
+// --- палитра лутбокса: «карбоновая» панель + тёплый оранжевый акцент ---------
+// Отдельная от темы приложения палитра: лутбокс — игровая сцена, он одинаков на всех
+// семи темах (как экран награды в Clash Royale / Dixlo Open Case).
+private val LootOrangeDark = Color(0xFFFF8A3D)
+private val LootOrangeLight = Color(0xFFFFB74D)
+private val LootPanelTop = Color(0xFF1C1511)
+private val LootPanelBottom = Color(0xFF0C0907)
+private val LootCardTop = Color(0xFF2A1E15)
+private val LootCardBottom = Color(0xFF17100B)
+private val LootWarmWhite = Color(0xFFFDF3E6)
+private val LootWarmSecondary = Color(0xFFC3AC94)
+private val LootWarmTertiary = Color(0xFF8E7A66)
+
 /**
- * Лутбокс (item 8 фазы 5) — не «иконка в ореоле», а настоящий сундук с анимацией:
+ * Лутбокс (полная переработка внешнего вида, референс — Clash Royale / Dixlo Open Case).
  *
- * 1. Закрытое состояние: нарисованный `Canvas`-сундук (корпус, крышка, металлические полосы,
- *    замок, блик), мягкий пульсирующий ореол, подпись «Сундук Утешения #2025» и честный шанс iPhone.
- * 2. «Открыть бесплатно» → `isOpening`: тряска сундука 700 мс (поворот ±4°, масштаб 1→1.06),
- *    крышка приоткрывается, вспышка. Никакого спама анимацией на каждую рекомпозицию.
- * 3. Дроп ловится ровно один раз по `lootboxState.lastRewardSeq`: вибрация
- *    (`VibrationEffect.createWaveform`), конфетти 72 частицы цвета редкости (гравитация, 1.2 с),
- *    затем карточка приза и — для темы — экран «Поздравляем!» ([ThemeRevealContent]).
- * 4. История — последние 5 дропов из персистентной `lootboxState.history` с цветом редкости.
- *    Пустая история — `KochEmptyState` с объяснением, а не пустая плашка.
+ * Сцена: тёмная карбоновая панель, сундук по центру, над ним направленный вверх световой
+ * луч ([LightBeam]), по редкости последнего приза — цветное свечение ([RarityAura]).
+ * Кнопка «ОТКРЫТЬ» — крупная (56 dp, оранжевый градиент, тень) в закреплённом футере.
  *
- * Кнопок-обманок нет: у приза-темы «Применить» (`onApplyTheme`), у остальных — «Продолжить»,
- * которая закрывает лист; «Открыть бесплатно» в футере реально открывает сундук.
+ * Результат: карточка приза в центре ([LootPrizeCard]) — «ВЫПАЛО:»/«ВЫПАЛА:» из
+ * `reward.revealVerbRu`, название ≥ 22 sp, подзаголовок и плашка редкости цветом
+ * `rarity.colorHex`; появление — scaleIn(0.8) + fadeIn + вспышка.
+ *
+ * История дропов — подменю-аккордеон, закрытое по умолчанию: свёрнутое состояние не
+ * рендерит список вообще (до 20 последних наград, внутренний скролл).
+ *
+ * Сохранено: тряска сундука, вибрация, конфетти 72 частицы и экран «Поздравляем!»
+ * для выпавшей темы ([ThemeRevealContent], разблокировка применяется через `onApplyTheme`).
+ *
+ * Бонусные попытки: приз с `grantsExtraAttempt` показывает строку «+1 попытка» на карточке;
+ * пока попыток меньше пяти и бонусный запас не выбран, под кнопкой «ОТКРЫТЬ» есть
+ * «Смотреть рекламу → +1 попытка». Ролик (`ad_lion` / `ad_slippers`) играет полноэкранно
+ * без контролов поверх диалога; по завершении — автовозврат и [onGrantAdAttempt].
  */
 @Composable
 fun LootboxDialog(
@@ -112,9 +154,9 @@ fun LootboxDialog(
     currentTheme: AppThemeMode,
     onOpenLootbox: () -> Unit,
     onApplyTheme: (AppThemeMode) -> Unit,
+    onGrantAdAttempt: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val colors = LocalKochColors.current
     val context = LocalContext.current
 
     val lastReward = lootboxState.lastReward
@@ -131,11 +173,19 @@ fun LootboxDialog(
     var appliedTheme by remember { mutableStateOf<AppThemeMode?>(null) }
     val revealState = droppedTheme?.let { rememberThemeRevealState(availableThemes, it) }
 
+    // Ролик «+1 попытка за рекламу». null — диалог рекламы не показан.
+    // Ресурс чередуется на каждый просмотр, чтобы один и тот же ролик не шёл дважды.
+    var adVideoRes by remember { mutableStateOf<Int?>(null) }
+    var adViews by remember { mutableIntStateOf(0) }
+
     // --- анимация сундука ---------------------------------------------------
     val shake = remember { Animatable(0f) }
     val lid = remember { Animatable(0f) }
     val flash = remember { Animatable(0f) }
     val confetti = remember { Animatable(0f) }
+    val cardScale = remember { Animatable(0.8f) }
+    val cardAlpha = remember { Animatable(0f) }
+    val revealFlash = remember { Animatable(0f) }
     var confettiVisible by remember { mutableStateOf(false) }
     var burstSeed by remember { mutableIntStateOf(0) }
     var burstRarity by remember { mutableStateOf(LootRarity.COMMON) }
@@ -146,8 +196,6 @@ fun LootboxDialog(
     // Тайминги подчинены одному правилу: вся последовательность короче 1200 мс, после
     // которых VM отдаёт награду и гасит `isOpening` (смена ключа отменяет этот эффект).
     // Поэтому вспышка идёт ПАРАЛЛЕЛЬНО крышке: 700 (тряска) + 290 (вспышка) = 990 мс.
-    // Раньше было 700 + 240 + 70 + 300 = 1310 мс, и отмена на 1200-й оставляла `flash`
-    // на ~0.2–0.4 — белый блик «залипал» до закрытия листа (item 8/14).
     // `finally` + NonCancellable гарантируют `flash == 0f` даже при отмене.
     LaunchedEffect(lootboxState.isOpening) {
         if (!lootboxState.isOpening) return@LaunchedEffect
@@ -171,7 +219,6 @@ fun LootboxDialog(
     }
 
     // Ровно один выстрел анимации/вибрации на дроп: ключ — lastRewardSeq, а не рекомпозиция.
-    // `seenSeq` отсекает повтор при переоткрытии листа с той же наградой.
     LaunchedEffect(lootboxState.lastRewardSeq) {
         val seq = lootboxState.lastRewardSeq
         if (seq == seenSeq) return@LaunchedEffect
@@ -197,15 +244,36 @@ fun LootboxDialog(
         }
     }
 
+    // Появление карточки приза: scaleIn(0.8) + fadeIn + короткая вспышка.
+    // Ключ — номер дропа, поэтому повторно выпавшая та же награда тоже анимируется.
+    LaunchedEffect(lootboxState.lastRewardSeq, lastReward?.id) {
+        if (lastReward == null) return@LaunchedEffect
+        cardScale.snapTo(0.8f)
+        cardAlpha.snapTo(0f)
+        revealFlash.snapTo(1f)
+        coroutineScope {
+            launch {
+                cardScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.62f,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+            launch { cardAlpha.animateTo(1f, tween(200, easing = FastOutSlowInEasing)) }
+            launch { revealFlash.animateTo(0f, tween(520, easing = FastOutSlowInEasing)) }
+        }
+    }
+
     val activeReveal = if (revealOpen) revealState else null
     val showReveal = activeReveal != null
 
     KochSheet(
         onDismiss = onDismiss,
         variant = if (showReveal) KochSheetVariant.FullScreenInset else KochSheetVariant.Bottom,
-        // Лист лутбокса — самый плотный в приложении: шапка, сундук, карточка приза и
-        // 5 строк истории. 0.88 обрезал историю под CTA (visual-critic r15);
-        // 0.94 даёт под неё ~40 dp, а контент остаётся скроллируемым (KochSheet).
+        // Сцена 256 dp + карточка приза + аккордеон истории: 0.94 даёт им место,
+        // а контент остаётся скроллируемым на невысоких экранах (KochSheet).
         maxHeightFraction = 0.94f,
         content = {
             if (activeReveal != null && droppedTheme != null) {
@@ -216,20 +284,34 @@ fun LootboxDialog(
                     droppedTheme = droppedTheme
                 )
             } else {
-                LootboxChestContent(
-                    lootboxState = lootboxState,
-                    lastReward = lastReward,
-                    currentTheme = currentTheme,
-                    shake = shake.value,
-                    lid = lid.value,
-                    flash = flash.value,
-                    confettiVisible = confettiVisible,
-                    confettiProgress = confetti.value,
-                    burstRarity = burstRarity,
-                    burstSeed = burstSeed,
-                    onApplyTheme = onApplyTheme,
-                    onContinue = onDismiss
-                )
+                LootboxPanel {
+                    LootboxScene(
+                        isOpening = lootboxState.isOpening,
+                        rarityColor = Color((lastReward?.rarity ?: burstRarity).colorHex),
+                        shake = shake.value,
+                        lid = lid.value,
+                        flash = flash.value,
+                        confettiVisible = confettiVisible,
+                        confettiProgress = confetti.value,
+                        burstRarity = burstRarity,
+                        burstSeed = burstSeed
+                    )
+
+                    AttemptsLine(attemptsLeft = lootboxState.attemptsLeft)
+
+                    if (lastReward != null) {
+                        LootPrizeCard(
+                            reward = lastReward,
+                            scale = cardScale.value,
+                            alpha = cardAlpha.value,
+                            flash = revealFlash.value
+                        )
+                    }
+
+                    Spacer(Modifier.height(KochSpace.s))
+
+                    LootHistoryAccordion(history = lootboxState.history)
+                }
             }
         },
         footer = {
@@ -240,13 +322,14 @@ fun LootboxDialog(
                     // Мёртвых кликов нет: уже применённая тема гасит кнопку и подписывается
                     // результатом. Выбрали другую стрелками — снова «Применить».
                     val isApplied = isUnlocked && appliedTheme == preview
-                    KochPrimaryButton(
+                    LootboxOpenButton(
                         text = when {
-                            !isUnlocked -> "Тема закрыта"
-                            isApplied -> "Тема применена"
-                            else -> "Применить"
+                            !isUnlocked -> "ТЕМА ЗАКРЫТА"
+                            isApplied -> "ТЕМА ПРИМЕНЕНА"
+                            else -> "ПРИМЕНИТЬ"
                         },
                         enabled = isUnlocked && !isApplied,
+                        loading = false,
                         onClick = {
                             if (!isApplied) {
                                 onApplyTheme(preview)
@@ -265,81 +348,150 @@ fun LootboxDialog(
                     )
                 }
             } else {
-                KochPrimaryButton(
-                    text = "Открыть бесплатно",
-                    onClick = onOpenLootbox,
-                    enabled = !lootboxState.isOpening,
-                    loading = lootboxState.isOpening
-                )
+                Column {
+                    LootboxOpenButton(
+                        text = "ОТКРЫТЬ",
+                        enabled = lootboxState.attemptsLeft > 0 && !lootboxState.isOpening,
+                        loading = lootboxState.isOpening,
+                        onClick = onOpenLootbox
+                    )
+                    // «Смотреть рекламу → +1 попытка» — пока попыток меньше пяти и не выбран
+                    // бонусный запас (5 бонусов, LootboxAttemptsPolicy): мёртвой кнопки,
+                    // которая уже ничего не начислит, не бывает.
+                    val showAdAttempt = lootboxState.attemptsLeft < LootboxState.FREE_ATTEMPTS_TOTAL &&
+                        LootboxAttemptsPolicy.canGrantAdAttempt(lootboxState.attemptsUsed)
+                    if (showAdAttempt) {
+                        Spacer(Modifier.height(KochSpace.s))
+                        LootAdAttemptButton(
+                            onClick = {
+                                // Чередуем два ролика («лев в очках» и «тапки»).
+                                adVideoRes = if (adViews % 2 == 0) {
+                                    R.raw.ad_lion
+                                } else {
+                                    R.raw.ad_slippers
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
     )
+
+    // Полноэкранный ролик: рендерится отдельным окном поверх листа лутбокса,
+    // без контролов плеера; по завершении возвращаемся и начисляем попытку.
+    adVideoRes?.let { videoRes ->
+        RewardAdDialog(
+            videoRes = videoRes,
+            onFinished = {
+                adVideoRes = null
+                // Следующий бонусный ролик — другой.
+                adViews += 1
+                onGrantAdAttempt()
+            },
+            onClosed = { adVideoRes = null }
+        )
+    }
 }
 
-/** Содержимое закрытого/открывающегося сундука: герой, карточка приза и история дропов. */
+/**
+ * Тёмная карбоновая панель лутбокса: глубокий вертикальный градиент, тканая
+ * диагональная текстура карбона, тонкая оранжевая кромка сверху и рамка.
+ * Внутри — сцена, карточка приза и аккордеон истории.
+ */
 @Composable
-private fun LootboxChestContent(
-    lootboxState: LootboxState,
-    lastReward: LootReward?,
-    currentTheme: AppThemeMode,
+private fun LootboxPanel(content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(KochRadius.cardLg)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(LootPanelTop, LootPanelBottom)))
+            .border(
+                BorderStroke(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(LootOrangeLight.copy(alpha = 0.45f), Color.White.copy(alpha = 0.08f))
+                    )
+                ),
+                shape
+            )
+            .drawBehind {
+                // Карбоновая «плетёнка»: диагональные штрихи в двух направлениях.
+                val step = 7.dp.toPx()
+                val hair = 1.dp.toPx()
+                var x = -size.height
+                while (x < size.width + size.height) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.018f),
+                        start = Offset(x, 0f),
+                        end = Offset(x + size.height, size.height),
+                        strokeWidth = hair
+                    )
+                    drawLine(
+                        color = Color.Black.copy(alpha = 0.16f),
+                        start = Offset(x, size.height),
+                        end = Offset(x + size.height, 0f),
+                        strokeWidth = hair
+                    )
+                    x += step
+                }
+                // Тёплая кромка сверху: панель «подсвечена» оранжевым акцентом.
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(LootOrangeLight.copy(alpha = 0.16f), Color.Transparent),
+                        startY = 0f,
+                        endY = size.height * 0.16f
+                    ),
+                    size = Size(size.width, size.height * 0.16f)
+                )
+            }
+            .padding(horizontal = KochSpace.m, vertical = KochSpace.m)
+    ) {
+        content()
+    }
+}
+
+/**
+ * Сцена: световой луч, свечение по редкости, сундук по центру, вспышка и конфетти.
+ * Всё в одном боксе фиксированной высоты, чтобы лист не «прыгал» между состояниями.
+ */
+@Composable
+private fun LootboxScene(
+    isOpening: Boolean,
+    rarityColor: Color,
     shake: Float,
     lid: Float,
     flash: Float,
     confettiVisible: Boolean,
     confettiProgress: Float,
     burstRarity: LootRarity,
-    burstSeed: Int,
-    onApplyTheme: (AppThemeMode) -> Unit,
-    onContinue: () -> Unit
+    burstSeed: Int
 ) {
-    val colors = LocalKochColors.current
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = KochSpace.xs),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.CardGiftcard,
-            contentDescription = null,
-            tint = colors.accentPromo,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(Modifier.width(KochSpace.m))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Погодные Лутбоксы",
-                style = KochType.titleCard,
-                color = colors.textPrimary
-            )
-            Text(
-                text = "Не повезло с погодой? Повезёт тут!",
-                style = KochType.sub,
-                color = colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-
-    // Герой-зона: ореол, сундук, вспышка и конфетти — всё в одном боксе,
-    // чтобы лист не «прыгал» при смене состояния.
-    // Высота 206 → 124 dp (visual-critic r15): история из 5 строк перестала влезать
-    // под сундук в листе 0.88 — освобождённые ~80 dp отданы строкам истории.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(124.dp)
-            .padding(top = KochSpace.xs),
-        contentAlignment = Alignment.Center
+            .height(256.dp),
+        contentAlignment = Alignment.BottomCenter
     ) {
-        ChestGlow(isOpening = lootboxState.isOpening)
+        LightBeam(
+            intensity = if (isOpening) 1f else 0.55f,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        RarityAura(
+            color = rarityColor,
+            isOpening = isOpening,
+            modifier = Modifier.fillMaxSize()
+        )
 
         ChestCanvas(
             lidOpen = lid.coerceIn(0f, 1f),
             shake = shake,
             modifier = Modifier
-                .width(142.dp)
-                .height(118.dp)
+                .padding(bottom = KochSpace.s)
+                .width(170.dp)
+                .height(148.dp)
         )
 
         // Вспышка при открытии: короткий белый радиальный блик из центра сундука.
@@ -355,11 +507,11 @@ private fun LootboxChestContent(
                                     Color(0xFFFFE082).copy(alpha = 0.35f * flash),
                                     Color.Transparent
                                 ),
-                                center = center,
-                                radius = size.minDimension * 0.55f
+                                center = Offset(size.width * 0.5f, size.height * 0.72f),
+                                radius = size.minDimension * 0.62f
                             ),
-                            radius = size.minDimension * 0.55f,
-                            center = center
+                            radius = size.minDimension * 0.62f,
+                            center = Offset(size.width * 0.5f, size.height * 0.72f)
                         )
                     }
             )
@@ -374,107 +526,131 @@ private fun LootboxChestContent(
             )
         }
     }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = when {
-                lootboxState.isOpening -> "Сундук открывается..."
-                else -> "Сундук Утешения #2025"
-            },
-            style = KochType.bodyStrong,
-            color = colors.textPrimary
-        )
-        Text(
-            text = "Шанс на iPhone 16 Pro Max: 0,001 %",
-            style = KochType.sub,
-            color = colors.textSecondary
-        )
-    }
-
-    if (lastReward != null) {
-        Spacer(Modifier.height(KochSpace.s))
-        LootRewardCard(
-            reward = lastReward,
-            currentTheme = currentTheme,
-            onApplyTheme = onApplyTheme,
-            onContinue = onContinue
-        )
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = KochSpace.s, bottom = KochSpace.xs),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "История дропов",
-            style = KochType.titleSection,
-            color = colors.textPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = "Открыто: ${lootboxState.totalOpened}",
-            style = KochType.caption,
-            color = colors.textTertiary
-        )
-    }
-
-    val recent = remember(lootboxState.history) { lootboxState.history.take(5) }
-    if (recent.isEmpty()) {
-        KochEmptyState(
-            icon = Icons.Default.CardGiftcard,
-            title = "Вы ещё не открывали сундуки",
-            subtitle = "Нажмите «Открыть бесплатно» — призы появятся здесь."
-        )
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(KochSpace.xs)) {
-            recent.forEach { reward ->
-                LootHistoryRow(reward)
-            }
-        }
-    }
-
-    // Нижний отступ контента: последняя строка истории не прилипает к CTA и к
-    // градиентной шторке над футером (KochSheet добавляет свои 24 dp ниже).
-    Spacer(Modifier.height(KochSpace.s))
 }
 
-/** Мягкий пульсирующий ореол под сундуком. */
+/**
+ * Направленный вверх световой луч из сундука: три вложенных конуса с вертикальным
+ * градиентом (снизу ярко, сверху прозрачно) — читается как объёмный свет, а не как
+ * залитый треугольник. Мягко пульсирует.
+ */
 @Composable
-private fun ChestGlow(isOpening: Boolean) {
-    val pulse = rememberInfiniteTransition(label = "chest_glow")
-    val glow by pulse.animateFloat(
+private fun LightBeam(
+    intensity: Float,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "loot_beam")
+    val pulse by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loot_beam_pulse"
+    )
+    Canvas(modifier = modifier) {
+        val cx = size.width / 2f
+        // Свет выходит из-под крышки сундука и уходит вверх, за край панели.
+        val baseY = size.height * 0.42f
+        val strength = (0.35f + 0.45f * intensity) * pulse
+
+        // Конусы: от широкого и почти прозрачного к узкому и яркому.
+        val cones = listOf(
+            Triple(0.34f, 0.10f, 0.30f),
+            Triple(0.24f, 0.075f, 0.50f),
+            Triple(0.15f, 0.045f, 0.85f)
+        )
+        cones.forEach { (halfTopFrac, halfBottomFrac, alpha) ->
+            val halfTop = size.width * halfTopFrac
+            val halfBottom = size.width * halfBottomFrac
+            val path = Path().apply {
+                moveTo(cx - halfBottom, baseY)
+                lineTo(cx + halfBottom, baseY)
+                lineTo(cx + halfTop, 0f)
+                lineTo(cx - halfTop, 0f)
+                close()
+            }
+            drawPath(
+                path = path,
+                brush = Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.55f to LootOrangeDark.copy(alpha = alpha * 0.20f * strength),
+                    1f to Color(0xFFFFE9C4).copy(alpha = alpha * 0.62f * strength),
+                    startY = 0f,
+                    endY = baseY
+                )
+            )
+        }
+
+        // Яркое «пятно» у основания луча — источник света на крышке.
+        drawOval(
+            brush = Brush.radialGradient(
+                listOf(
+                    Color(0xFFFFF0D2).copy(alpha = 0.55f * strength),
+                    LootOrangeLight.copy(alpha = 0.18f * strength),
+                    Color.Transparent
+                ),
+                center = Offset(cx, baseY),
+                radius = size.width * 0.26f
+            ),
+            topLeft = Offset(cx - size.width * 0.26f, baseY - size.width * 0.10f),
+            size = Size(size.width * 0.52f, size.width * 0.20f)
+        )
+    }
+}
+
+/**
+ * Свечение по редкости последнего приза: тёплый ореол вокруг сундука + мягкий отсвет
+ * на «пол» сцены. Пульсирует; при открытии усиливается.
+ */
+@Composable
+private fun RarityAura(
+    color: Color,
+    isOpening: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "loot_aura")
+    val pulse by transition.animateFloat(
         initialValue = 0.55f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(1400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "chest_glow_alpha"
+        label = "loot_aura_pulse"
     )
     val boost = if (isOpening) 1.35f else 1f
-    Box(
-        modifier = Modifier
-            // Ореол подстроен под уменьшенную герой-зону (124 dp), чтобы не диктовать высоту.
-            .size(width = 208.dp, height = 118.dp)
-            .drawBehind {
-                drawOval(
-                    brush = Brush.radialGradient(
-                        listOf(
-                            Color(0xFFFFC65A).copy(alpha = 0.30f * glow * boost),
-                            Color(0xFFFF9D2E).copy(alpha = 0.12f * glow * boost),
-                            Color.Transparent
-                        )
-                    ),
-                    topLeft = Offset.Zero,
-                    size = size
-                )
-            }
-    )
+    Canvas(modifier = modifier) {
+        val cx = size.width / 2f
+        val cy = size.height * 0.74f
+        val radius = size.width * 0.46f
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(
+                    color.copy(alpha = 0.34f * pulse * boost),
+                    color.copy(alpha = 0.12f * pulse * boost),
+                    Color.Transparent
+                ),
+                center = Offset(cx, cy),
+                radius = radius
+            ),
+            radius = radius,
+            center = Offset(cx, cy)
+        )
+        // Отсвет на «пол»: эллипс под сундуком.
+        drawOval(
+            brush = Brush.radialGradient(
+                listOf(
+                    LootOrangeLight.copy(alpha = 0.26f * pulse * boost),
+                    Color.Transparent
+                ),
+                center = Offset(cx, size.height * 0.92f),
+                radius = size.width * 0.40f
+            ),
+            topLeft = Offset(cx - size.width * 0.36f, size.height * 0.84f),
+            size = Size(size.width * 0.72f, size.height * 0.14f)
+        )
+    }
 }
 
 /**
@@ -506,13 +682,13 @@ private fun ChestCanvas(
 
         // Тряска: поворот влево-вправо на ±4° и лёгкий «вдох» масштаба до 1.06.
         val rotation = sin(shake * Math.PI * 6.0).toFloat() * 4f
-        val scale = 1f + 0.06f * sin(shake * Math.PI).toFloat()
+        val scaleFactor = 1f + 0.06f * sin(shake * Math.PI).toFloat()
 
         rotate(degrees = rotation, pivot = Offset(w * 0.5f, bodyBottom)) {
             val cx = w * 0.5f
             val cy = bodyBottom
             // Масштаб вокруг центра нижней кромки: сундук «приседает» на месте.
-            scale(scaleX = scale, scaleY = scale, pivot = Offset(cx, cy)) {
+            scale(scaleX = scaleFactor, scaleY = scaleFactor, pivot = Offset(cx, cy)) {
 
                 // Тень под сундуком.
                 drawOval(
@@ -643,6 +819,517 @@ private fun ChestCanvas(
 }
 
 // ---------------------------------------------------------------------------
+// Результат: «ВЫПАЛО:» / «ВЫПАЛА:» и карточка приза
+// ---------------------------------------------------------------------------
+
+/**
+ * Карточка приза в центре диалога. Крупная надпись «ВЫПАЛО:»/«ВЫПАЛА:» берётся из
+ * `reward.revealVerbRu` (согласование рода готовит data-слой), название — 24 sp,
+ * ниже подзаголовок и плашка редкости цветом `rarity.colorHex`.
+ * Появление — `scaleIn(0.8f) + fadeIn` (анимация снаружи, здесь только применение)
+ * и вспышка цвета редкости.
+ */
+@Composable
+private fun LootPrizeCard(
+    reward: LootReward,
+    scale: Float,
+    alpha: Float,
+    flash: Float
+) {
+    val rarity = Color(reward.rarity.colorHex)
+    val shape = RoundedCornerShape(KochRadius.card)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = KochSpace.xs)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(LootCardTop, LootCardBottom)))
+            .border(
+                BorderStroke(
+                    1.5.dp,
+                    Brush.verticalGradient(
+                        listOf(rarity.copy(alpha = 0.85f), rarity.copy(alpha = 0.22f))
+                    )
+                ),
+                shape
+            )
+            .drawBehind {
+                // Свечение редкости из верхней кромки карточки.
+                drawRect(
+                    brush = Brush.radialGradient(
+                        listOf(rarity.copy(alpha = 0.26f), Color.Transparent),
+                        center = Offset(size.width / 2f, 0f),
+                        radius = size.width * 0.75f
+                    )
+                )
+                // Вспышка появления.
+                if (flash > 0.01f) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.55f * flash),
+                                rarity.copy(alpha = 0.22f * flash),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            radius = size.width * 0.8f
+                        )
+                    )
+                }
+            }
+            .padding(horizontal = KochSpace.l, vertical = KochSpace.l),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(rarity.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    RewardIcon(reward = reward, tint = rarity)
+                }
+                Spacer(Modifier.width(KochSpace.s))
+                Text(
+                    text = "${reward.revealVerbRu.uppercase()}:",
+                    style = KochType.microCaps.copy(fontSize = 15.sp, lineHeight = 18.sp, letterSpacing = 2.2.sp),
+                    color = LootOrangeLight,
+                    maxLines = 1
+                )
+            }
+
+            Text(
+                text = reward.title,
+                style = KochType.titleSheet.copy(fontSize = 24.sp, lineHeight = 29.sp),
+                color = LootWarmWhite,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = KochSpace.s)
+            )
+
+            if (reward.subtitle.isNotBlank()) {
+                Text(
+                    text = reward.subtitle,
+                    style = KochType.body,
+                    color = LootWarmSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = KochSpace.xs)
+                )
+            }
+
+            // Погодный приз: реальная погода из прогноза (не выдуманная).
+            val weatherCode = reward.weatherCode
+            if (weatherCode != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = KochSpace.s)
+                ) {
+                    WeatherIcon(
+                        iconType = WmoHelper.getIconType(weatherCode, isDay = true),
+                        size = 20.dp
+                    )
+                    Spacer(Modifier.width(KochSpace.xs))
+                    Text(
+                        text = WmoHelper.getDescriptionRu(weatherCode),
+                        style = KochType.caption,
+                        color = LootWarmSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(KochSpace.m))
+            // Приз-додеп: карточка честно подписывает, что попытка вернулась.
+            if (reward.grantsExtraAttempt) {
+                ExtraAttemptNote()
+                Spacer(Modifier.height(KochSpace.s))
+            }
+            RarityPlaque(rarity = reward.rarity, big = true)
+        }
+    }
+}
+
+/**
+ * Строка «+1 попытка» на карточке приза-додепа: оранжевая плашка с плюсом.
+ * Оранжевый акцент читается на карбоне и не конкурирует с плашкой редкости.
+ */
+@Composable
+private fun ExtraAttemptNote() {
+    Row(
+        modifier = Modifier
+            .clip(KochShape.pill)
+            .background(LootOrangeDark.copy(alpha = 0.18f))
+            .border(1.dp, LootOrangeDark.copy(alpha = 0.65f), KochShape.pill)
+            .padding(horizontal = KochSpace.m, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.AddCircle,
+            contentDescription = null,
+            tint = LootOrangeLight,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "+1 попытка",
+            style = KochType.chip,
+            color = LootOrangeLight,
+            maxLines = 1
+        )
+    }
+}
+
+/** Плашка редкости: цвет — `rarity.colorHex`, контраст на тёмном карбоне ≥ 4.5:1. */
+@Composable
+private fun RarityPlaque(rarity: LootRarity, big: Boolean) {
+    val rarityColor = Color(rarity.colorHex)
+    Box(
+        modifier = Modifier
+            .clip(KochShape.pill)
+            .background(rarityColor.copy(alpha = 0.20f))
+            .border(1.dp, rarityColor.copy(alpha = 0.70f), KochShape.pill)
+            .padding(
+                horizontal = if (big) KochSpace.m else KochSpace.s,
+                vertical = if (big) 6.dp else 3.dp
+            )
+    ) {
+        Text(
+            text = rarity.titleRu.uppercase(),
+            style = (if (big) KochType.chip else KochType.microCaps)
+                .copy(letterSpacing = 1.4.sp),
+            color = rarityColor,
+            maxLines = 1
+        )
+    }
+}
+
+/** Счётчик попыток: «Осталось попыток: N» либо «Попытки закончились». */
+@Composable
+private fun AttemptsLine(attemptsLeft: Int) {
+    val out = attemptsLeft <= 0
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = KochSpace.xs),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.CardGiftcard,
+            contentDescription = null,
+            tint = if (out) LootWarmTertiary else LootOrangeLight,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = if (out) "Попытки закончились" else "Осталось попыток: $attemptsLeft",
+            style = KochType.caption,
+            color = if (out) LootWarmTertiary else LootWarmSecondary,
+            maxLines = 1
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// История дропов — аккордеон, закрытый по умолчанию
+// ---------------------------------------------------------------------------
+
+/**
+ * Подменю «История дропов»: свёрнутое состояние НЕ рендерит список вообще (только
+ * строка с шевроном). Раскрытое — до 20 последних наград во внутреннем скролле,
+ * чтобы панель не растягивалась на весь экран.
+ */
+@Composable
+private fun LootHistoryAccordion(history: List<LootReward>) {
+    var expanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
+        label = "loot_history_chevron"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(Color.White.copy(alpha = 0.07f))
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(KochRadius.input))
+            .clickable(role = Role.Button) { expanded = !expanded }
+            .padding(horizontal = KochSpace.xs, vertical = KochSpace.m),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "История дропов",
+            style = KochType.titleSection,
+            color = LootWarmWhite,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Default.KeyboardArrowDown,
+            contentDescription = if (expanded) "Свернуть историю" else "Развернуть историю",
+            tint = LootOrangeLight,
+            modifier = Modifier
+                .size(24.dp)
+                .graphicsLayer { rotationZ = chevronRotation }
+        )
+    }
+
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically(animationSpec = tween(220), expandFrom = Alignment.Top) +
+            fadeIn(animationSpec = tween(180)),
+        exit = shrinkVertically(animationSpec = tween(180), shrinkTowards = Alignment.Top) +
+            fadeOut(animationSpec = tween(120))
+    ) {
+        if (history.isEmpty()) {
+            Text(
+                text = "Пока пусто — откройте сундук, и дропы появятся здесь.",
+                style = KochType.caption,
+                color = LootWarmTertiary,
+                modifier = Modifier.padding(
+                    start = KochSpace.xs,
+                    end = KochSpace.xs,
+                    bottom = KochSpace.m
+                )
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 212.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = KochSpace.m),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                history.take(LootboxState.MAX_HISTORY).forEach { reward ->
+                    LootHistoryRow(reward)
+                }
+            }
+        }
+    }
+}
+
+/** Строка истории: полоска редкости, название и редкость. Компактно, до 20 строк. */
+@Composable
+private fun LootHistoryRow(reward: LootReward) {
+    val rarity = Color(reward.rarity.colorHex)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(KochRadius.input))
+            .background(Color.White.copy(alpha = 0.04f))
+            .padding(horizontal = KochSpace.m, vertical = KochSpace.s),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 3.dp, height = 26.dp)
+                .clip(CircleShape)
+                .background(rarity)
+        )
+        Spacer(Modifier.width(KochSpace.m))
+        Text(
+            text = reward.title,
+            style = KochType.caption,
+            color = LootWarmWhite,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(KochSpace.s))
+        RarityPlaque(rarity = reward.rarity, big = false)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Кнопка «ОТКРЫТЬ»
+// ---------------------------------------------------------------------------
+
+/**
+ * Главная кнопка лутбокса: высота ≥ 56 dp, оранжевый градиент
+ * (`#FF8A3D → #FFB74D`), тень, тёмный текст (контраст на градиенте > 7:1) и
+ * масштаб 0.98 при нажатии. Неактивное состояние — серый карбон, без тени.
+ */
+@Composable
+private fun LootboxOpenButton(
+    text: String,
+    enabled: Boolean,
+    loading: Boolean,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val active = enabled && !loading
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && active) 0.98f else 1f,
+        label = "loot_open_scale"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .shadow(elevation = if (active) 18.dp else 0.dp, shape = KochShape.pill)
+            .clip(KochShape.pill)
+            .background(
+                if (active) {
+                    Brush.horizontalGradient(listOf(LootOrangeDark, LootOrangeLight))
+                } else {
+                    Brush.horizontalGradient(listOf(Color(0xFF3B332B), Color(0xFF2A231D)))
+                }
+            )
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = active,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .padding(horizontal = KochSpace.l, vertical = KochSpace.m),
+        contentAlignment = Alignment.Center
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                color = Color(0xFF2A1405),
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(22.dp)
+            )
+        } else {
+            Text(
+                text = text,
+                style = KochType.button.copy(
+                    fontSize = 17.sp,
+                    letterSpacing = 1.4.sp
+                ),
+                color = if (active) Color(0xFF2A1405) else LootWarmTertiary,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Реклама за попытку
+// ---------------------------------------------------------------------------
+
+/**
+ * Вторичная кнопка под «ОТКРЫТЬ»: «Смотреть рекламу → +1 попытка».
+ * Карбоновая капсула 44 dp с оранжевой рамкой — заметно, но не спорит с главной CTA.
+ * Показывается, пока попыток меньше пяти и бонусный запас за рекламу не выбран.
+ */
+@Composable
+private fun LootAdAttemptButton(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clip(KochShape.pill)
+            .background(
+                if (pressed) Color(0xFF2E2219) else Color(0xFF1E1712)
+            )
+            .border(1.dp, LootOrangeDark.copy(alpha = 0.55f), KochShape.pill)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .padding(horizontal = KochSpace.m, vertical = KochSpace.s),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = LootOrangeLight,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "Смотреть рекламу → +1 попытка",
+            style = KochType.caption.copy(fontSize = 13.sp),
+            color = LootOrangeLight,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * Полноэкранный ролик «+1 попытка»: `VideoView` без контролов, жестов и паузы,
+ * поверх листа лутбокса. По концу ролика — [onFinished] (начисление попытки и
+ * автовозврат в диалог). Системный «назад» — безопасный выход без начисления
+ * ([onClosed]), чтобы пользователь не остался заперт в рекламе.
+ */
+@Composable
+private fun RewardAdDialog(
+    @AnyRes videoRes: Int,
+    onFinished: () -> Unit,
+    onClosed: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onClosed,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            AdVideoPlayer(
+                videoRes = videoRes,
+                onEnded = onFinished,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = KochSpace.m, vertical = KochSpace.x2l)
+            )
+            Text(
+                text = "Реклама",
+                style = KochType.microCaps,
+                color = Color.White.copy(alpha = 0.55f),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(KochSpace.l)
+            )
+            BackHandler(enabled = true) { onClosed() }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Конфетти
 // ---------------------------------------------------------------------------
 
@@ -720,208 +1407,32 @@ private fun ConfettiLayer(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Карточка приза и история
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun LootRewardCard(
-    reward: LootReward,
-    currentTheme: AppThemeMode,
-    onApplyTheme: (AppThemeMode) -> Unit,
-    onContinue: () -> Unit
-) {
-    val colors = LocalKochColors.current
-    val rarity = Color(reward.rarity.colorHex)
-    val theme = if (reward.type == LootRewardType.THEME) {
-        ThemePreferenceCodec.decode(reward.unlockedThemeName)
-    } else {
-        null
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(KochRadius.card))
-            .background(rarity.copy(alpha = 0.10f))
-            .border(1.dp, rarity.copy(alpha = 0.55f), RoundedCornerShape(KochRadius.card))
-            .drawBehind {
-                // Свечение редкости из левого верхнего угла карточки.
-                drawRect(
-                    brush = Brush.radialGradient(
-                        listOf(rarity.copy(alpha = 0.22f), Color.Transparent),
-                        center = Offset(0f, 0f),
-                        radius = size.width * 0.8f
-                    )
-                )
-            }
-            // Вертикальные отступы m → s: карточка приза отдаёт ~8 dp истории.
-            .padding(horizontal = KochSpace.m, vertical = KochSpace.s)
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(rarity.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    RewardIcon(reward = reward, tint = rarity)
-                }
-                Spacer(Modifier.width(KochSpace.m))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = reward.rarity.titleRu.uppercase(),
-                        style = KochType.microCaps,
-                        color = rarity
-                    )
-                    Text(
-                        text = reward.title,
-                        style = KochType.bodyStrong,
-                        color = colors.textPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = reward.subtitle,
-                        style = KochType.sub,
-                        color = colors.textSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            // Погодный приз: реальная температура из прогноза, а не выдуманная.
-            // Диапазон уже стоит в подзаголовке выше — второй раз не дублируем (m6).
-            val weatherCode = reward.weatherCode
-            if (weatherCode != null) {
-                Spacer(Modifier.height(KochSpace.s))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    WeatherIcon(
-                        iconType = WmoHelper.getIconType(weatherCode, isDay = true),
-                        size = 22.dp
-                    )
-                    Spacer(Modifier.width(KochSpace.s))
-                    Text(
-                        text = WmoHelper.getDescriptionRu(weatherCode),
-                        style = KochType.body,
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(KochSpace.xs))
-            RewardActionButton(
-                text = when {
-                    theme == null -> "Продолжить"
-                    theme == currentTheme -> "Применена"
-                    else -> "Применить"
-                },
-                accent = rarity,
-                onClick = {
-                    if (theme != null) onApplyTheme(theme) else onContinue()
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun RewardActionButton(
-    text: String,
-    accent: Color,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .heightIn(min = 32.dp)
-            .clip(KochShape.pill)
-            .background(accent.copy(alpha = 0.20f))
-            .border(1.dp, accent.copy(alpha = 0.55f), KochShape.pill)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = KochSpace.l, vertical = KochSpace.xs),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = KochType.chip,
-            color = Color.White,
-            maxLines = 1
-        )
-    }
-}
-
-/** Крупная иконка приза: погода по WMO-коду, тема, предмет — без «одной иконки на всё». */
+/** Крупная иконка приза: погода по WMO-коду, тема, предмет. */
 @Composable
 private fun RewardIcon(reward: LootReward, tint: Color) {
     val weatherCode = reward.weatherCode
     if (weatherCode != null) {
         WeatherIcon(
             iconType = WmoHelper.getIconType(weatherCode, isDay = true),
-            size = 28.dp
+            size = 22.dp
         )
         return
     }
+    // `else` вместо перебора всех LootRewardType: список типов ведёт data-слой,
+    // и удаление/добавление типа не должно ломать сборку UI.
     val icon: ImageVector = when (reward.type) {
         LootRewardType.IPHONE -> Icons.Default.PhoneIphone
         LootRewardType.THEME -> Icons.Default.Palette
-        LootRewardType.WEATHER_TOMORROW -> Icons.Default.CardGiftcard
         LootRewardType.UMBRELLA_DISCOUNT -> Icons.Default.BeachAccess
         LootRewardType.RUBBER_BOOTS -> Icons.AutoMirrored.Filled.DirectionsWalk
-        LootRewardType.COFFEE -> Icons.Default.LocalCafe
+        else -> Icons.Default.CardGiftcard
     }
     Icon(
         imageVector = icon,
         contentDescription = null,
         tint = tint,
-        modifier = Modifier.size(26.dp)
+        modifier = Modifier.size(20.dp)
     )
-}
-
-/** Строка истории: цвет редкости полоской слева, заголовок и редкость. */
-@Composable
-private fun LootHistoryRow(reward: LootReward) {
-    val colors = LocalKochColors.current
-    val rarity = Color(reward.rarity.colorHex)
-    KochCard(
-        material = KochMaterial.Solid,
-        padding = androidx.compose.foundation.layout.PaddingValues(
-            horizontal = KochSpace.m,
-            // Вертикаль s → xs: 5 строк истории дают ~40 dp экономии на листе 0.93.
-            vertical = KochSpace.xs
-        )
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(width = 3.dp, height = 32.dp)
-                    .clip(CircleShape)
-                    .background(rarity)
-            )
-            Spacer(Modifier.width(KochSpace.m))
-            Column(modifier = Modifier.weight(1f)) {
-                // M2b: «Вам выпала облачная погода на» обрезалось без «завтра» —
-                // вторая строка возвращает формулировку приза целиком.
-                Text(
-                    text = reward.title,
-                    style = KochType.caption,
-                    color = colors.textPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = reward.rarity.titleRu,
-                    style = KochType.sub,
-                    color = rarity,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

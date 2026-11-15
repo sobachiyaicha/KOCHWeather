@@ -60,7 +60,7 @@ class MainScreenViewModelTest {
         assertNull(state.weatherSourceNote)
         assertTrue(state.savedCities.isEmpty())
         assertFalse(state.isLoadingSavedCities)
-        assertEquals(7, state.themeCatalog.size)
+        assertEquals(6, state.themeCatalog.size)
         assertNull(state.searchError)
         assertTrue(state.imageUrls.isEmpty())
     }
@@ -179,12 +179,12 @@ class MainScreenViewModelTest {
     }
 
     @Test
-    fun appThemeMode_hasAllSevenThemes() {
+    fun appThemeMode_hasAllSixThemes_andNoForest() {
         val themes = AppThemeMode.values()
-        assertEquals(7, themes.size)
+        assertEquals(6, themes.size)
         assertTrue(themes.contains(AppThemeMode.BLUE_SKY))
         assertTrue(themes.contains(AppThemeMode.COPPER_SUNSET))
-        assertTrue(themes.contains(AppThemeMode.FOREST))
+        assertTrue(themes.none { it.name == "FOREST" })
         assertTrue(themes.contains(AppThemeMode.MARS))
         assertTrue(themes.contains(AppThemeMode.CYBERPUNK))
         assertTrue(themes.contains(AppThemeMode.BLOODY_SUNSET))
@@ -292,7 +292,9 @@ class MainScreenViewModelTest {
         val state = MainScreenUiState()
         assertNotNull(state.adCreative)
         assertEquals(AdCatalog.creatives.first(), state.adCreative)
-        assertNull(state.adImageUrl)
+        // Баннер стартует с фото1 и не открывает поп-ап сам по себе (ТЗ п. 3/5).
+        assertEquals(AdCatalog.bannerCreatives.first(), state.adBannerCreative)
+        assertFalse(state.isAdPopupVisible)
         assertFalse(state.isSelectedCityCurrentLocation)
         assertTrue(state.lootboxState.history.isEmpty())
         assertEquals(0, state.lootboxState.lastRewardSeq)

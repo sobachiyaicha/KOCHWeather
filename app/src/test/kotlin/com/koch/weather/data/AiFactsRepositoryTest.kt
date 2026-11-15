@@ -1,5 +1,6 @@
 package com.koch.weather.data
 
+import com.koch.weather.data.model.FactOfDayPolicy
 import com.koch.weather.data.repository.AiFactsRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -7,8 +8,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Item 12 фазы 5: факт дня детерминирован, «другой факт» не повторяет текущий,
- * список фактов расширен (>= 16), тексты без повторов.
+ * Item 12 фазы 5: список фактов расширен (>= 16), тексты без повторов,
+ * факт выбирается по индексу сессии — при перезапуске он меняется, а внутри
+ * сессии «другой факт» не повторяет текущий.
  */
 class AiFactsRepositoryTest {
 
@@ -26,56 +28,47 @@ class AiFactsRepositoryTest {
     }
 
     @Test
-    fun factForDay_isDeterministic() {
-        val first = repository.getFactForDay("Москва", 123)
-        val second = repository.getFactForDay("Москва", 123)
-        assertEquals(first, second)
-        assertEquals(repository.getFactForDay(123), repository.getFactForDay(null, 123))
+    fun factCount_matchesFactList() {
+        assertEquals(repository.getAllFacts().size, repository.getFactCount())
     }
 
     @Test
-    fun twoColdStartsWithSameCityAndDay_giveSameFact() {
-        // D5: перезапуск в тот же день не должен менять детерминированный факт.
-        val day = 318
-        val firstStart = AiFactsRepository().getFactForDay("Санкт-Петербург", day)
-        val secondStart = AiFactsRepository().getFactForDay("Санкт-Петербург", day)
-        assertEquals(firstStart, secondStart)
+    fun factAt_isStableForSessionIndex() {
+        // Внутри сессии факт берётся по сохранённому индексу: рекомпозиция,
+        // смена города и возврат из фона текст не меняют.
+        val index = 7
+        val fact = repository.getFactAt(index)
+        assertEquals(fact, AiFactsRepository().getFactAt(index))
     }
 
     @Test
-    fun refreshCallsDoNotChangeFactOfDay() {
-        // Другой факт выдаёт только refreshAiFact(); Random не влияет на сид дня.
-        val before = repository.getFactForDay("Москва", 77)
-        repeat(50) { repository.getNextFact(before) }
-        assertEquals(before, repository.getFactForDay("Москва", 77))
+    fun factAt_normalizesOutOfRangeIndex() {
+        val facts = repository.getAllFacts()
+        assertEquals(facts.first(), repository.getFactAt(0))
+        assertEquals(facts.last(), repository.getFactAt(facts.size - 1))
+        assertEquals(facts.first(), repository.getFactAt(facts.size))
+        assertEquals(facts.last(), repository.getFactAt(-1))
     }
 
     @Test
-    fun consecutiveDays_giveDifferentFacts() {
-        (1..40).forEach { day ->
-            assertNotEquals(
-                "Соседние дни не должны повторять факт (день $day)",
-                repository.getFactForDay("Москва", day),
-                repository.getFactForDay("Москва", day + 1)
-            )
-        }
+    fun newIndexPerStart_variesFact() {
+        // Перезапуск больше не даёт детерминированный по дню факт: индекс на
+        // старте выбирается случайно, поэтому тексты стартов различаются.
+        val facts = (1..100).map {
+            repository.getFactAt(FactOfDayPolicy.initialIndex(repository.getFactCount()))
+        }.toSet()
+        assertTrue("Факт должен меняться между запусками", facts.size > 1)
     }
 
     @Test
-    fun differentCities_varyFacts() {
-        val cities = listOf("Санкт-Петербург", "Москва", "Сочи", "Казань", "Дубай")
-        val facts = cities.map { repository.getFactForDay(it, 10) }.toSet()
-        assertTrue("Разные города могут давать разные факты", facts.size >= 2)
-    }
-
-    @Test
-    fun nextFact_neverRepeatsCurrent() {
-        repository.getAllFacts().forEach { current ->
+    fun nextFactIndex_neverRepeatsCurrentFact() {
+        val facts = repository.getAllFacts()
+        facts.indices.forEach { current ->
             repeat(25) {
-                assertNotEquals(current, repository.getNextFact(current))
+                val next = FactOfDayPolicy.nextIndex(current, facts.size)
+                assertNotEquals(facts[current], facts[next])
             }
         }
-        assertTrue(repository.getAllFacts().contains(repository.getNextFact("неизвестный факт")))
     }
 
     @Test

@@ -37,8 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.koch.weather.BuildConfig
-import com.koch.weather.data.model.AdAction
-import com.koch.weather.data.model.AppThemeMode
 import com.koch.weather.data.model.BottomTab
 import com.koch.weather.data.model.ConditionSegment
 import com.koch.weather.data.model.DailyItem
@@ -46,7 +44,7 @@ import com.koch.weather.data.model.ImageCategory
 import com.koch.weather.data.model.MainScreenUiState
 import com.koch.weather.data.model.WeatherDataState
 import com.koch.weather.data.model.WeatherDomainData
-import com.koch.weather.data.model.backgroundRes
+import com.koch.weather.data.model.defaultBackgroundRes
 import com.koch.weather.ui.components.AdPromoDialog
 import com.koch.weather.ui.components.CityListScreen
 import com.koch.weather.ui.components.CitySearchScreen
@@ -76,10 +74,10 @@ import java.util.Locale
 private fun formatWeatherTime(epochMillis: Long, formatter: SimpleDateFormat): String =
     formatter.format(Date(epochMillis))
 
-/** Порядок блоков ленты: стабильные списки, не пересоздаются на каждую рекомпозицию. */
-private val CleanFeedOrder: List<String> = listOf(
-    "services_grid", "hourly_card", "daily_card", "ai_fact_block", "premium_banner", "ad_banner"
-)
+/**
+ * Порядок блоков ленты: один и тот же для ВСЕХ тем (как в «Северном сиянии»).
+ * Стабильный список, не пересоздаётся на каждую рекомпозицию.
+ */
 private val PromoFeedOrder: List<String> = listOf(
     "ai_fact_block", "premium_banner", "ad_banner", "services_grid", "hourly_card", "daily_card"
 )
@@ -158,12 +156,19 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var isPaywallOpen by remember { mutableStateOf(false) }
-    var isAdPromoOpen by remember { mutableStateOf(false) }
     var isLootboxOpen by remember { mutableStateOf(false) }
     var selectedDayDetail by remember { mutableStateOf<DailyItem?>(null) }
-    // Облачная вуаль — один раз за сессию. Латч живёт здесь, чтобы не сбрасываться при
-    // уходе с главной на другую вкладку (там MainScreenContent выходит из композиции).
+    // Облачная вуаль — цикл на стороне VM (первый показ через 4 с, дальше случайно
+    // через 20–30 с). Латч живёт здесь, чтобы не сбрасываться при уходе с главной
+    // на другую вкладку (там MainScreenContent выходит из композиции).
     var cloudVeilDismissed by rememberSaveable { mutableStateOf(false) }
+    // Вуаль возвращается по таймеру VM, поэтому латч «уже стёрто» сбрасывается на
+    // каждый новый показ — иначе после первого стирания оверлей не вернулся бы.
+    LaunchedEffect(uiState.isCloudLocked, uiState.isCloudsCleared) {
+        if (uiState.isCloudLocked && !uiState.isCloudsCleared) {
+            cloudVeilDismissed = false
+        }
+    }
     // Позиция ленты живёт на уровне MainScreen: повторный тап по «Главная» скроллит наверх,
     // а возврат с другой вкладки по-прежнему открывает главную сверху.
     val homeListState = remember { LazyListState() }
@@ -240,11 +245,6 @@ fun MainScreen(
                     onCloudsCleared = { viewModel.onCloudsCleared() },
                     onRefreshAiFact = { viewModel.refreshAiFact() },
                     onOpenPaywall = { isPaywallOpen = true },
-                    onOpenAdPromo = {
-                        // Креатив переключается на стороне VM (dayOfYear + число открытий).
-                        viewModel.openAdPromo()
-                        isAdPromoOpen = true
-                    },
                     onOpenFlight = { viewModel.openFlightSheet() },
                     onOpenLootbox = { isLootboxOpen = true },
                     onOpenTaxi = { viewModel.openTaxiSheet() },
@@ -391,21 +391,12 @@ fun MainScreen(
             )
         }
 
-        if (isAdPromoOpen) {
+        // Реклама (ТЗ п. 4–5): полноэкранный поп-ап открывается только по событию
+        // «облака стёрты» — состояние готовит ViewModel, ручного вызова больше нет.
+        if (uiState.isAdPopupVisible) {
             AdPromoDialog(
                 creative = uiState.adCreative,
-                imageUrl = uiState.adImageUrl,
-                onAction = { action ->
-                    // Лист рекламы закрывается, CTA ведёт в конкретную функцию приложения.
-                    isAdPromoOpen = false
-                    when (action) {
-                        AdAction.PAYWALL -> isPaywallOpen = true
-                        AdAction.LOOTBOX -> isLootboxOpen = true
-                        AdAction.UMBRELLA_SHOP -> viewModel.openUmbrellaShop()
-                        AdAction.FOOD -> viewModel.openFoodSheet()
-                    }
-                },
-                onDismiss = { isAdPromoOpen = false }
+                onDismiss = { viewModel.dismissAdPopup() }
             )
         }
 
@@ -427,6 +418,7 @@ fun MainScreen(
                 currentTheme = uiState.currentTheme,
                 onOpenLootbox = { viewModel.openLootbox() },
                 onApplyTheme = { theme -> viewModel.setTheme(theme) },
+                onGrantAdAttempt = { viewModel.grantAdAttempt() },
                 onDismiss = { isLootboxOpen = false }
             )
         }
@@ -493,7 +485,6 @@ internal fun MainScreenContent(
     onCloudsCleared: () -> Unit,
     onRefreshAiFact: () -> Unit,
     onOpenPaywall: () -> Unit,
-    onOpenAdPromo: () -> Unit,
     onOpenFlight: () -> Unit,
     onOpenLootbox: () -> Unit,
     onOpenTaxi: () -> Unit,
@@ -513,7 +504,8 @@ internal fun MainScreenContent(
     var veilCooldownUntil by remember { mutableLongStateOf(0L) }
 
     ProvideKochColors(uiState.currentTheme) {
-        // Вуаль показываем только когда есть что скрывать (weather != null) и один раз за сессию.
+        // Вуаль показываем только когда есть что скрывать (weather != null); возврат
+        // оверлея задаёт таймер VM, а не латч «один раз за сессию».
         val veilVisible = uiState.isCloudVeilVisible &&
             !cloudVeilDismissed &&
             uiState.weather != null
@@ -644,11 +636,12 @@ internal fun MainScreenContent(
                     )
                 }
         ) {
-            // Фон темы: локальный блюр-фон из ресурсов (data-coder: ThemeBackgrounds).
-            // Никакой сети и Coil — фон есть всегда, в правильном разрешении.
+            // Фон темы: локальный ресурс из ресурсов (data-coder: ThemeBackgrounds).
+            // Тема по умолчанию берёт `theme_default.jpg` без блюра (defaultBackgroundRes),
+            // остальные — свой блюр-фон. Никакой сети и Coil — фон есть всегда.
             KochSkyBackground(
                 modifier = Modifier.matchParentSize(),
-                imageRes = uiState.currentTheme.backgroundRes
+                imageRes = uiState.currentTheme.defaultBackgroundRes
             )
 
             LazyColumn(
@@ -743,10 +736,9 @@ internal fun MainScreenContent(
                         Spacer(modifier = Modifier.height(KochSpace.m))
                     }
 
-                    // Голубая тема — порядок clean_main/bottom_nav: погода сразу под шапкой.
-                    // Остальные темы — «перегруженный» порядок theme_copper/f_063: промо сверху.
-                    val cleanOrder = uiState.currentTheme == AppThemeMode.BLUE_SKY
-                    val feedOrder = if (cleanOrder) CleanFeedOrder else PromoFeedOrder
+                    // Единый порядок ленты для всех тем (TZ): промо сверху, погода ниже.
+                    // Отдельного «чистого» порядка для голубой темы больше нет.
+                    val feedOrder = PromoFeedOrder
 
                     feedOrder.forEach { key ->
                         if (key == "ad_banner" && !uiState.showAds) return@forEach
@@ -793,7 +785,9 @@ internal fun MainScreenContent(
 
                                     "ai_fact_block" -> AiFactCard(
                                         aiFact = uiState.aiFact,
-                                        // Тап (и строка «Другой факт») — новый факт;
+                                        aiFactImageRes = uiState.aiFactImageRes,
+                                        isAnotherFactAvailable = uiState.isAnotherFactAvailable,
+                                        // Тап (и строка «Другой факт») — новый факт/картинка;
                                         // модалка травы больше не живёт на этом блоке.
                                         onClick = onRefreshAiFact,
                                         onLongClick = onOpenGrassModal
@@ -806,9 +800,8 @@ internal fun MainScreenContent(
                                     )
 
                                     "ad_banner" -> AdBannerCard(
-                                        creative = uiState.adCreative,
-                                        imageUrl = uiState.adImageUrl,
-                                        onClick = onOpenAdPromo
+                                        // Только фото1/фото2: ротацию задаёт ViewModel.
+                                        creative = uiState.adBannerCreative
                                     )
                                 }
                             }
@@ -888,7 +881,8 @@ internal fun MainScreenContent(
                 )
             }
 
-            // Облачная вуаль (refs/cloud_swipe.png, 2:40) — ровно один раз за сессию.
+            // Облачная вуаль (refs/cloud_swipe.png, 2:40) — цикл VM: 4 с после старта,
+            // затем снова через случайные 20–30 с после стирания.
             if (veilVisible) {
                 // Вуаль НЕ должна накрывать нижний бар: он теперь снаружи, в Scaffold,
                 // а bottomContentPadding — его точная высота (включая navigationBars).

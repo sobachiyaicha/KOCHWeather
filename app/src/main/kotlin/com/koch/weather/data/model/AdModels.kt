@@ -1,93 +1,158 @@
 package com.koch.weather.data.model
 
+import androidx.annotation.AnyRes
 import androidx.compose.runtime.Immutable
+import com.koch.weather.R
+import kotlin.random.Random
 
-/** Куда ведёт CTA рекламного креатива. UI маршрутизирует, данные не знают про экраны. */
-enum class AdAction {
-    PAYWALL,
-    LOOTBOX,
-    UMBRELLA_SHOP,
-    FOOD
+/** Тип медиа в рекламном креативе: фото рисуем через `Image`, ролик — через `VideoView`. */
+enum class AdMediaType {
+    PHOTO,
+    VIDEO
 }
 
 /**
- * Рекламный креатив (Реклама — item 9 фазы 5).
+ * Рекламный креатив-медиа (ТЗ «реклама»).
  *
- * Все тексты — на русском, без эмодзи; [disclaimerRu] обязателен и показывается
- * мелким шрифтом под CTA. [imageCategory] == null означает «фото нет, рисуем иконку».
+ * Пул состоит из шести креативов, и медиа «вылетает» без надписей: в полноэкранном
+ * поп-апе нет ни заголовков, ни текста, ни CTA — только само медиа и крестик.
+ * Единственный текст — красная подпись «КУПИТЬ СЕЙЧАС!» под тремя фото
+ * ([hasBuyLabel]); у остальных креативов надписей нет вообще.
+ *
+ * @param id стабильный идентификатор креатива (он же ключ анимаций)
+ * @param type фото или видео
+ * @param mediaRes `R.drawable.ad_*` для фото, `R.raw.ad_*` для видео
+ * @param hasBuyLabel красная подпись «КУПИТЬ СЕЙЧАС!» под медиа
  */
 @Immutable
 data class AdCreative(
     val id: String,
-    val brandRu: String,
-    val headline: String,
-    val body: String,
-    val ctaLabel: String,
-    val action: AdAction,
-    val imageCategory: ImageCategory?,
-    val disclaimerRu: String
+    val type: AdMediaType,
+    @param:AnyRes val mediaRes: Int,
+    val hasBuyLabel: Boolean = false
 )
 
 /**
- * Каталог рекламы (4 креатива). Ротация детерминированная:
- * `creatives[(dayOfYear + openCount) % size]` — «всегда одна и та же реклама»
- * больше не воспроизводится, но и случайности без данных нет.
+ * Каталог рекламы (ТЗ «реклама»): пул из шести креативов на локальных медиа.
+ *
+ * - фото: `ad_photo1`, `ad_photo2`, `ad_slippers` (с подписью), `ad_son` (без подписи);
+ * - видео: `ad_lion` (первый показ в жизни пользователя), `ad_slippers_video`.
+ *
+ * Выбор креатива поп-апа случайный, но воспроизводимый в тестах: тип медиа
+ * (видео/фото) решает `Random`, который передаётся параметром ([popupCreative]).
+ * Один и тот же креатив не показывается два раза подряд — последний id
+ * исключается из выбора.
  */
 object AdCatalog {
 
-    val creatives: List<AdCreative> = listOf(
-        AdCreative(
-            id = "ad_ai_course",
-            brandRu = "НейроШкола",
-            headline = "Дизайнеры больше не нужны",
-            body = "Научим собирать сайты с помощью нейросетей за 15 минут в день. " +
-                "Первое занятие бесплатно, второе — уже нет.",
-            ctaLabel = "Смотреть премиум-условия",
-            action = AdAction.PAYWALL,
-            imageCategory = ImageCategory.AD_LAPTOP,
-            disclaimerRu = "Реклама. Курс не связан с разработчиком приложения."
-        ),
-        AdCreative(
-            id = "ad_iphone_lootbox",
-            brandRu = "Погодные лутбоксы",
-            headline = "iPhone 16 Pro Max",
-            body = "Шанс выиграть 0.001 %. Кто-то же должен выиграть — почему не вы? " +
-                "Остальным достанется дождь на завтра.",
-            ctaLabel = "Открыть лутбоксы",
-            action = AdAction.LOOTBOX,
-            imageCategory = ImageCategory.IPHONE,
-            disclaimerRu = "Реклама. Розыгрыш развлекательный, приз не выдаётся."
-        ),
-        AdCreative(
-            id = "ad_umbrella_shop",
-            brandRu = "Магазин зонтов",
-            headline = "Зонтики от 649 ₽",
-            body = "Автоматические зонты с ветрозащитой до 15 м/с. " +
-                "Доставка курьером за 30 минут, пока дождь ещё идёт.",
-            ctaLabel = "В магазин зонтов",
-            action = AdAction.UMBRELLA_SHOP,
-            imageCategory = null,
-            disclaimerRu = "Реклама. Магазин работает внутри приложения."
-        ),
-        AdCreative(
-            id = "ad_yandex_food",
-            brandRu = "Яндекс Еда",
-            headline = "Бургер за 30 минут",
-            body = "Курьер приедет даже в ливень. Первый заказ по промокоду ПИТЕР — " +
-                "доставка бесплатно.",
-            ctaLabel = "Открыть Еду",
-            action = AdAction.FOOD,
-            imageCategory = ImageCategory.FOOD,
-            disclaimerRu = "Реклама. Сервис не связан с разработчиком приложения."
-        )
+    /** Красная подпись под тремя фото (ТЗ п. 2). */
+    const val BUY_LABEL_RU = "КУПИТЬ СЕЙЧАС!"
+
+    /** Шанс видео-креатива в поп-апе: 50 % видео / 50 % фото. */
+    const val POPUP_VIDEO_CHANCE_PERCENT = 50
+
+    /** Верхняя граница для стохастических бросков в процентах. */
+    private const val PERCENT_MAX = 100
+
+    /** Крупная белая надпись на зелёной плашке баннера (ТЗ п. 3). */
+    const val BANNER_DISCOUNT_RU = "СКИДКА 50%"
+
+    /** Мелкая надпись под ней на плашке баннера. */
+    const val BANNER_NOTE_RU = "только сегодня"
+
+    val photo1 = AdCreative(
+        id = "ad_photo1",
+        type = AdMediaType.PHOTO,
+        mediaRes = R.drawable.ad_photo1,
+        hasBuyLabel = true
     )
 
+    val photo2 = AdCreative(
+        id = "ad_photo2",
+        type = AdMediaType.PHOTO,
+        mediaRes = R.drawable.ad_photo2,
+        hasBuyLabel = true
+    )
+
+    val slippers = AdCreative(
+        id = "ad_slippers",
+        type = AdMediaType.PHOTO,
+        mediaRes = R.drawable.ad_slippers,
+        hasBuyLabel = true
+    )
+
+    val son = AdCreative(
+        id = "ad_son",
+        type = AdMediaType.PHOTO,
+        mediaRes = R.drawable.ad_son
+    )
+
+    val lion = AdCreative(
+        id = "ad_lion",
+        type = AdMediaType.VIDEO,
+        mediaRes = R.raw.ad_lion
+    )
+
+    val slippersVideo = AdCreative(
+        id = "ad_slippers_video",
+        type = AdMediaType.VIDEO,
+        mediaRes = R.raw.ad_slippers
+    )
+
+    /** Пул полноэкранного поп-апа: ровно шесть креативов. */
+    val creatives: List<AdCreative> = listOf(
+        photo1,
+        photo2,
+        slippers,
+        son,
+        lion,
+        slippersVideo
+    )
+
+    /** Баннер главного экрана — только фото1/фото2 (ТЗ п. 3). */
+    val bannerCreatives: List<AdCreative> = listOf(photo1, photo2)
+
+    /** Видео-креативы поп-апа: `ad_lion`, `ad_slippers_video`. */
+    val popupVideoCreatives: List<AdCreative> =
+        creatives.filter { it.type == AdMediaType.VIDEO }
+
+    /** Фото-креативы поп-апа: фото1, фото2, тапки, сын. */
+    val popupPhotoCreatives: List<AdCreative> =
+        creatives.filter { it.type == AdMediaType.PHOTO }
+
+    /** Первый в жизни пользователя поп-ап — обязательно «лев в очках». */
+    fun firstShowCreative(): AdCreative = lion
+
     /**
-     * Детерминированный выбор креатива. Один и тот же день + число открытий
-     * дают один и тот же креатив (без Random и без пересборки на рекомпозиции).
+     * Креатив полноэкранного поп-апа после стирания облаков.
+     *
+     * С вероятностью [POPUP_VIDEO_CHANCE_PERCENT] % берётся видео-креатив,
+     * иначе фото. Креатив [lastShownId] (последний показанный) исключается
+     * из пула, поэтому один и тот же ролик/фото не идёт два раза подряд.
+     * [random] инжектится параметром — как в [FactOfDayPolicy] — чтобы тесты
+     * получали детерминированный выбор без глобального состояния.
+     *
+     * Пул из одного креатива: повтор неизбежен, поэтому возвращается он же,
+     * а не падение/пустой результат.
      */
-    fun creativeFor(dayOfYear: Int, openCount: Int = 0): AdCreative {
-        val index = (dayOfYear + openCount).mod(creatives.size)
-        return creatives[index]
+    fun popupCreative(
+        lastShownId: String? = null,
+        random: Random = Random.Default
+    ): AdCreative {
+        val video = random.nextInt(PERCENT_MAX) < POPUP_VIDEO_CHANCE_PERCENT
+        // Пустой пул типа (каталог без роликов) — не повод падать: берём весь пул.
+        val pool = (if (video) popupVideoCreatives else popupPhotoCreatives).ifEmpty { creatives }
+        val candidates = pool.filterNot { it.id == lastShownId }
+        val resolved = candidates.ifEmpty { pool }
+        return resolved[random.nextInt(resolved.size)]
     }
+
+    /** Ротация поп-апа: без `Random`, одинаковый вход — одинаковый креатив. */
+    fun creativeFor(sequence: Int): AdCreative = creatives[sequence.mod(creatives.size)]
+
+    /** Ротация баннера главного экрана между фото1 и фото2. */
+    fun bannerCreativeFor(sequence: Int): AdCreative =
+        bannerCreatives[sequence.mod(bannerCreatives.size)]
+
+    fun byId(id: String): AdCreative? = creatives.firstOrNull { it.id == id }
 }

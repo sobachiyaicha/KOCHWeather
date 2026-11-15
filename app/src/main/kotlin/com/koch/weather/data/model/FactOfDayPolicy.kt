@@ -1,27 +1,28 @@
 package com.koch.weather.data.model
 
+import kotlin.random.Random
+
 /**
- * Правило «факта дня» (item 12 фазы 5, D5 с устройства).
+ * Выбор «факта дня» на сессию приложения.
  *
- * Сид факта зависит только от города и дня года. Но «город» для факта дня —
- * это постоянный гео-город (текущее место), а не последний открытый город:
- * иначе после перезапуска приложения, который восстанавливает последний
- * просмотренный город, факт менялся бы в течение одного календарного дня.
- *
- * Смена выбранного города факт не меняет; другой факт выдаёт только
- * `MainScreenViewModel.refreshAiFact()`.
+ * Детерминизм по городу и дню года убран: факт выбирается случайно при каждом
+ * запуске приложения. Выбранный индекс лежит в [MainScreenUiState.aiFactIndex],
+ * поэтому рекомпозиция, смена города и возврат из фона в течение сессии факт не
+ * меняют — новый факт будет только после перезапуска приложения или кнопки
+ * «Другой факт».
  */
 object FactOfDayPolicy {
 
-    /**
-     * Город-якорь для сида факта: гео-город из списка, иначе первый город,
-     * иначе явный fallback. Порядок списка и выбранный город не влияют.
-     */
-    fun anchorCityName(
-        cities: List<CityLocation>,
-        fallback: String = DefaultCities.GEO_CITY_NAME
-    ): String =
-        cities.firstOrNull { DefaultCities.isGeoCity(it) }?.name
-            ?: cities.firstOrNull()?.name
-            ?: fallback
+    /** Индекс факта на старте приложения: любой из [size]. */
+    fun initialIndex(size: Int, random: Random = Random.Default): Int =
+        if (size <= 0) 0 else random.nextInt(size)
+
+    /** Индекс «другого факта»: гарантированно не равен [currentIndex]. */
+    fun nextIndex(currentIndex: Int, size: Int, random: Random = Random.Default): Int {
+        if (size <= 1) return 0
+        val current = currentIndex.mod(size)
+        // Сдвиг 1..size-1 по кругу: тот же факт не выпадает.
+        val offset = random.nextInt(size - 1) + 1
+        return (current + offset).mod(size)
+    }
 }

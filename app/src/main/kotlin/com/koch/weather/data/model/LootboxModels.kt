@@ -13,6 +13,13 @@ enum class LootRarity(val titleRu: String, val colorHex: Long) {
     MYTHIC("Мифический", 0xFFFF1744)
 }
 
+/**
+ * Род награды: по нему UI согласует глагол «выпал / выпала / выпало».
+ * Женский/мужской/средний — без множественного числа: названия призов
+ * подобраны так, чтобы любой из трёх глаголов читался грамматически верно.
+ */
+enum class LootGender { MASCULINE, FEMININE, NEUTER }
+
 enum class LootRewardType {
     IPHONE,
     THEME,
@@ -20,7 +27,19 @@ enum class LootRewardType {
     WEATHER_TOMORROW,
     UMBRELLA_DISCOUNT,
     RUBBER_BOOTS,
-    COFFEE
+
+    // Первые четыре дропа — сценарные, строго по порядку (см. LootboxPrizeFactory).
+    MOTHER_FROM_WINDOW,
+    SVO_CONTRACT,
+    MIYAGI_SON,
+    DODEP_CHANCE,
+
+    // Дальше — случайный пул.
+    RAIN_PASS,
+    GOOD_DAY_CERT,
+    CLOUD_INVISIBILITY_HAT,
+    COURTYARD_PUDDLE,
+    PERSONAL_CLOUD
 }
 
 @Immutable
@@ -39,8 +58,23 @@ data class LootReward(
     val temperatureRangeRu: String? = null,
     /** «завтра» или «сегодня» — согласовано с тем днём, на который выдан приз. */
     val dayLabelRu: String = "завтра",
-    val timestamp: Long = System.currentTimeMillis()
-)
+    val timestamp: Long = System.currentTimeMillis(),
+    /** Род названия приза: «выпал» / «выпала» / «выпало» (см. [revealVerbRu]). */
+    val gender: LootGender = LootGender.NEUTER,
+    /** Приз даёт +1 бесплатную попытку лутбокса (UI показывает «+1 попытка»). */
+    val grantsExtraAttempt: Boolean = false
+) {
+    /**
+     * Глагол выпадения под род приза. Вычисляемое свойство без backing-поля:
+     * kotlinx.serialization его не пишет в JSON истории.
+     */
+    val revealVerbRu: String
+        get() = when (gender) {
+            LootGender.MASCULINE -> "выпал"
+            LootGender.FEMININE -> "выпала"
+            LootGender.NEUTER -> "выпало"
+        }
+}
 
 @Immutable
 data class LootboxState(
@@ -56,10 +90,17 @@ data class LootboxState(
     val unlockedThemes: Set<AppThemeMode> = setOf(
         AppThemeMode.BLUE_SKY,
         AppThemeMode.COPPER_SUNSET,
-        AppThemeMode.FOREST,
-        AppThemeMode.MARS
-    )
+        AppThemeMode.MARS,
+        AppThemeMode.AURORA_BOREALIS
+    ),
+    /** Сколько бесплатных попыток даётся пользователю за всё время. */
+    val freeAttemptsTotal: Int = 5,
+    /** Сколько попыток уже потрачено; персистится в DataStore. */
+    val attemptsUsed: Int = 0
 ) {
+    /** Осталось попыток; ниже нуля не уходит. */
+    val attemptsLeft: Int get() = (freeAttemptsTotal - attemptsUsed).coerceAtLeast(0)
+
     /** Применяет выпавшую награду: история до 20, счётчик открытий и seq растут. */
     fun withDrop(reward: LootReward, themes: Set<AppThemeMode> = unlockedThemes): LootboxState =
         copy(
@@ -73,6 +114,9 @@ data class LootboxState(
 
     companion object {
         const val MAX_HISTORY: Int = 20
+
+        /** 5 бесплатных попыток на пользователя (ТЗ). */
+        const val FREE_ATTEMPTS_TOTAL: Int = 5
     }
 }
 

@@ -39,12 +39,15 @@ object ThemeRestorePolicy {
 
 object ThemeCatalog {
 
-    /** Темы, доступные без лутбоксов. Это единственный источник правды для дефолтов. */
+    /**
+     * Темы, доступные без лутбоксов. Это единственный источник правды для дефолтов.
+     * «Северное сияние» открыто сразу (TZ), «Кровавый закат» и остальные — из лутбокса.
+     */
     val DEFAULT_UNLOCKED: Set<AppThemeMode> = setOf(
         AppThemeMode.BLUE_SKY,
         AppThemeMode.COPPER_SUNSET,
-        AppThemeMode.FOREST,
-        AppThemeMode.MARS
+        AppThemeMode.MARS,
+        AppThemeMode.AURORA_BOREALIS
     )
 
     /** Темы, которые можно получить только из лутбокса. */
