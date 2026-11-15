@@ -2,18 +2,14 @@ package com.koch.weather.ui.components
 
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
-import android.graphics.SurfaceTexture
-import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.view.Surface
 import android.view.TextureView
 import androidx.activity.compose.BackHandler
 import androidx.annotation.AnyRes
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -70,13 +66,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.koch.weather.data.model.AdCatalog
 import com.koch.weather.data.model.AdCreative
 import com.koch.weather.data.model.AdMediaType
 import com.koch.weather.ui.theme.AdBuyRed
 import com.koch.weather.ui.theme.KochSpace
 import com.koch.weather.ui.theme.KochType
-import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -107,17 +107,18 @@ private val CloseButtonSize = 44.dp
  *
  * Автозакрытие — только для видео: когда ролик доиграл до конца, поп-ап
  * закрывается тем же путём, что и крестик ([requestDismiss]). Закрытие планируется
- * через `Handler(Looper.getMainLooper()).post`: колбэк `MediaPlayer` не разрушает
+ * через `Handler(Looper.getMainLooper()).post`: колбэк плеера не разрушает
  * диалог внутри себя, иначе на части прошивок (realme/ColorOS) освобождение плеера
  * идёт из его же callback и main thread зависает.
  *
  * Системный «назад» больше не глушится: back закрывает рекламу тем же отложенным
  * путём, что и крестик (пользователь не заперт в полноэкранном поп-апе).
  *
- * Видео-ролик проигрывается целиком через `TextureView` + `MediaPlayer`: без контролов,
- * без паузы и перемотки, со звуком. `TextureView` — обычный View в иерархии, поэтому
- * не создаёт отдельный `SurfaceView`-слой поверх окна `Dialog` и не тормозит
- * композицию кадрами чужого surface (жалоба realme RMX3151: ~3000 пропущенных кадров).
+ * Видео-ролик проигрывается целиком через AndroidX Media3 (ExoPlayer): без контролов,
+ * без паузы и перемотки, со звуком. Плеер не создаётся здесь — его готовит
+ * [AdVideoEngine] заранее (`requestAdPopup`), поэтому первый кадр появляется сразу,
+ * без индикаторов загрузки. `PlayerView` отдаёт кадр либо в `SurfaceView` (дефолтный
+ * `surface_type`, не блокирует main), либо в `TextureView` fallback-режима.
  */
 @Composable
 fun AdPromoDialog(
@@ -130,11 +131,16 @@ fun AdPromoDialog(
     val isDismissing = remember { AtomicBoolean(false) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
-    // Единственная точка закрытия поп-апа. post() гарантирует, что onCompletion
-    // плеера вернётся раньше, чем композиция снимет диалог и `DisposableEffect`
-    // освободит MediaPlayer/Surface.
+    // Единственная точка закрытия поп-апа. post() гарантирует, что колбэк плеера
+    // (в т.ч. `Player.Listener.onPlaybackStateChanged(STATE_ENDED)`) вернётся раньше,
+    // чем композиция снимет диалог и его `DisposableEffect` отвяжет плеер от поверхности.
+    // parkCurrent() вызывается ещё при живой View: выход кодека уходит на фиктивную
+    // поверхность движка, поэтому teardown PlayerView не отдаст кодеку освобождённую
+    // Surface (иначе `MediaCodec.setOutputSurface` падает с
+    // `IllegalArgumentException: The surface has been released`).
     val requestDismiss: () -> Unit = {
         if (isDismissing.compareAndSet(false, true)) {
+            AdVideoEngine.parkCurrent()
             mainHandler.post { currentOnDismiss() }
         }
     }
@@ -307,19 +313,42 @@ private fun readVideoAspect(context: Context, @AnyRes resId: Int): Float? {
 private fun resourceUri(context: Context, @AnyRes resId: Int): Uri =
     Uri.parse("android.resource://${context.packageName}/$resId")
 
+/** Ссылка-держатель `PlayerView` для `AndroidView`: без записи в snapshot-состояние. */
+private class PlayerViewRef {
+    var view: PlayerView? = null
+}
+
+/** Ссылка-держатель `TextureView` fallback-режима (тоже вне snapshot-состояния). */
+private class TextureViewRef {
+    var view: TextureView? = null
+}
+
 /**
- * Ролик рекламы на `TextureView` + `MediaPlayer`: без контролов, паузы и перемотки.
+ * Ролик рекламы поп-апа на AndroidX Media3.
  *
- * Почему не `VideoView`: он рисует кадр в отдельный `SurfaceView`-слой поверх окна
- * `Dialog`. На realme RMX3151 композиция такого слоя давала тысячи пропущенных кадров
- * и «залипание» после ролика. `TextureView` — обычный View в иерархии, его кадр
- * композитится вместе с остальным UI.
+ * Плеер здесь **не создаётся и не готовится**: его заранее готовит [AdVideoEngine]
+ * (вызов из `MainScreenViewModel.requestAdPopup()` в момент стирания облаков).
+ * Диалог только выбирает ветку по фактическому состоянию движка:
+ * - [AdVideoEngine.Renderer.EXOPLAYER] — основной путь: `PlayerView` (дефолтный
+ *   `surface_type`, контролов и индикаторов нет);
+ * - [AdVideoEngine.Renderer.LEGACY_MEDIA_PLAYER] — fallback: один общий `MediaPlayer`
+ *   на процесс + `TextureView`, освобождается только при выходе из приложения;
+ * - [AdVideoEngine.Renderer.NONE] — ролик не поднялся: чёрная подложка, поп-ап живёт.
  *
- * Жизненный цикл: при уходе приложения в фон — пауза, при возврате — продолжение
- * с того же места (звук не глушим); `DisposableEffect` при закрытии поп-апа
- * освобождает `MediaPlayer` и `Surface`. Освобождение идемпотентно, слушатели
- * снимаются до `release()`. Когда ролик доиграл до конца, вызывается [onEnded] —
- * получатель сам решает, как закрывать поп-ап (в `AdPromoDialog` — через `post`).
+ * [AdVideoEngine.ensurePrepared] в `remember` — страховка для прямого показа диалога
+ * без предзагрузки; в штатном пути это no-op (плеер уже подготовлен движком).
+ *
+ * Воспроизведение: без паузы, перемотки и жестов, звук включён. Жизненный цикл:
+ * `ON_STOP` — пауза, `ON_START` — продолжение с того же места. Конец ролика отдаётся
+ * в [onEnded]; как закрывать поп-ап, решает вызывающий (через `requestDismiss`).
+ *
+ * Освобождение: плеер **не освобождается** при закрытии. `DisposableEffect.onDispose`
+ * сначала переключает выход кодека на фиктивную поверхность движка
+ * ([AdVideoEngine.parkPlayer]), затем отвязывает `PlayerView`. Плеер остаётся тёплым
+ * для следующего показа и освобождается движком только через 60 с простоя
+ * или в `MainActivity.onDestroy(isFinishing)` — без нативного teardown в кадре
+ * закрытия (в отличие от `MediaPlayer.release()`, который на realme RMX3151
+ * держал main 9–20 с).
  */
 @Composable
 internal fun AdVideoPlayer(
@@ -328,28 +357,89 @@ internal fun AdVideoPlayer(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current.applicationContext
+    // Штатно ролик уже подготовлен: движок вызван из ViewModel до показа диалога.
+    val renderer = remember(videoRes) { AdVideoEngine.ensurePrepared(context, videoRes) }
+    val player = remember(videoRes, renderer) {
+        if (renderer == AdVideoEngine.Renderer.EXOPLAYER) {
+            AdVideoEngine.exoPlayerFor(videoRes)
+        } else {
+            null
+        }
+    }
+    when {
+        player != null -> ExoAdVideoPlayer(player = player, onEnded = onEnded, modifier = modifier)
+        renderer == AdVideoEngine.Renderer.LEGACY_MEDIA_PLAYER ->
+            LegacyAdVideoPlayer(videoRes = videoRes, onEnded = onEnded, modifier = modifier)
+        // Ролик не поднялся — вместо индикатора загрузки просто чёрный кадр.
+        else -> Box(modifier = modifier.background(Color.Black))
+    }
+}
+
+/**
+ * Основной путь: подготовленный ExoPlayer в `PlayerView`.
+ *
+ * `useController = false` — ни контролов, ни жестов; `RESIZE_MODE_FIT` — кадр целиком
+ * без обрезки; `SHOW_BUFFERING_NEVER` — никаких спиннеров загрузки (пользователь просил
+ * без анимаций); чёрный shutter вместо прозрачного первого кадра. `surface_type`
+ * не переопределяем: дефолтный `SurfaceView` у ExoPlayer не блокирует main thread.
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun ExoAdVideoPlayer(
+    player: ExoPlayer,
+    onEnded: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    // Сессия создаётся один раз на ролик, а колбэк всегда читается актуальный:
-    // смена лямбды между рекомпозициями не пересоздаёт плеер.
     val currentOnEnded by rememberUpdatedState(onEnded)
-    val controller = remember(videoRes) {
-        AdVideoController(
-            context = context,
-            videoRes = videoRes,
-            onEnded = { currentOnEnded() }
-        )
+    val playerViewRef = remember { PlayerViewRef() }
+
+    // Конец ролика: тот же путь, что у крестика (post + атомарный флаг в диалоге).
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) currentOnEnded()
+            }
+        }
+        player.addListener(listener)
+        onDispose { runCatching { player.removeListener(listener) } }
     }
 
     AndroidView(
-        modifier = modifier,
-        factory = { ctx -> TextureView(ctx).also(controller::attach) }
+        modifier = modifier.fillMaxSize(),
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                useController = false
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                setShutterBackgroundColor(android.graphics.Color.BLACK)
+                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                this.player = player
+                playerViewRef.view = this
+            }
+        },
+        onRelease = { view ->
+            if (playerViewRef.view === view) playerViewRef.view = null
+            runCatching { view.player = null }
+        }
     )
 
-    DisposableEffect(controller, lifecycleOwner) {
+    // Плеер подготовлен движком до показа: здесь только старт — первый кадр сразу.
+    // markVisible() отменяет таймер простоя: тёплый плеер нельзя освободить под показом.
+    LaunchedEffect(player) {
+        AdVideoEngine.markVisible()
+        player.playWhenReady = true
+        player.play()
+    }
+
+    // Пауза в фоне и продолжение с того же места (звук не глушим).
+    DisposableEffect(player, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> controller.pause()
-                Lifecycle.Event.ON_START -> controller.resume()
+                Lifecycle.Event.ON_STOP -> runCatching { player.pause() }
+                Lifecycle.Event.ON_START ->
+                    if (player.playbackState != Player.STATE_ENDED) {
+                        runCatching { player.play() }
+                    }
                 else -> Unit
             }
         }
@@ -360,213 +450,75 @@ internal fun AdVideoPlayer(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
-            // Плеер освобождается только здесь: к этому моменту колбэк MediaPlayer
-            // (включая onCompletion) уже вернулся — диалог закрывается через post().
-            controller.release()
+        }
+    }
+
+    DisposableEffect(player) {
+        onDispose {
+            // Порядок teardown обязателен: сначала паркуем тёплый плеер
+            // (pause + seekTo(0) + выход кодека на фиктивную поверхность),
+            // и только потом снимаем PlayerView. Наоборот PlayerView отдал бы
+            // кодеку уже освобождённую Surface — `The surface has been released`.
+            // Сам release() здесь не вызывается: плеер остаётся тёплым до
+            // таймера простоя или выхода из приложения.
+            AdVideoEngine.parkPlayer(player)
+            runCatching { playerViewRef.view?.player = null }
+            playerViewRef.view = null
         }
     }
 }
 
 /**
- * Плеер одного ролика: `MediaPlayer` + `Surface` на `TextureView`.
- *
- * Все переходы состояния защищены [isReleased]/[isPrepared] и `runCatching`:
- * поздний колбэк `prepareAsync` не запустит освобождённый плеер. Слушатели
- * снимаются перед `release()`, поэтому `onCompletion` не срабатывает на уже
- * снятом диалоге.
+ * Fallback: общий `MediaPlayer` движка + `TextureView` — прежняя схема, но без
+ * `release()` в горячем пути. Плеер переживает закрытие поп-апа; между роликами
+ * движок делает `pause()` + `seekTo(0)`, а освобождает только на выходе из приложения.
  */
-private class AdVideoController(
-    private val context: Context,
-    @param:AnyRes private val videoRes: Int,
-    private val onEnded: () -> Unit
+@Composable
+private fun LegacyAdVideoPlayer(
+    @AnyRes videoRes: Int,
+    onEnded: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnEnded by rememberUpdatedState(onEnded)
+    val textureViewRef = remember { TextureViewRef() }
 
-    private var player: MediaPlayer? = null
-    private var surface: Surface? = null
-    private var videoWidth = 0
-    private var videoHeight = 0
-    private var isPrepared = false
-    private var isCompleted = false
-    private var isForeground = true
-    private var isReleased = false
-    private var viewRef: WeakReference<TextureView>? = null
-
-    /** Подключить `TextureView`: ролик стартует, как только появится поверхность. */
-    fun attach(view: TextureView) {
-        viewRef = WeakReference(view)
-        if (isReleased) return
-        view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(
-                surfaceTexture: SurfaceTexture,
-                width: Int,
-                height: Int
-            ) {
-                if (isReleased) return
-                start(surfaceTexture)
-            }
-
-            override fun onSurfaceTextureSizeChanged(
-                surfaceTexture: SurfaceTexture,
-                width: Int,
-                height: Int
-            ) {
-                fitToView()
-            }
-
-            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-                // Наш Surface освобождаем сами; true — систему просим освободить SurfaceTexture.
-                stop()
-                return true
-            }
-
-            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
-        }
-        // TextureView уже с готовой поверхностью — колбэк available повторно не придёт.
-        if (view.isAvailable) {
-            view.surfaceTexture?.let(::start)
-        }
+    DisposableEffect(videoRes) {
+        AdVideoEngine.bindLegacyEnded { currentOnEnded() }
+        onDispose { AdVideoEngine.bindLegacyEnded(null) }
     }
 
-    private fun start(surfaceTexture: SurfaceTexture) {
-        stop()
-        if (isReleased) return
-        isCompleted = false
-        val mp = MediaPlayer()
-        player = mp
-        runCatching {
-            surface = Surface(surfaceTexture)
-            mp.setSurface(surface)
-            // Кадр вписывается целиком, без растяжения. Матрица ниже дублирует это
-            // для устройств, где MediaPlayer игнорирует scaling mode у TextureView.
-            runCatching { mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT) }
-            applyAudioAttributes(mp)
-            context.resources.openRawResourceFd(videoRes)?.use { descriptor ->
-                mp.setDataSource(
-                    descriptor.fileDescriptor,
-                    descriptor.startOffset,
-                    descriptor.length
-                )
-            } ?: error("res/raw/$videoRes не найден")
-            mp.isLooping = false
-            installListeners(mp)
-            mp.prepareAsync()
-        }.onFailure { stop() }
-    }
-
-    private fun installListeners(mp: MediaPlayer) {
-        mp.setOnVideoSizeChangedListener { _, width, height ->
-            videoWidth = width
-            videoHeight = height
-            fitToView()
-        }
-        mp.setOnPreparedListener { prepared ->
-            if (isReleased || player !== prepared) return@setOnPreparedListener
-            isPrepared = true
-            // Звук ролика: полная громкость, медиа-поток как у фильма.
-            runCatching { prepared.setVolume(1f, 1f) }
-            // Страховка на случай, если onVideoSizeChanged не пришёл: берём размеры
-            // уже подготовленного плеера, иначе кадр мог бы растянуться на всю рамку.
-            if (videoWidth <= 0 || videoHeight <= 0) {
-                runCatching {
-                    videoWidth = prepared.videoWidth
-                    videoHeight = prepared.videoHeight
-                }
+    AndroidView(
+        modifier = modifier.fillMaxSize(),
+        factory = { ctx ->
+            TextureView(ctx).also { view ->
+                textureViewRef.view = view
+                AdVideoEngine.attachLegacyView(view)
             }
-            fitToView()
-            if (isForeground && !isCompleted) {
-                runCatching { prepared.start() }
+        },
+        onRelease = { view ->
+            if (textureViewRef.view === view) textureViewRef.view = null
+            AdVideoEngine.detachLegacyView(view)
+        }
+    )
+
+    DisposableEffect(videoRes, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> AdVideoEngine.pausePlayback()
+                Lifecycle.Event.ON_START -> AdVideoEngine.resumePlayback()
+                else -> Unit
             }
         }
-        mp.setOnCompletionListener { completed ->
-            if (isReleased || player !== completed) return@setOnCompletionListener
-            isCompleted = true
-            // Сам диалог здесь не закрываем: получатель планирует закрытие (post).
-            onEnded()
+        lifecycleOwner.lifecycle.addObserver(observer)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+            // Отвязка поверхности; MediaPlayer не освобождаем by design.
+            textureViewRef.view?.let { AdVideoEngine.detachLegacyView(it) }
+            textureViewRef.view = null
         }
-        mp.setOnErrorListener { failed, _, _ ->
-            // Битый/неподдерживаемый файл не роняет поп-ап: остаётся чёрная подложка.
-            if (isReleased || player !== failed) return@setOnErrorListener false
-            stop()
-            true
-        }
-    }
-
-    private fun applyAudioAttributes(mp: MediaPlayer) {
-        runCatching {
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                    .build()
-            )
-        }
-    }
-
-    /** Вписать кадр целиком в TextureView, не растягивая: меньший из масштабов. */
-    private fun fitToView() {
-        val view = viewRef?.get() ?: return
-        val viewWidth = view.width
-        val viewHeight = view.height
-        if (viewWidth <= 0 || viewHeight <= 0) return
-        if (videoWidth <= 0 || videoHeight <= 0) {
-            view.setTransform(Matrix())
-            return
-        }
-        val scaleX = viewWidth.toFloat() / videoWidth
-        val scaleY = viewHeight.toFloat() / videoHeight
-        val fit = minOf(scaleX, scaleY)
-        view.setTransform(
-            Matrix().apply {
-                setScale(
-                    fit / scaleX,
-                    fit / scaleY,
-                    viewWidth / 2f,
-                    viewHeight / 2f
-                )
-            }
-        )
-    }
-
-    /** Пауза при уходе в фон: ролик не должен звучать из кармана. */
-    fun pause() {
-        isForeground = false
-        val mp = player ?: return
-        runCatching { if (isPrepared && !isCompleted && mp.isPlaying) mp.pause() }
-    }
-
-    /** Возврат из фона: продолжаем с того же места, но не перезапускаем законченный ролик. */
-    fun resume() {
-        isForeground = true
-        val mp = player ?: return
-        runCatching { if (isPrepared && !isCompleted && !mp.isPlaying) mp.start() }
-    }
-
-    /** Освобождение плеера (закрытие поп-апа/выход из композиции). Идемпотентно. */
-    fun release() {
-        if (isReleased) return
-        isReleased = true
-        stop()
-        viewRef?.get()?.surfaceTextureListener = null
-        viewRef = null
-    }
-
-    private fun stop() {
-        isPrepared = false
-        player?.let { mp ->
-            // Слушатели снимаем ДО release(): поздний колбэк не должен тронуть
-            // освобождённый плеер и не может закрыть уже снятый диалог.
-            runCatching { mp.setOnPreparedListener(null) }
-            runCatching { mp.setOnCompletionListener(null) }
-            runCatching { mp.setOnErrorListener(null) }
-            runCatching { mp.setOnVideoSizeChangedListener(null) }
-            runCatching { if (mp.isPlaying) mp.stop() }
-            runCatching { mp.release() }
-        }
-        player = null
-        surface?.let { runCatching { it.release() } }
-        surface = null
-        videoWidth = 0
-        videoHeight = 0
     }
 }
 

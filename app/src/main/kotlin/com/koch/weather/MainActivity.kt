@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.koch.weather.ui.components.AdVideoEngine
 import com.koch.weather.ui.theme.KOCHWeatherTheme
 
 class MainActivity : ComponentActivity() {
@@ -30,5 +31,17 @@ class MainActivity : ComponentActivity() {
     setContent {
       KOCHWeatherTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
     }
+  }
+
+  override fun onDestroy() {
+    // Выход из приложения — единственный момент, когда fallback-плеер рекламы
+    // (общий MediaPlayer) реально освобождается. Во время показа поп-апа
+    // release() не вызывается вовсе, поэтому 9–20-секундный teardown
+    // на realme/OPPO не попадает в горячий путь. Смена конфигурации
+    // сюда не относится: isFinishing == false, плеер не трогаем.
+    if (isFinishing) {
+      AdVideoEngine.shutdown()
+    }
+    super.onDestroy()
   }
 }

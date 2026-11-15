@@ -13,6 +13,7 @@ import com.koch.weather.data.mapper.WeatherErrors
 import com.koch.weather.data.model.*
 import com.koch.weather.data.network.NetworkMonitor
 import com.koch.weather.data.repository.*
+import com.koch.weather.ui.components.AdVideoEngine
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -623,6 +625,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         ProcessLifecycleOwner.get().lifecycle.removeObserver(processLifecycleObserver)
+        // Экран уходит насовсем: подготовленный, но так и не показанный ролик
+        // не должен держать кодек вечно. Плеер паркуется тёплым и освобождается
+        // движком через 60 с простоя (или в MainActivity.onDestroy(isFinishing)).
+        AdVideoEngine.parkCurrent()
         super.onCleared()
     }
 
@@ -871,6 +877,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 // Запоминаем показанное: следующий выбор исключит этот id.
                 lastAdPopupCreativeId = creative.id
+                // Предзагрузка ДО показа поп-апа: ExoPlayer создаётся и готовит ролик,
+                // пока isAdPopupVisible ещё false. Диалог получит уже подготовленный
+                // плеер и сразу вызовет play() — первый кадр появляется без 5–10 с
+                // чёрного экрана (жалоба OPPO/realme). Фото-креатив просто снимает
+                // подготовленный видеоплеер.
+                withContext(Dispatchers.Main) {
+                    AdVideoEngine.prepare(getApplication(), creative)
+                }
                 _uiState.update { state ->
                     state.copy(adCreative = creative, isAdPopupVisible = true)
                 }
@@ -899,7 +913,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun dismissAdPopup() {
         val wasVisible = _uiState.value.isAdPopupVisible
         _uiState.update { it.copy(isAdPopupVisible = false) }
-        if (wasVisible) resumeAdBannerRotation()
+        if (wasVisible) {
+            resumeAdBannerRotation()
+        } else {
+            // Поп-ап закрыли, не показав: плеер не освобождаем — паркуем тёплым,
+            // чтобы следующая реклама стартовала без инициализации кодека.
+            AdVideoEngine.parkCurrent()
+        }
     }
 
     /**
