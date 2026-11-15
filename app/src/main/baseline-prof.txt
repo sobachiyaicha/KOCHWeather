@@ -1,0 +1,28 @@
+# KOCHWeather startup baseline profile (manual, HSPL rules).
+# Covers app code that currently JITs on the first frame: MainActivity → MainScreen,
+# ViewModel, theme palette, weather repositories and the first photo/compose helpers.
+Lcom/koch/weather/MainActivity;
+HSPLcom/koch/weather/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/koch/weather/MainActivity;->onStart()V
+HSPLcom/koch/weather/MainActivity;->onResume()V
+
+Lcom/koch/weather/ui/main/MainScreenKt;
+Lcom/koch/weather/ui/main/MainScreenViewModel;
+Lcom/koch/weather/ui/main/MainCardsKt;
+Lcom/koch/weather/ui/main/MainWeatherCardsKt;
+Lcom/koch/weather/ui/theme/ThemeKt;
+Lcom/koch/weather/ui/design/KochBackgroundKt;
+Lcom/koch/weather/ui/design/KochNavBarKt;
+Lcom/koch/weather/ui/design/KochCardKt;
+Lcom/koch/weather/ui/components/WeatherImageKt;
+Lcom/koch/weather/ui/components/CloudVeilOverlayKt;
+
+Lcom/koch/weather/data/cache/WeatherCache;
+Lcom/koch/weather/data/repository/WeatherRepository;
+Lcom/koch/weather/data/repository/SubscriptionRepository;
+Lcom/koch/weather/data/repository/LootboxRepository;
+Lcom/koch/weather/data/repository/ImageRepository;
+Lcom/koch/weather/data/provider/MetNoProvider;
+Lcom/koch/weather/data/provider/OpenMeteoProvider;
+Lcom/koch/weather/data/mapper/WeatherMapper;
+Lcom/koch/weather/data/network/NetworkMonitor;

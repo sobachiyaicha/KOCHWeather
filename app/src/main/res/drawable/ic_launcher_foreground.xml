@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Передний слой иконки: солнце и облако (геометрия совпадает с PNG для API 24–25).
+  Всё внутри безопасной зоны 72dp, поэтому круглый и квадратный лончеры не обрезают.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Солнце: центр 72,33, радиус 11.5 -->
+    <path
+        android:fillColor="#FFFFD600"
+        android:pathData="M60.5,33a11.5,11.5 0 1,0 23,0a11.5,11.5 0 1,0 -23,0z" />
+
+    <!-- Облако: три круга -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31,67a12,12 0 1,0 24,0a12,12 0 1,0 -24,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41,58a16,16 0 1,0 32,0a16,16 0 1,0 -32,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M61,67a11,11 0 1,0 22,0a11,11 0 1,0 -22,0z" />
+
+    <!-- База облака: стадион от 30 до 84 по X, высота 16 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41,66a8,8 0 0 0 0,16h32a8,8 0 0 0 0,-16z" />
+</vector>
