@@ -1282,7 +1282,7 @@ private fun LootAdAttemptButton(onClick: () -> Unit) {
 }
 
 /**
- * Полноэкранный ролик «+1 попытка»: `VideoView` без контролов, жестов и паузы,
+ * Полноэкранный ролик «+1 попытка»: общий `AdVideoPlayer` (`TextureView`) без контролов, жестов и паузы,
  * поверх листа лутбокса. По концу ролика — [onFinished] (начисление попытки и
  * автовозврат в диалог). Системный «назад» — безопасный выход без начисления
  * ([onClosed]), чтобы пользователь не остался заперт в рекламе.
@@ -1297,7 +1297,9 @@ private fun RewardAdDialog(
         onDismissRequest = onClosed,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            dismissOnBackPress = false,
+            // Back закрывает ролик так же, как [onClosed] (без начисления попытки):
+            // иначе `dismissOnBackPress = false` глушил бы системный back.
+            dismissOnBackPress = true,
             dismissOnClickOutside = false,
             decorFitsSystemWindows = false
         )

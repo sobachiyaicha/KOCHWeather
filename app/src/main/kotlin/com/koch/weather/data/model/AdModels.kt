@@ -5,7 +5,7 @@ import androidx.compose.runtime.Immutable
 import com.koch.weather.R
 import kotlin.random.Random
 
-/** Тип медиа в рекламном креативе: фото рисуем через `Image`, ролик — через `VideoView`. */
+/** Тип медиа в рекламном креативе: фото рисуем через `Image`, ролик — через `TextureView` + `MediaPlayer`. */
 enum class AdMediaType {
     PHOTO,
     VIDEO

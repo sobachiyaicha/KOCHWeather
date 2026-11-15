@@ -874,6 +874,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { state ->
                     state.copy(adCreative = creative, isAdPopupVisible = true)
                 }
+                // Пока полноэкранный поп-ап открыт, главный экран не тикает:
+                // ротация баннера — единственный источник кадров под диалогом
+                // (Crossfade каждые 8 с) и на время показа рекламы не нужна.
+                pauseAdBannerRotation()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -884,9 +888,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Закрытие поп-апа: крестик или автозакрытие после конца видео. */
+    /**
+     * Закрытие поп-апа: крестик, системный back или автозакрытие после конца видео.
+     *
+     * После снятия полноэкранного диалога возвращаем ротацию баннера — она была
+     * остановлена на время показа, чтобы главный экран не перерисовывался
+     * (Crossfade) под открытым поп-апом. Повторный вызов не плодит таймеры:
+     * [startAdBannerRotation] сначала отменяет предыдущую корутину.
+     */
     fun dismissAdPopup() {
+        val wasVisible = _uiState.value.isAdPopupVisible
         _uiState.update { it.copy(isAdPopupVisible = false) }
+        if (wasVisible) resumeAdBannerRotation()
     }
 
     /**
@@ -904,6 +917,21 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.update { state -> state.copy(adBannerCreative = creative) }
             }
         }
+    }
+
+    /**
+     * Пауза ротации на время полноэкранного рекламного поп-апа. Кадры главного
+     * экрана под `Dialog` продолжают композититься, если там идёт анимация,
+     * поэтому единственный тикающий источник — баннер — выключаем целиком.
+     */
+    private fun pauseAdBannerRotation() {
+        adBannerJob?.cancel()
+        adBannerJob = null
+    }
+
+    /** Возобновление ротации после закрытия поп-апа (последовательность продолжается). */
+    private fun resumeAdBannerRotation() {
+        startAdBannerRotation()
     }
 
     // ------------------------------------------------------------------------
