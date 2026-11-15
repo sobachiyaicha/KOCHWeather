@@ -52,7 +52,7 @@ $env:JAVA_HOME = "D:\jdk-17\jdk-17.0.12+7"
 | `data/deeplink` | Яндекс Go (маршрут по координатам from→to), Яндекс Еда, веб-фолбэк |
 | `ui/theme` | `Tokens.kt` (8 кеглей, 6 радиусов, сетка 4…32), `KochColors` (30 семантических ролей), 7 тем |
 | `ui/design` | примитивы: `KochSheet`, `KochCard`, `KochButtons`, `KochChip`, `KochListRow`, `KochHeader`, `KochNavBar`, `KochBackground` (локальный фон темы) |
-| `ui/main` | `MainScreen` (один `Scaffold` на все вкладки), `MainScreenViewModel`, лента (`CleanFeedOrder` — голубая тема, `PromoFeedOrder` — остальные), анимация смены города |
+| `ui/main` | `MainScreen` (один `Scaffold` на все вкладки), `MainScreenViewModel`, лента (`PromoFeedOrder` — единый порядок для всех тем), анимация смены города |
 | `ui/components` | полноэкранные «Карта/Список/Поиск/Вид», облачная вуаль, листы (такси, еда, лутбоксы с сундуком/конфетти/вибрацией и выпадением тем, билеты, премиум, трава, зонты, реклама) |
 | `app/src/test` | 37 сьютов / 229 тестов: парсеры, мапперы, политика кэша, цепочка провайдеров, такси, лутбокс, реклама, города, советы, факт дня, контент-гарды |
 
