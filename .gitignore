@@ -19,6 +19,8 @@ ui_*.xml
 screen_check.png
 test_screen.png
 app/build/
+shared/build/
+iosApp/build/
 
 # Reference video is a read-only source, kept out of the repository
 refs_src/
