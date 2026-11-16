@@ -32,5 +32,5 @@ plugins {
 
 rootProject.name = "KOCHWeather"
 
-include(":app")
 include(":shared")
+include(":androidApp")

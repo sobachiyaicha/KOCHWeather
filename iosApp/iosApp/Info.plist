@@ -45,5 +45,11 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>yandextaxi</string>
+		<string>yandexmaps</string>
+		<string>eda.yandex</string>
+	</array>
 </dict>
 </plist>
