@@ -1,0 +1,13 @@
+# Binary assets — never translate line endings or diff them as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.mp4 binary
+*.apk binary
+*.jar binary
+*.keystore binary
+
+# Keep Gradle wrapper scripts usable on Windows
+*.bat text eol=crlf
+*.sh text eol=lf

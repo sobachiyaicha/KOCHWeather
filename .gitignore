@@ -1,22 +1,38 @@
-# Gradle
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
-
-# Android
-local.properties
-*.apk
-*.aab
-*.keystore
-*.jks
-captures/
-.cxx/
-
-# IDE
-.idea/
 *.iml
-.vscode/
-
-# OS
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
 .DS_Store
-Thumbs.db
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.kotlin/
+ui.xml
+ui_*.xml
+screen_check.png
+test_screen.png
+app/build/
+shared/build/
+iosApp/build/
+
+# Reference video is a read-only source, kept out of the repository
+refs_src/
+
+# Scratch build log dumps (real evidence lives in shots/)
+assemble_out.txt
+
+# Local build scratch: temp files, caches. Never committed, never on C:
+.local/
+
+# One-off device-side test scripts (logs stay tracked)
+shots/*.sh
+
+# One-off analysis scripts from critic runs
+tmp_*.py
