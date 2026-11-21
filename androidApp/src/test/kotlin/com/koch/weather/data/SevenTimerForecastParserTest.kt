@@ -8,7 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
-import java.util.TimeZone
+import kotlinx.datetime.TimeZone
 
 class SevenTimerForecastParserTest {
 
@@ -80,7 +80,7 @@ class SevenTimerForecastParserTest {
             nowMillis = now,
             latitude = 59.9343,
             longitude = 30.3351,
-            timeZone = TimeZone.getTimeZone("UTC")
+            timeZone = TimeZone.of("UTC")
         )
         assertEquals(59.9343, response.latitude, 0.001)
         assertEquals(30.3351, response.longitude, 0.001)
@@ -103,7 +103,7 @@ class SevenTimerForecastParserTest {
             nowMillis = now,
             latitude = 59.9343,
             longitude = 30.3351,
-            timeZone = TimeZone.getTimeZone("UTC")
+            timeZone = TimeZone.of("UTC")
         )
         val hourly = response.hourly
         assertNotNull(hourly)

@@ -4,6 +4,7 @@ import com.koch.weather.data.model.AdCatalog
 import com.koch.weather.data.model.AdMediaType
 import com.koch.weather.data.model.EmojiTextGuard
 import com.koch.weather.data.model.MainScreenUiState
+import com.koch.weather.data.model.androidMediaRes
 import com.koch.weather.data.repository.AdRepository
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
@@ -35,7 +36,9 @@ class AdCatalogTest {
         assertEquals(4, creatives.count { it.type == AdMediaType.PHOTO })
         assertEquals(2, creatives.count { it.type == AdMediaType.VIDEO })
         // Медиа-ресурс обязателен у каждого креатива: пустого креатива быть не может.
-        assertTrue(creatives.all { it.mediaRes != 0 })
+        // (mediaRes: Int → mediaKey: String; android-резолв в R — androidMediaRes().)
+        assertTrue(creatives.all { it.mediaKey.isNotBlank() })
+        assertTrue(creatives.all { it.androidMediaRes() != 0 })
     }
 
     @Test

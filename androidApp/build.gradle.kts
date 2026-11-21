@@ -119,6 +119,10 @@ dependencies {
   implementation(libs.coil.compose)
 
   // Local tests
-  testImplementation(libs.junit)
+  // Phase 2: тесты зовут kotlinx-datetime (TimeZone) и Ktor HttpTimeout из commonMain-кода shared;
+// shared держит их как implementation — в test-класспас androidApp их нужно подтянуть явно.
+testImplementation(libs.kotlinx.datetime)
+testImplementation(libs.ktor.client.core)
+testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
 }

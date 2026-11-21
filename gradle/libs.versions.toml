@@ -21,6 +21,14 @@ okhttp = "4.12.0"
 datastore = "1.1.1"
 osmdroid = "6.1.18"
 coil = "2.6.0"
+ktor = "3.6.1"
+# DEVIATION от dependency-auditor (было 3.6.2): coil3 3.6.0–3.6.3 требуют compileSdk 37,
+# проект и AGP 9.0.1 — максимум 36; 3.5.0 = ближайшая stable с minCompileSdk=36 (AAR-metadata).
+coil3 = "3.5.0"
+kotlinxDatetime = "0.8.0"
+# DEVIATION от dependency-auditor (было 2.11.0): androidx-вариант lifecycle 2.11.0 требует
+# compileSdk 37 и AGP 9.1.0; 2.10.0 -> androidx.lifecycle 2.10.0 — уже зелёный в проекте.
+jetbrainsLifecycle = "2.10.0"
 
 [libraries]
 osmdroid-android = { module = "org.osmdroid:osmdroid-android", version.ref = "osmdroid" }
@@ -57,6 +65,19 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNav3" }
+# Phase 2 (по решению dependency-auditor, _history/reports/phase-1/dependencies.md):
+# KMP-стек для commonMain. JetBrains lifecycle — ДРУГИЕ координаты
+# (org.jetbrains.androidx.*); androidx.lifecycle остаётся для androidApp.
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+coil3-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
+coil3-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jetbrainsLifecycle" }
+jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrainsLifecycle" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }

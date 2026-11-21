@@ -88,6 +88,25 @@ kotlin {
       implementation(libs.compose.ui)
       implementation(libs.kotlinx.coroutines.core)
       implementation(libs.kotlinx.serialization.json)
+      // Phase 2 (dependency-auditor): KMP-зависимости для переноса data-слоя.
+      // Источники пока их не используют — только resolution/компиляция.
+      implementation(libs.ktor.client.core)
+      implementation(libs.ktor.client.content.negotiation)
+      implementation(libs.ktor.serialization.kotlinx.json)
+      implementation(libs.kotlinx.datetime)
+      implementation(libs.coil3.compose)
+      implementation(libs.coil3.network.ktor3)
+      // JetBrains lifecycle (org.jetbrains.androidx.*) — KMP-версия;
+      // androidx.lifecycle остаётся в androidMain.
+      implementation(libs.jetbrains.lifecycle.viewmodel.compose)
+      implementation(libs.jetbrains.lifecycle.runtime.compose)
+      // DataStore Preferences — KMP с 1.1.0 (kotlin-multiplatform артефакт);
+      // cache-porter: WeatherCache в commonMain использует createWithPath.
+      implementation(libs.androidx.datastore.preferences)
+    }
+    iosMain.dependencies {
+      // Движок Ktor для iOS (NSURLSession); iosMain — общий для iosArm64/iosSimulatorArm64.
+      implementation(libs.ktor.client.darwin)
     }
     androidMain {
       kotlin.srcDir(kochBuildConfigDir)
@@ -98,12 +117,22 @@ kotlin {
         implementation(libs.androidx.lifecycle.process)
         implementation(libs.androidx.datastore.preferences)
         implementation(libs.okhttp)
+        // ktor 3.6.1 тянет okhttp 5.5.1 (minCompileSdk 37 > наших 36, AGP 9.0.1) —
+        // исключаем; движок работает на существующем okhttp 4.12.0 из каталога.
+        // Лямбда-оверлоуд в KMP-исходниках принимает только String, поэтому
+        // координаты с версией из каталога (libs.versions.ktor) вместо аксессора.
+        implementation("io.ktor:ktor-client-okhttp:${libs.versions.ktor.get()}") {
+          exclude(group = "com.squareup.okhttp3")
+        }
         implementation(libs.osmdroid.android)
         implementation(libs.coil.compose)
       }
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
+      // Main-диспетчер подменяется тестовым (Dispatchers.setMain): в kexe без
+      // UIKit-runloop real Dispatchers.Main некому качать (см. CacheIoDispatcher.ios.kt).
+      implementation(libs.kotlinx.coroutines.test)
     }
   }
 }

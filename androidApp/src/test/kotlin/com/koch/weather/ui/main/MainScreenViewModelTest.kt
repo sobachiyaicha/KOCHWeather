@@ -1,7 +1,7 @@
 package com.koch.weather.ui.main
 
-import android.app.Application
 import com.koch.weather.data.model.*
+import com.koch.weather.platform.AppContainer
 import com.koch.weather.data.repository.AiFactsRepository
 import com.koch.weather.data.repository.FlightRepository
 import com.koch.weather.data.repository.FoodRepository
@@ -68,15 +68,19 @@ class MainScreenViewModelTest {
     @Test
     fun viewModelConstructor_hasNoHeavyDependencies() {
         // ANR Run 2: конструктор VM не должен принимать 11 репозиториев/DataStore/OkHttp.
+        // Фаза 2 (KMP, ui-porter): AndroidViewModel(Application) заменён общим
+        // ViewModel с ЕДИНСТВЕННЫМ лёгким параметром AppContainer (замена прежнего
+        // Application-контракта; замысел гварда — «один лёгкий параметр, без
+        // репозиториев» — сохранён).
         val constructors = MainScreenViewModel::class.java.constructors
         assertTrue(constructors.isNotEmpty())
         assertTrue(
-            "Ожидался только (Application), получено: " +
+            "Ожидался только (AppContainer), получено: " +
                 constructors.joinToString { it.parameterTypes.joinToString() },
             constructors.all { it.parameterTypes.size == 1 }
         )
         assertTrue(
-            constructors.any { it.parameterTypes.singleOrNull() == Application::class.java }
+            constructors.any { it.parameterTypes.singleOrNull() == AppContainer::class.java }
         )
         // Начальное состояние не требует сети: погоды ещё нет, экран в LOADING.
         val initial = MainScreenUiState(

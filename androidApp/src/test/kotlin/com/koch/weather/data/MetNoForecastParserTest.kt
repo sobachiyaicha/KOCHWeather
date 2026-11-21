@@ -11,7 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
-import java.util.TimeZone
+import kotlinx.datetime.TimeZone
 
 class MetNoForecastParserTest {
 
@@ -120,7 +120,7 @@ class MetNoForecastParserTest {
             nowMillis = now,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         assertEquals(59.9386, response.latitude, 0.001)
         assertEquals(30.3141, response.longitude, 0.001)
@@ -159,7 +159,7 @@ class MetNoForecastParserTest {
             nowMillis = now,
             latitude = 25.2048,
             longitude = 55.2708,
-            timeZone = TimeZone.getTimeZone("Asia/Dubai")
+            timeZone = TimeZone.of("Asia/Dubai")
         )
         assertEquals(25.2048, response.latitude, 0.001)
         assertEquals(55.2708, response.longitude, 0.001)
@@ -175,7 +175,7 @@ class MetNoForecastParserTest {
             nowMillis = now,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         // next_1_hours.precipitation_amount [0.0, 0.2, 0.0, 0.0] — без выдуманных нулей.
         assertEquals(0.2, response.hourly?.precipitation?.get(1) ?: 0.0, 0.001)
@@ -205,7 +205,7 @@ class MetNoForecastParserTest {
             nowMillis = mixedNow,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         val daily = response.daily!!
         assertEquals(
@@ -237,7 +237,7 @@ class MetNoForecastParserTest {
             nowMillis = mixedNow,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         val hourly = response.hourly!!
         // Текущая точка — 20:00Z (23:00 МСК), впереди 15 часовых точек: ряд не обрывается на полуночи.
@@ -260,7 +260,7 @@ class MetNoForecastParserTest {
             nowMillis = mixedNow,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         val daily = response.daily!!
         // 14.11: 0.3 мм за час и 1.2 мм за 6 часов на той же точке — это скользящее
@@ -282,7 +282,7 @@ class MetNoForecastParserTest {
             nowMillis = mixedNow,
             latitude = 59.9386,
             longitude = 30.3141,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         // Пустой details (реальный вид next_12_hours) — «нет данных», а не 0.0 мм.
         assertTrue(response.hourly?.precipitation?.all { it == null } == true)
@@ -303,7 +303,7 @@ class MetNoForecastParserTest {
             nowMillis = now,
             latitude = 59.9,
             longitude = 30.3,
-            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+            timeZone = TimeZone.of("Europe/Moscow")
         )
         assertTrue(response.hourly?.precipitation?.all { it == null } == true)
 
