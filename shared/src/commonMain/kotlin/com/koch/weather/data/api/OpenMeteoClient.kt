@@ -60,15 +60,10 @@ class OpenMeteoClient(
         try {
             val url = buildForecastUrl(lat, lon)
 
-            println("WeatherApp: Fetching forecast from: " + url)
-
             val response = client.get(url) {
                 header("User-Agent", OPEN_METEO_USER_AGENT)
             }
-            println("WeatherApp: OpenMeteo response code: " + response.status.value)
             if (!response.status.isSuccess()) {
-                val err = "HTTP " + response.status.value
-                println("WeatherApp: OpenMeteo failed with " + err)
                 return@withContext Result.failure(OpenMeteoHttpException(response.status.value))
             }
             val body = response.bodyAsText()
@@ -76,12 +71,10 @@ class OpenMeteoClient(
                 return@withContext Result.failure(OpenMeteoEmptyBodyException())
             }
             val parsed = json.decodeFromString<WeatherApiResponse>(body)
-            println("WeatherApp: OpenMeteo parsed successfully for lat=" + lat + ", lon=" + lon)
             Result.success(parsed)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("WeatherApp: OpenMeteo exception: " + e.message)
             Result.failure(e)
         }
     }
@@ -90,8 +83,6 @@ class OpenMeteoClient(
         try {
             val encodedQuery = urlEncodeUtf8(query.trim())
             val url = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodedQuery + "&count=10&language=ru&format=json"
-
-            println("WeatherApp: Searching city: " + url)
 
             val response = client.get(url) {
                 header("User-Agent", OPEN_METEO_USER_AGENT)
@@ -108,7 +99,6 @@ class OpenMeteoClient(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("WeatherApp: City search exception: " + e.message)
             Result.failure(e)
         }
     }

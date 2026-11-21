@@ -143,10 +143,7 @@ private class IosVideoSession(
         configureAudioSession()
 
         val nsUrl = NSURL.URLWithString(url)
-        if (nsUrl == null) {
-            NSLog("[KOCHMedia] invalid media url: $url")
-            return VideoContainerView()
-        }
+        if (nsUrl == null) return VideoContainerView()
 
         val item = AVPlayerItem(uRL = nsUrl)
         val avPlayer = AVPlayer(playerItem = item)
@@ -170,12 +167,10 @@ private class IosVideoSession(
         ) { _ ->
             if (isReleased) return@addObserverForName
             if (isLooping) {
-                NSLog("[KOCHMedia] loop restart: $url")
                 avPlayer.seekToTime(CMTimeMake(0, 1))
                 avPlayer.play()
             } else if (!isCompleted) {
                 isCompleted = true
-                NSLog("[KOCHMedia] ended: $url")
                 onEnded?.invoke()
             }
         }
@@ -193,7 +188,6 @@ private class IosVideoSession(
             queue
         ) { _ -> resume() }
 
-        LOG("player started: $url looping=$isLooping")
         avPlayer.play()
 
         player = avPlayer
@@ -232,7 +226,6 @@ private class IosVideoSession(
         playerLayer = null
         player = null
         container = null
-        LOG("released: $url")
     }
 }
 
@@ -243,12 +236,8 @@ private fun configureAudioSession() {
     if (audioSessionConfigured) return
     audioSessionConfigured = true
     val session = AVAudioSession.sharedInstance()
-    val categoryOk = session.setCategory(AVAudioSessionCategoryPlayback, error = null)
-    val activeOk = session.setActive(true, error = null)
-    LOG(
-        "AVAudioSession category=${session.category ?: "nil"} " +
-            "setCategory=$categoryOk setActive=$activeOk"
-    )
+    session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+    session.setActive(true, error = null)
 }
 
 private fun LOG(message: String) {
