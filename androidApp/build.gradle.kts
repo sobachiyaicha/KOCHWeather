@@ -1,0 +1,128 @@
+import java.util.Properties
+
+plugins {
+  alias(libs.plugins.android.application)
+  alias(libs.plugins.compose.compiler)
+  alias(libs.plugins.kotlin.serialization)
+}
+
+// Read local.properties OUTSIDE the `android { }` block: inside it, `java`
+// resolves to the Gradle `java` extension, not the package.
+val localProperties = Properties().apply {
+  val localPropFile = rootProject.file("local.properties")
+  if (localPropFile.exists()) {
+    localPropFile.inputStream().use { load(it) }
+  }
+}
+val trafficApiKey = localProperties.getProperty("TRAFFIC_API_KEY") ?: ""
+
+android {
+  // namespace отличается от shared (com.koch.weather): AGP 9 требует уникальные
+  // namespace у модулей. applicationId остаётся com.koch.weather (идентичность
+  // приложения не меняется).
+  namespace = "com.koch.weather.app"
+  compileSdk = 36
+
+  defaultConfig {
+    applicationId = "com.koch.weather"
+    minSdk = 24
+    targetSdk = 34
+    versionCode = 2
+    versionName = "1.1"
+    buildConfigField("String", "TRAFFIC_API_KEY", "\"$trafficApiKey\"")
+  }
+
+  buildTypes {
+    release {
+      isMinifyEnabled = false
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+    }
+    debug {
+      isMinifyEnabled = false
+    }
+    // Release-like build type for honest performance measurements (ACCEPTANCE R18).
+    // - not debuggable, so ART/JIT behaves like production;
+    // - signed with the debug key and WITHOUT applicationIdSuffix => same package
+    //   ``com.koch.weather``, so ``adb install -r`` swaps it with the debug build.
+    create("benchmark") {
+      initWith(getByName("release"))
+      isDebuggable = false
+      // R18: benchmark should be release-like: R8 shrinks dex/JIT work.
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro"
+      )
+      isProfileable = true
+      signingConfig = signingConfigs.getByName("debug")
+      matchingFallbacks += listOf("release")
+    }
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+  buildFeatures {
+    compose = true
+    aidl = false
+    buildConfig = true
+    shaders = false
+  }
+
+  packaging {
+    resources {
+      excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+  }
+}
+
+kotlin {
+  jvmToolchain(17)
+}
+
+dependencies {
+  // Shared KMP module (Phase 1 restructure).
+  implementation(project(":shared"))
+
+  val composeBom = platform(libs.androidx.compose.bom)
+  implementation(composeBom)
+  androidTestImplementation(composeBom)
+
+  // Core Android dependencies
+  implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(libs.androidx.lifecycle.process)
+  implementation(libs.androidx.activity.compose)
+
+  // Arch Components
+  implementation(libs.androidx.lifecycle.runtime.compose)
+  implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+  // Compose
+  implementation(libs.androidx.compose.ui)
+  implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.androidx.compose.material3)
+  implementation(libs.androidx.compose.material.icons.extended)
+
+  // Tooling
+  debugImplementation(libs.androidx.compose.ui.tooling)
+  debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+  // Network & Serialization
+  implementation(libs.okhttp)
+  implementation(libs.kotlinx.serialization.json)
+  implementation(libs.androidx.datastore.preferences)
+
+  // Maps & Images (No VPN / Russia friendly)
+  implementation(libs.osmdroid.android)
+  implementation(libs.coil.compose)
+
+  // Local tests
+  // Phase 2: тесты зовут kotlinx-datetime (TimeZone) и Ktor HttpTimeout из commonMain-кода shared;
+// shared держит их как implementation — в test-класспас androidApp их нужно подтянуть явно.
+testImplementation(libs.kotlinx.datetime)
+testImplementation(libs.ktor.client.core)
+testImplementation(libs.junit)
+  testImplementation(libs.kotlinx.coroutines.test)
+}
